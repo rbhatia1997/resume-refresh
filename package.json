@@ -1,0 +1,14 @@
+{
+  "name": "resume-refresh",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local resume improvement tool that ingests resume files and LinkedIn text.",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

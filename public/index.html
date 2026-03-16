@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Resume Refresh</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <p class="eyebrow">Resume updater</p>
+        <h1>Turn your LinkedIn and current resume into a sharper draft.</h1>
+        <p class="lede">
+          Connect LinkedIn for verified identity, upload a resume PDF or paste resume text, then
+          get concrete rewrite suggestions plus an updated draft.
+        </p>
+      </section>
+
+      <section class="panel auth-panel">
+        <div>
+          <p class="section-kicker">LinkedIn connection</p>
+          <h2>Browser-based sign-in</h2>
+          <p class="auth-copy">
+            Sign in with LinkedIn to attach basic profile identity. For richer resume content, keep
+            using the LinkedIn paste field below because LinkedIn does not expose full experience
+            data to standard OpenID apps.
+          </p>
+        </div>
+
+        <div class="auth-actions">
+          <div id="auth-state" class="auth-state">Checking LinkedIn configuration...</div>
+          <div class="auth-buttons">
+            <a id="linkedin-login" class="button-link" href="/auth/linkedin">Connect LinkedIn</a>
+            <button id="linkedin-logout" type="button" class="button-secondary hidden">Disconnect</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <form id="analyze-form">
+          <label>
+            Target role
+            <input id="target-role" name="targetRole" placeholder="Senior Product Manager" />
+          </label>
+
+          <label>
+            LinkedIn URL
+            <input id="linkedin-url" name="linkedinUrl" placeholder="https://www.linkedin.com/in/..." />
+          </label>
+
+          <label>
+            LinkedIn content
+            <textarea
+              id="linkedin-text"
+              name="linkedinText"
+              rows="9"
+              placeholder="Paste your LinkedIn About, Experience, Skills, and headline here."
+            ></textarea>
+          </label>
+
+          <label>
+            Resume file
+            <input id="resume-file" name="resumeFile" type="file" accept=".pdf,.txt,.md" />
+          </label>
+
+          <label>
+            Resume text
+            <textarea
+              id="resume-text"
+              name="resumeText"
+              rows="9"
+              placeholder="Optional if you upload a file. Paste plain text here if easier."
+            ></textarea>
+          </label>
+
+          <button type="submit">Analyze Resume</button>
+        </form>
+      </section>
+
+      <section id="status" class="status" aria-live="polite"></section>
+
+      <section id="linkedin-profile-card" class="panel hidden">
+        <p class="section-kicker">Connected account</p>
+        <div id="linkedin-profile"></div>
+      </section>
+
+      <section id="results" class="results hidden">
+        <div class="card">
+          <h2>Improvement Suggestions</h2>
+          <div id="suggestions"></div>
+        </div>
+
+        <div class="card">
+          <h2>Extracted Snapshot</h2>
+          <pre id="snapshot"></pre>
+        </div>
+
+        <div class="card">
+          <h2>Updated Resume Draft</h2>
+          <pre id="draft"></pre>
+        </div>
+
+        <div class="card">
+          <h2>Extracted Resume Text</h2>
+          <pre id="extracted-text"></pre>
+        </div>
+      </section>
+    </main>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>
