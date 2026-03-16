@@ -1,6 +1,5 @@
 const form = document.querySelector("#analyze-form");
 const statusEl = document.querySelector("#status");
-const resultsEl = document.querySelector("#results");
 const suggestionsEl = document.querySelector("#suggestions");
 const snapshotEl = document.querySelector("#snapshot");
 const draftEl = document.querySelector("#draft");
@@ -12,12 +11,28 @@ const authStateEl = document.querySelector("#auth-state");
 const profileCardEl = document.querySelector("#linkedin-profile-card");
 const profileEl = document.querySelector("#linkedin-profile");
 const rewriteButtonEl = document.querySelector("#rewrite-button");
+const stepPanes = [...document.querySelectorAll(".step-pane")];
+const stepChips = [...document.querySelectorAll(".step-chip")];
+const goStepButtons = [...document.querySelectorAll("[data-go-step], [data-next-step]")];
+
+const fieldEls = {
+  targetRole: document.querySelector("#target-role"),
+  linkedinUrl: document.querySelector("#linkedin-url"),
+  linkedinText: document.querySelector("#linkedin-text"),
+  resumeText: document.querySelector("#resume-text"),
+  rewriteStyle: document.querySelector("#rewrite-style"),
+  resumeFile: document.querySelector("#resume-file")
+};
 
 let appConfig = {
   linkedInAuthEnabled: false,
   requiresAppSecret: false,
   openAiRewriteEnabled: false
 };
+
+let sessionProfile = null;
+let analysisResult = null;
+let currentStep = 1;
 
 function readLinkedInStatusFromUrl() {
   const url = new URL(window.location.href);
@@ -35,6 +50,25 @@ function setStatus(message, error = false) {
   statusEl.dataset.error = error ? "true" : "false";
 }
 
+function setStep(step) {
+  currentStep = step;
+  for (const pane of stepPanes) {
+    pane.classList.toggle("hidden", Number(pane.dataset.step) !== step);
+  }
+  for (const chip of stepChips) {
+    chip.classList.toggle("is-active", Number(chip.dataset.goStep) === step);
+  }
+}
+
+for (const button of goStepButtons) {
+  button.addEventListener("click", () => {
+    const target = Number(button.dataset.goStep || button.dataset.nextStep);
+    if (target) {
+      setStep(target);
+    }
+  });
+}
+
 async function fileToBase64(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -49,11 +83,11 @@ async function fileToBase64(file) {
 
 function getFormPayload() {
   return {
-    targetRole: document.querySelector("#target-role").value.trim(),
-    linkedinUrl: document.querySelector("#linkedin-url").value.trim(),
-    linkedinText: document.querySelector("#linkedin-text").value.trim(),
-    resumeText: document.querySelector("#resume-text").value.trim(),
-    style: document.querySelector("#rewrite-style").value
+    targetRole: fieldEls.targetRole.value.trim(),
+    linkedinUrl: fieldEls.linkedinUrl.value.trim(),
+    linkedinText: fieldEls.linkedinText.value.trim(),
+    resumeText: fieldEls.resumeText.value.trim(),
+    style: fieldEls.rewriteStyle.value
   };
 }
 
@@ -79,6 +113,52 @@ function renderSuggestions(suggestions) {
   }
 }
 
+function renderSnapshot(result) {
+  snapshotEl.replaceChildren();
+
+  const items = [
+    ["Target role", result?.meta?.targetRole || fieldEls.targetRole.value.trim() || "Not set"],
+    ["LinkedIn connected", sessionProfile ? "Yes" : "No"],
+    ["Detected sections", result?.extracted?.sections?.join(", ") || "None yet"],
+    ["Bullet count", String(result?.extracted?.bullets ?? 0)],
+    ["Missing keywords", result?.extracted?.missingKeywords?.join(", ") || "None detected"],
+    ["Source coverage", summarizeCoverage(result)]
+  ];
+
+  for (const [label, value] of items) {
+    const row = document.createElement("div");
+    row.className = "snapshot-row";
+    const term = document.createElement("p");
+    term.className = "snapshot-label";
+    term.textContent = label;
+    const detail = document.createElement("p");
+    detail.className = "snapshot-value";
+    detail.textContent = value;
+    row.append(term, detail);
+    snapshotEl.appendChild(row);
+  }
+}
+
+function summarizeCoverage(result) {
+  const parts = [];
+  if (sessionProfile) {
+    parts.push("LinkedIn identity");
+  }
+  if (fieldEls.linkedinText.value.trim()) {
+    parts.push("LinkedIn text");
+  }
+  if (fieldEls.resumeText.value.trim()) {
+    parts.push("Resume text");
+  }
+  if (fieldEls.resumeFile.files[0]) {
+    parts.push("Resume file");
+  }
+  if (!parts.length && result?.extractedResumeText) {
+    parts.push("Extracted resume text");
+  }
+  return parts.join(" + ") || "Waiting for source material";
+}
+
 function renderNotes(items) {
   aiNotesEl.replaceChildren();
   if (!items.length) {
@@ -90,6 +170,25 @@ function renderNotes(items) {
     const row = document.createElement("p");
     row.textContent = item;
     aiNotesEl.appendChild(row);
+  }
+}
+
+function maybeAutofillFromProfile(profile) {
+  if (!profile) {
+    return;
+  }
+
+  if (!fieldEls.resumeText.value.trim()) {
+    const header = [profile.name, profile.email].filter(Boolean).join("\n");
+    if (header) {
+      fieldEls.resumeText.value = `${header}\n\n`;
+    }
+  }
+
+  if (!fieldEls.linkedinText.value.trim()) {
+    fieldEls.linkedinText.value = [profile.name ? `Name: ${profile.name}` : "", profile.email ? `Email: ${profile.email}` : ""]
+      .filter(Boolean)
+      .join("\n");
   }
 }
 
@@ -159,18 +258,22 @@ async function loadSession() {
   ]);
   appConfig = await configResponse.json();
   const session = await sessionResponse.json();
-  renderProfile(session.profile);
+  sessionProfile = session.profile || null;
+  renderProfile(sessionProfile);
+  maybeAutofillFromProfile(sessionProfile);
+  renderSnapshot(analysisResult);
   updateRewriteButton();
 }
 
 logoutButtonEl.addEventListener("click", async () => {
   await fetch("/api/auth/logout", { method: "POST" });
+  sessionProfile = null;
   await loadSession();
   setStatus("LinkedIn disconnected.");
 });
 
 async function enrichPayloadWithFile(payload) {
-  const resumeFile = document.querySelector("#resume-file").files[0];
+  const resumeFile = fieldEls.resumeFile.files[0];
   if (!resumeFile) {
     return payload;
   }
@@ -179,38 +282,35 @@ async function enrichPayloadWithFile(payload) {
   return payload;
 }
 
+async function runAnalysis(payload) {
+  const response = await fetch("/api/analyze", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  const result = await response.json();
+  if (!response.ok) {
+    throw new Error(result.error || "Analysis failed");
+  }
+  analysisResult = result;
+  renderSuggestions(result.suggestions);
+  renderSnapshot(result);
+  draftEl.textContent = result.rewrittenResume || "No draft returned.";
+  return result;
+}
+
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
   setStatus("Analyzing...");
-  resultsEl.classList.add("hidden");
 
   try {
     const payload = await enrichPayloadWithFile(getFormPayload());
-    const response = await fetch("/api/analyze", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(payload)
-    });
-
-    const result = await response.json();
-    if (!response.ok) {
-      throw new Error(result.error || "Analysis failed");
+    const result = await runAnalysis(payload);
+    if (!fieldEls.resumeText.value.trim() && result.extractedResumeText) {
+      fieldEls.resumeText.value = result.extractedResumeText;
     }
-
-    renderSuggestions(result.suggestions);
-    snapshotEl.textContent = JSON.stringify(
-      {
-        targetRole: result.meta.targetRole,
-        bullets: result.extracted.bullets,
-        sections: result.extracted.sections,
-        missingKeywords: result.extracted.missingKeywords
-      },
-      null,
-      2
-    );
-    draftEl.textContent = result.rewrittenResume;
-    resultsEl.classList.remove("hidden");
-    setStatus("Analysis ready.");
+    setStep(3);
+    setStatus("Review ready.");
   } catch (error) {
     setStatus(error.message || "Something went wrong.", true);
   }
@@ -225,34 +325,13 @@ rewriteButtonEl.addEventListener("click", async () => {
   setStatus("Rewriting...");
   try {
     const payload = await enrichPayloadWithFile(getFormPayload());
-    if (!payload.resumeText && !payload.resumeFileBase64 && !payload.linkedinText) {
-      throw new Error("Add resume or LinkedIn text first.");
-    }
-
-    if (!payload.resumeText && payload.resumeFileBase64) {
-      const analyzeResponse = await fetch("/api/analyze", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(payload)
-      });
-      const analyzeResult = await analyzeResponse.json();
-      if (!analyzeResponse.ok) {
-        throw new Error(analyzeResult.error || "Could not prepare rewrite input.");
+    if (!analysisResult) {
+      const analyzed = await runAnalysis(payload);
+      if (!payload.resumeText && analyzed.extractedResumeText) {
+        payload.resumeText = analyzed.extractedResumeText;
       }
-      payload.resumeText = analyzeResult.extractedResumeText || "";
-      draftEl.textContent = analyzeResult.rewrittenResume;
-      renderSuggestions(analyzeResult.suggestions);
-      snapshotEl.textContent = JSON.stringify(
-        {
-          targetRole: analyzeResult.meta.targetRole,
-          bullets: analyzeResult.extracted.bullets,
-          sections: analyzeResult.extracted.sections,
-          missingKeywords: analyzeResult.extracted.missingKeywords
-        },
-        null,
-        2
-      );
-      resultsEl.classList.remove("hidden");
+    } else if (!payload.resumeText && analysisResult.extractedResumeText) {
+      payload.resumeText = analysisResult.extractedResumeText;
     }
 
     const response = await fetch("/api/rewrite", {
@@ -267,12 +346,18 @@ rewriteButtonEl.addEventListener("click", async () => {
 
     aiRewriteEl.textContent = result.rewrittenResume || "No rewrite returned.";
     renderNotes([result.summary, ...result.bulletImprovements, ...result.notes].filter(Boolean));
-    resultsEl.classList.remove("hidden");
+    setStep(4);
     setStatus("AI rewrite ready.");
   } catch (error) {
     setStatus(error.message || "Rewrite failed.", true);
   }
 });
+
+for (const chip of stepChips) {
+  chip.addEventListener("click", () => {
+    setStep(Number(chip.dataset.goStep));
+  });
+}
 
 const linkedInStatus = readLinkedInStatusFromUrl();
 if (linkedInStatus === "connected") {
@@ -281,6 +366,7 @@ if (linkedInStatus === "connected") {
   setStatus("LinkedIn sign-in did not complete.", true);
 }
 
+renderSnapshot(null);
 loadSession().catch((error) => {
   setStatus(error.message || "Unable to load app state.", true);
 });

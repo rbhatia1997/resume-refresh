@@ -11,127 +11,160 @@
       <section class="hero">
         <div class="hero-copy">
           <p class="eyebrow">Resume Refresh</p>
-          <h1>Sharper resume. Less work.</h1>
-          <p class="lede">Upload, connect, rewrite.</p>
+          <h1>Build a stronger resume in four steps.</h1>
+          <p class="lede">Connect. Add context. Review. Rewrite.</p>
         </div>
-        <div class="hero-proof">
-          <div class="proof-card">
-            <p class="proof-label">What it does</p>
-            <ul class="proof-list">
-              <li>Reads resume PDFs</li>
-              <li>Pulls basic LinkedIn identity</li>
-              <li>Finds gaps and weak bullets</li>
-              <li>Generates an AI rewrite</li>
-            </ul>
-          </div>
+        <div class="proof-card">
+          <p class="proof-label">Outputs</p>
+          <ul class="proof-list">
+            <li>Gap analysis</li>
+            <li>Bullet fixes</li>
+            <li>Resume draft</li>
+            <li>AI rewrite</li>
+          </ul>
         </div>
       </section>
 
-      <section class="panel auth-panel">
-        <div>
-          <p class="section-kicker">LinkedIn</p>
-          <h2>Connect once</h2>
-        </div>
-
-        <div class="auth-actions">
-          <div id="auth-state" class="auth-state">Checking LinkedIn configuration...</div>
-          <div class="auth-buttons">
-            <a id="linkedin-login" class="button-link" href="/api/auth/linkedin">Connect LinkedIn</a>
-            <button id="linkedin-logout" type="button" class="button-secondary hidden">Disconnect</button>
-          </div>
-        </div>
-      </section>
-
-      <section class="panel">
-        <form id="analyze-form">
-          <div class="form-grid">
-            <label>
-              Target role
-              <input id="target-role" name="targetRole" placeholder="Senior Product Manager" />
-            </label>
-
-            <label>
-              LinkedIn URL
-              <input id="linkedin-url" name="linkedinUrl" placeholder="linkedin.com/in/you" />
-            </label>
-          </div>
-
-          <div class="form-grid two-up">
-            <label>
-              LinkedIn text
-              <textarea
-                id="linkedin-text"
-                name="linkedinText"
-                rows="10"
-                placeholder="Paste About, Experience, Skills."
-              ></textarea>
-            </label>
-
-            <label>
-              Resume text
-              <textarea
-                id="resume-text"
-                name="resumeText"
-                rows="10"
-                placeholder="Paste your current resume."
-              ></textarea>
-            </label>
-          </div>
-
-          <div class="upload-row">
-            <label class="file-picker">
-              <span>Resume file</span>
-              <input id="resume-file" name="resumeFile" type="file" accept=".pdf,.txt,.md" />
-            </label>
-
-            <label>
-              AI rewrite tone
-              <select id="rewrite-style" name="rewriteStyle">
-                <option value="concise">Concise</option>
-                <option value="executive">Executive</option>
-                <option value="technical">Technical</option>
-              </select>
-            </label>
-          </div>
-
-          <div class="action-row">
-            <button type="submit">Analyze</button>
-            <button id="rewrite-button" type="button" class="button-secondary">AI Rewrite</button>
-          </div>
-        </form>
-      </section>
+      <nav class="stepper" aria-label="Application steps">
+        <button class="step-chip is-active" data-go-step="1" type="button">1. Connect</button>
+        <button class="step-chip" data-go-step="2" type="button">2. Sources</button>
+        <button class="step-chip" data-go-step="3" type="button">3. Review</button>
+        <button class="step-chip" data-go-step="4" type="button">4. Rewrite</button>
+      </nav>
 
       <section id="status" class="status" aria-live="polite"></section>
 
-      <section id="linkedin-profile-card" class="panel hidden">
-        <p class="section-kicker">Connected account</p>
-        <div id="linkedin-profile"></div>
+      <section class="step-pane" data-step="1">
+        <div class="panel auth-panel">
+          <div>
+            <p class="section-kicker">Step 1</p>
+            <h2>Connect LinkedIn</h2>
+            <p class="panel-copy">We pull basic identity and use it to prefill what we can.</p>
+          </div>
+
+          <div class="auth-actions">
+            <div id="auth-state" class="auth-state">Checking LinkedIn configuration...</div>
+            <div class="auth-buttons">
+              <a id="linkedin-login" class="button-link" href="/api/auth/linkedin">Connect LinkedIn</a>
+              <button id="linkedin-logout" type="button" class="button-secondary hidden">Disconnect</button>
+              <button class="button-secondary" data-next-step="2" type="button">Continue</button>
+            </div>
+          </div>
+        </div>
+
+        <section id="linkedin-profile-card" class="panel hidden">
+          <p class="section-kicker">Connected account</p>
+          <div id="linkedin-profile"></div>
+        </section>
       </section>
 
-      <section id="results" class="results hidden">
-        <div class="card">
-          <h2>Suggestions</h2>
-          <div id="suggestions"></div>
-        </div>
+      <section class="step-pane hidden" data-step="2">
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <p class="section-kicker">Step 2</p>
+              <h2>Add source material</h2>
+            </div>
+            <button class="button-secondary" data-next-step="3" type="button" id="skip-to-review">Skip to review</button>
+          </div>
 
-        <div class="card">
-          <h2>Snapshot</h2>
-          <pre id="snapshot"></pre>
-        </div>
+          <form id="analyze-form">
+            <div class="form-grid">
+              <label>
+                Target role
+                <input id="target-role" name="targetRole" placeholder="Senior Product Manager" />
+              </label>
 
-        <div class="card">
-          <h2>Draft</h2>
-          <pre id="draft"></pre>
-        </div>
+              <label>
+                LinkedIn URL
+                <input id="linkedin-url" name="linkedinUrl" placeholder="linkedin.com/in/you" />
+              </label>
+            </div>
 
-        <div class="card">
-          <h2>AI Rewrite</h2>
-          <pre id="ai-rewrite">OpenAI rewrite not run yet.</pre>
-        </div>
+            <div class="form-grid two-up">
+              <label>
+                LinkedIn text
+                <textarea
+                  id="linkedin-text"
+                  name="linkedinText"
+                  rows="10"
+                  placeholder="Paste About, Experience, Skills."
+                ></textarea>
+              </label>
 
-        <div class="card">
-          <h2>AI Notes</h2>
-          <div id="ai-notes" class="notes-list"></div>
+              <label>
+                Resume text
+                <textarea
+                  id="resume-text"
+                  name="resumeText"
+                  rows="10"
+                  placeholder="Paste your current resume."
+                ></textarea>
+              </label>
+            </div>
+
+            <div class="upload-row">
+              <label class="file-picker">
+                <span>Resume file</span>
+                <input id="resume-file" name="resumeFile" type="file" accept=".pdf,.txt,.md" />
+              </label>
+
+              <label>
+                AI rewrite tone
+                <select id="rewrite-style" name="rewriteStyle">
+                  <option value="concise">Concise</option>
+                  <option value="executive">Executive</option>
+                  <option value="technical">Technical</option>
+                </select>
+              </label>
+            </div>
+
+            <div class="action-row">
+              <button type="submit">Analyze</button>
+              <button class="button-secondary" data-go-step="1" type="button">Back</button>
+            </div>
+          </form>
+        </section>
+      </section>
+
+      <section class="step-pane hidden" data-step="3">
+        <div class="results review-grid">
+          <div class="card">
+            <h2>Snapshot</h2>
+            <div id="snapshot" class="snapshot-list"></div>
+          </div>
+
+          <div class="card">
+            <h2>Suggestions</h2>
+            <div id="suggestions"></div>
+          </div>
+
+          <div class="card review-wide">
+            <h2>Draft</h2>
+            <pre id="draft">Run analysis to generate a draft.</pre>
+          </div>
+        </div>
+        <div class="action-row action-bar">
+          <button class="button-secondary" data-go-step="2" type="button">Back</button>
+          <button id="rewrite-button" type="button">AI Rewrite</button>
+        </div>
+      </section>
+
+      <section class="step-pane hidden" data-step="4">
+        <div class="results rewrite-grid">
+          <div class="card rewrite-wide">
+            <h2>AI Rewrite</h2>
+            <pre id="ai-rewrite">Run AI rewrite to see the polished version.</pre>
+          </div>
+
+          <div class="card">
+            <h2>AI Notes</h2>
+            <div id="ai-notes" class="notes-list"></div>
+          </div>
+        </div>
+        <div class="action-row action-bar">
+          <button class="button-secondary" data-go-step="3" type="button">Back</button>
+          <button class="button-secondary" data-go-step="2" type="button">Edit inputs</button>
         </div>
       </section>
     </main>
