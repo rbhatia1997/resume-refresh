@@ -40,7 +40,7 @@ async function fileToBase64(file) {
 }
 
 function renderSuggestions(suggestions) {
-  suggestionsEl.innerHTML = "";
+  suggestionsEl.replaceChildren();
   if (!suggestions.length) {
     suggestionsEl.textContent = "No obvious issues detected. Review the draft and tailor it to specific jobs.";
     return;
@@ -49,16 +49,27 @@ function renderSuggestions(suggestions) {
   for (const suggestion of suggestions) {
     const article = document.createElement("article");
     article.className = "suggestion";
-    article.innerHTML = `
-      <p class="priority">${suggestion.priority}</p>
-      <h3>${suggestion.title}</h3>
-      <p>${suggestion.detail}</p>
-    `;
+    const priority = document.createElement("p");
+    priority.className = "priority";
+    priority.textContent = suggestion.priority;
+    const title = document.createElement("h3");
+    title.textContent = suggestion.title;
+    const detail = document.createElement("p");
+    detail.textContent = suggestion.detail;
+    article.append(priority, title, detail);
     suggestionsEl.appendChild(article);
   }
 }
 
-function renderProfile(profile, linkedInAuthEnabled) {
+function renderProfile(profile, { linkedInAuthEnabled, requiresAppSecret }) {
+  if (requiresAppSecret) {
+    authStateEl.textContent = "Deployment is missing APP_SECRET, so LinkedIn auth is disabled until that is configured.";
+    loginLinkEl.classList.add("hidden");
+    logoutButtonEl.classList.add("hidden");
+    profileCardEl.classList.add("hidden");
+    return;
+  }
+
   if (!linkedInAuthEnabled) {
     authStateEl.textContent = "LinkedIn auth is not configured on this deployment.";
     loginLinkEl.classList.add("hidden");
@@ -78,15 +89,24 @@ function renderProfile(profile, linkedInAuthEnabled) {
   authStateEl.textContent = `Connected as ${profile.name || profile.email || "LinkedIn user"}.`;
   loginLinkEl.classList.add("hidden");
   logoutButtonEl.classList.remove("hidden");
-  profileEl.innerHTML = `
-    <div class="profile-row">
-      ${profile.picture ? `<img class="avatar" src="${profile.picture}" alt="" />` : ""}
-      <div>
-        <h3>${profile.name || "LinkedIn user"}</h3>
-        <p>${profile.email || "Email not shared"}</p>
-      </div>
-    </div>
-  `;
+  profileEl.replaceChildren();
+  const row = document.createElement("div");
+  row.className = "profile-row";
+  if (profile.picture) {
+    const image = document.createElement("img");
+    image.className = "avatar";
+    image.src = profile.picture;
+    image.alt = "";
+    row.appendChild(image);
+  }
+  const copy = document.createElement("div");
+  const name = document.createElement("h3");
+  name.textContent = profile.name || "LinkedIn user";
+  const email = document.createElement("p");
+  email.textContent = profile.email || "Email not shared";
+  copy.append(name, email);
+  row.appendChild(copy);
+  profileEl.appendChild(row);
   profileCardEl.classList.remove("hidden");
 }
 
@@ -97,11 +117,11 @@ async function loadSession() {
   ]);
   const config = await configResponse.json();
   const session = await sessionResponse.json();
-  renderProfile(session.profile, config.linkedInAuthEnabled);
+  renderProfile(session.profile, config);
 }
 
 logoutButtonEl.addEventListener("click", async () => {
-  await fetch("/auth/logout", { method: "POST" });
+  await fetch("/api/auth/logout", { method: "POST" });
   await loadSession();
   setStatus("LinkedIn connection removed.");
 });

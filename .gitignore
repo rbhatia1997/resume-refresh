@@ -1,3 +1,5 @@
 .DS_Store
 .env
 npm-debug.log*
+.vercel
+node_modules

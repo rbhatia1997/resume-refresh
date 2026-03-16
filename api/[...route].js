@@ -1,8 +1,12 @@
-import { createServer } from "node:http";
-import { handleRequest, getListenConfig } from "./app.js";
+import { handleRequest } from "../src/app.js";
+
+export const config = {
+  runtime: "nodejs"
+};
 
 async function toFetchRequest(req) {
-  const origin = `http://${req.headers.host || "127.0.0.1"}`;
+  const protocol = req.headers["x-forwarded-proto"] || "https";
+  const origin = `${protocol}://${req.headers.host}`;
   const url = new URL(req.url || "/", origin).toString();
   const headers = new Headers();
 
@@ -51,13 +55,8 @@ async function sendNodeResponse(res, response) {
   res.end(body);
 }
 
-const server = createServer(async (req, res) => {
+export default async function handler(req, res) {
   const request = await toFetchRequest(req);
-  const response = await handleRequest(request, { serveStatic: true });
+  const response = await handleRequest(request, { serveStatic: false });
   await sendNodeResponse(res, response);
-});
-
-const { port, host } = getListenConfig();
-server.listen(port, host, () => {
-  console.log(`Resume Refresh running at http://${host}:${port}`);
-});
+}
