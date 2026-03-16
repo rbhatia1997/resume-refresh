@@ -9,23 +9,28 @@
   <body>
     <main class="shell">
       <section class="hero">
-        <p class="eyebrow">Resume updater</p>
-        <h1>Turn your LinkedIn and current resume into a sharper draft.</h1>
-        <p class="lede">
-          Connect LinkedIn for verified identity, upload a resume PDF or paste resume text, then
-          get concrete rewrite suggestions plus an updated draft.
-        </p>
+        <div class="hero-copy">
+          <p class="eyebrow">Resume Refresh</p>
+          <h1>Sharper resume. Less work.</h1>
+          <p class="lede">Upload, connect, rewrite.</p>
+        </div>
+        <div class="hero-proof">
+          <div class="proof-card">
+            <p class="proof-label">What it does</p>
+            <ul class="proof-list">
+              <li>Reads resume PDFs</li>
+              <li>Pulls basic LinkedIn identity</li>
+              <li>Finds gaps and weak bullets</li>
+              <li>Generates an AI rewrite</li>
+            </ul>
+          </div>
+        </div>
       </section>
 
       <section class="panel auth-panel">
         <div>
-          <p class="section-kicker">LinkedIn connection</p>
-          <h2>Browser-based sign-in</h2>
-          <p class="auth-copy">
-            Sign in with LinkedIn to attach basic profile identity. For richer resume content, keep
-            using the LinkedIn paste field below because LinkedIn does not expose full experience
-            data to standard OpenID apps.
-          </p>
+          <p class="section-kicker">LinkedIn</p>
+          <h2>Connect once</h2>
         </div>
 
         <div class="auth-actions">
@@ -39,42 +44,60 @@
 
       <section class="panel">
         <form id="analyze-form">
-          <label>
-            Target role
-            <input id="target-role" name="targetRole" placeholder="Senior Product Manager" />
-          </label>
+          <div class="form-grid">
+            <label>
+              Target role
+              <input id="target-role" name="targetRole" placeholder="Senior Product Manager" />
+            </label>
 
-          <label>
-            LinkedIn URL
-            <input id="linkedin-url" name="linkedinUrl" placeholder="https://www.linkedin.com/in/..." />
-          </label>
+            <label>
+              LinkedIn URL
+              <input id="linkedin-url" name="linkedinUrl" placeholder="linkedin.com/in/you" />
+            </label>
+          </div>
 
-          <label>
-            LinkedIn content
-            <textarea
-              id="linkedin-text"
-              name="linkedinText"
-              rows="9"
-              placeholder="Paste your LinkedIn About, Experience, Skills, and headline here."
-            ></textarea>
-          </label>
+          <div class="form-grid two-up">
+            <label>
+              LinkedIn text
+              <textarea
+                id="linkedin-text"
+                name="linkedinText"
+                rows="10"
+                placeholder="Paste About, Experience, Skills."
+              ></textarea>
+            </label>
 
-          <label>
-            Resume file
-            <input id="resume-file" name="resumeFile" type="file" accept=".pdf,.txt,.md" />
-          </label>
+            <label>
+              Resume text
+              <textarea
+                id="resume-text"
+                name="resumeText"
+                rows="10"
+                placeholder="Paste your current resume."
+              ></textarea>
+            </label>
+          </div>
 
-          <label>
-            Resume text
-            <textarea
-              id="resume-text"
-              name="resumeText"
-              rows="9"
-              placeholder="Optional if you upload a file. Paste plain text here if easier."
-            ></textarea>
-          </label>
+          <div class="upload-row">
+            <label class="file-picker">
+              <span>Resume file</span>
+              <input id="resume-file" name="resumeFile" type="file" accept=".pdf,.txt,.md" />
+            </label>
 
-          <button type="submit">Analyze Resume</button>
+            <label>
+              AI rewrite tone
+              <select id="rewrite-style" name="rewriteStyle">
+                <option value="concise">Concise</option>
+                <option value="executive">Executive</option>
+                <option value="technical">Technical</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="action-row">
+            <button type="submit">Analyze</button>
+            <button id="rewrite-button" type="button" class="button-secondary">AI Rewrite</button>
+          </div>
         </form>
       </section>
 
@@ -87,23 +110,28 @@
 
       <section id="results" class="results hidden">
         <div class="card">
-          <h2>Improvement Suggestions</h2>
+          <h2>Suggestions</h2>
           <div id="suggestions"></div>
         </div>
 
         <div class="card">
-          <h2>Extracted Snapshot</h2>
+          <h2>Snapshot</h2>
           <pre id="snapshot"></pre>
         </div>
 
         <div class="card">
-          <h2>Updated Resume Draft</h2>
+          <h2>Draft</h2>
           <pre id="draft"></pre>
         </div>
 
         <div class="card">
-          <h2>Extracted Resume Text</h2>
-          <pre id="extracted-text"></pre>
+          <h2>AI Rewrite</h2>
+          <pre id="ai-rewrite">OpenAI rewrite not run yet.</pre>
+        </div>
+
+        <div class="card">
+          <h2>AI Notes</h2>
+          <div id="ai-notes" class="notes-list"></div>
         </div>
       </section>
     </main>

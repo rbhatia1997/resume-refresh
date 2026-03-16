@@ -8,6 +8,7 @@ Local resume improvement tool that:
 - accepts a resume in `PDF`, `TXT`, or `MD`
 - extracts text from PDFs in Node, so it can run on hosted Linux platforms
 - returns improvement suggestions and an updated resume draft
+- optionally generates an OpenAI-powered rewrite
 
 ## Run
 
@@ -23,10 +24,17 @@ Open `http://localhost:3210`.
 - OAuth state and session data are signed with `APP_SECRET`
 - cookies are `HttpOnly` and `SameSite=Lax`
 - request bodies and uploads are size-limited
+- write-heavy endpoints are same-origin checked and rate-limited
 - the client UI avoids rendering suggestion/profile data with `innerHTML`
 - security headers are set on app responses
 
 Set a strong random `APP_SECRET` in production.
+
+## OpenAI Rewrite
+
+Set `OPENAI_API_KEY` to enable AI-powered resume rewrites.
+
+Without it, the app still works for parsing and suggestions, but the `AI Rewrite` button stays disabled.
 
 ## LinkedIn Auth Setup
 
@@ -61,6 +69,7 @@ Set these environment variables in Vercel:
 - `APP_SECRET`
 - `LINKEDIN_CLIENT_ID`
 - `LINKEDIN_CLIENT_SECRET`
+- `OPENAI_API_KEY` if you want AI rewrite enabled
 
 Then update the LinkedIn redirect URL to:
 
@@ -83,6 +92,7 @@ Required environment variables:
 - `APP_SECRET`
 - `LINKEDIN_CLIENT_ID`
 - `LINKEDIN_CLIENT_SECRET`
+- `OPENAI_API_KEY` if you want AI rewrite enabled
 
 ## Notes
 

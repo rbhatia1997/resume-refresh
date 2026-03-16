@@ -4,12 +4,20 @@ const resultsEl = document.querySelector("#results");
 const suggestionsEl = document.querySelector("#suggestions");
 const snapshotEl = document.querySelector("#snapshot");
 const draftEl = document.querySelector("#draft");
-const extractedTextEl = document.querySelector("#extracted-text");
+const aiRewriteEl = document.querySelector("#ai-rewrite");
+const aiNotesEl = document.querySelector("#ai-notes");
 const loginLinkEl = document.querySelector("#linkedin-login");
 const logoutButtonEl = document.querySelector("#linkedin-logout");
 const authStateEl = document.querySelector("#auth-state");
 const profileCardEl = document.querySelector("#linkedin-profile-card");
 const profileEl = document.querySelector("#linkedin-profile");
+const rewriteButtonEl = document.querySelector("#rewrite-button");
+
+let appConfig = {
+  linkedInAuthEnabled: false,
+  requiresAppSecret: false,
+  openAiRewriteEnabled: false
+};
 
 function readLinkedInStatusFromUrl() {
   const url = new URL(window.location.href);
@@ -39,10 +47,20 @@ async function fileToBase64(file) {
   });
 }
 
+function getFormPayload() {
+  return {
+    targetRole: document.querySelector("#target-role").value.trim(),
+    linkedinUrl: document.querySelector("#linkedin-url").value.trim(),
+    linkedinText: document.querySelector("#linkedin-text").value.trim(),
+    resumeText: document.querySelector("#resume-text").value.trim(),
+    style: document.querySelector("#rewrite-style").value
+  };
+}
+
 function renderSuggestions(suggestions) {
   suggestionsEl.replaceChildren();
   if (!suggestions.length) {
-    suggestionsEl.textContent = "No obvious issues detected. Review the draft and tailor it to specific jobs.";
+    suggestionsEl.textContent = "No obvious issues detected.";
     return;
   }
 
@@ -61,17 +79,31 @@ function renderSuggestions(suggestions) {
   }
 }
 
-function renderProfile(profile, { linkedInAuthEnabled, requiresAppSecret }) {
-  if (requiresAppSecret) {
-    authStateEl.textContent = "Deployment is missing APP_SECRET, so LinkedIn auth is disabled until that is configured.";
+function renderNotes(items) {
+  aiNotesEl.replaceChildren();
+  if (!items.length) {
+    aiNotesEl.textContent = "No extra notes.";
+    return;
+  }
+
+  for (const item of items) {
+    const row = document.createElement("p");
+    row.textContent = item;
+    aiNotesEl.appendChild(row);
+  }
+}
+
+function renderProfile(profile) {
+  if (appConfig.requiresAppSecret) {
+    authStateEl.textContent = "APP_SECRET missing.";
     loginLinkEl.classList.add("hidden");
     logoutButtonEl.classList.add("hidden");
     profileCardEl.classList.add("hidden");
     return;
   }
 
-  if (!linkedInAuthEnabled) {
-    authStateEl.textContent = "LinkedIn auth is not configured on this deployment.";
+  if (!appConfig.linkedInAuthEnabled) {
+    authStateEl.textContent = "LinkedIn unavailable.";
     loginLinkEl.classList.add("hidden");
     logoutButtonEl.classList.add("hidden");
     profileCardEl.classList.add("hidden");
@@ -79,14 +111,14 @@ function renderProfile(profile, { linkedInAuthEnabled, requiresAppSecret }) {
   }
 
   if (!profile) {
-    authStateEl.textContent = "Not connected. Sign in to attach basic LinkedIn identity.";
+    authStateEl.textContent = "Not connected.";
     loginLinkEl.classList.remove("hidden");
     logoutButtonEl.classList.add("hidden");
     profileCardEl.classList.add("hidden");
     return;
   }
 
-  authStateEl.textContent = `Connected as ${profile.name || profile.email || "LinkedIn user"}.`;
+  authStateEl.textContent = `${profile.name || profile.email || "LinkedIn account"} connected`;
   loginLinkEl.classList.add("hidden");
   logoutButtonEl.classList.remove("hidden");
   profileEl.replaceChildren();
@@ -101,7 +133,7 @@ function renderProfile(profile, { linkedInAuthEnabled, requiresAppSecret }) {
   }
   const copy = document.createElement("div");
   const name = document.createElement("h3");
-  name.textContent = profile.name || "LinkedIn user";
+  name.textContent = profile.name || "LinkedIn account";
   const email = document.createElement("p");
   email.textContent = profile.email || "Email not shared";
   copy.append(name, email);
@@ -110,41 +142,50 @@ function renderProfile(profile, { linkedInAuthEnabled, requiresAppSecret }) {
   profileCardEl.classList.remove("hidden");
 }
 
+function updateRewriteButton() {
+  if (!appConfig.openAiRewriteEnabled) {
+    rewriteButtonEl.disabled = true;
+    rewriteButtonEl.textContent = "AI Rewrite Unavailable";
+    return;
+  }
+  rewriteButtonEl.disabled = false;
+  rewriteButtonEl.textContent = "AI Rewrite";
+}
+
 async function loadSession() {
   const [configResponse, sessionResponse] = await Promise.all([
     fetch("/api/config"),
     fetch("/api/session")
   ]);
-  const config = await configResponse.json();
+  appConfig = await configResponse.json();
   const session = await sessionResponse.json();
-  renderProfile(session.profile, config);
+  renderProfile(session.profile);
+  updateRewriteButton();
 }
 
 logoutButtonEl.addEventListener("click", async () => {
   await fetch("/api/auth/logout", { method: "POST" });
   await loadSession();
-  setStatus("LinkedIn connection removed.");
+  setStatus("LinkedIn disconnected.");
 });
+
+async function enrichPayloadWithFile(payload) {
+  const resumeFile = document.querySelector("#resume-file").files[0];
+  if (!resumeFile) {
+    return payload;
+  }
+  payload.resumeFileName = resumeFile.name;
+  payload.resumeFileBase64 = await fileToBase64(resumeFile);
+  return payload;
+}
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
-  setStatus("Analyzing your resume...");
+  setStatus("Analyzing...");
   resultsEl.classList.add("hidden");
 
   try {
-    const resumeFile = document.querySelector("#resume-file").files[0];
-    const payload = {
-      targetRole: document.querySelector("#target-role").value,
-      linkedinUrl: document.querySelector("#linkedin-url").value,
-      linkedinText: document.querySelector("#linkedin-text").value,
-      resumeText: document.querySelector("#resume-text").value
-    };
-
-    if (resumeFile) {
-      payload.resumeFileName = resumeFile.name;
-      payload.resumeFileBase64 = await fileToBase64(resumeFile);
-    }
-
+    const payload = await enrichPayloadWithFile(getFormPayload());
     const response = await fetch("/api/analyze", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -159,19 +200,77 @@ form.addEventListener("submit", async (event) => {
     renderSuggestions(result.suggestions);
     snapshotEl.textContent = JSON.stringify(
       {
-        meta: result.meta,
-        extracted: result.extracted,
-        linkedInProfile: result.linkedInProfile
+        targetRole: result.meta.targetRole,
+        bullets: result.extracted.bullets,
+        sections: result.extracted.sections,
+        missingKeywords: result.extracted.missingKeywords
       },
       null,
       2
     );
     draftEl.textContent = result.rewrittenResume;
-    extractedTextEl.textContent = result.extractedResumeText || "No resume text supplied.";
     resultsEl.classList.remove("hidden");
-    setStatus("Analysis complete.");
+    setStatus("Analysis ready.");
   } catch (error) {
     setStatus(error.message || "Something went wrong.", true);
+  }
+});
+
+rewriteButtonEl.addEventListener("click", async () => {
+  if (!appConfig.openAiRewriteEnabled) {
+    setStatus("OpenAI rewrite is not configured.", true);
+    return;
+  }
+
+  setStatus("Rewriting...");
+  try {
+    const payload = await enrichPayloadWithFile(getFormPayload());
+    if (!payload.resumeText && !payload.resumeFileBase64 && !payload.linkedinText) {
+      throw new Error("Add resume or LinkedIn text first.");
+    }
+
+    if (!payload.resumeText && payload.resumeFileBase64) {
+      const analyzeResponse = await fetch("/api/analyze", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const analyzeResult = await analyzeResponse.json();
+      if (!analyzeResponse.ok) {
+        throw new Error(analyzeResult.error || "Could not prepare rewrite input.");
+      }
+      payload.resumeText = analyzeResult.extractedResumeText || "";
+      draftEl.textContent = analyzeResult.rewrittenResume;
+      renderSuggestions(analyzeResult.suggestions);
+      snapshotEl.textContent = JSON.stringify(
+        {
+          targetRole: analyzeResult.meta.targetRole,
+          bullets: analyzeResult.extracted.bullets,
+          sections: analyzeResult.extracted.sections,
+          missingKeywords: analyzeResult.extracted.missingKeywords
+        },
+        null,
+        2
+      );
+      resultsEl.classList.remove("hidden");
+    }
+
+    const response = await fetch("/api/rewrite", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    const result = await response.json();
+    if (!response.ok) {
+      throw new Error(result.error || "Rewrite failed");
+    }
+
+    aiRewriteEl.textContent = result.rewrittenResume || "No rewrite returned.";
+    renderNotes([result.summary, ...result.bulletImprovements, ...result.notes].filter(Boolean));
+    resultsEl.classList.remove("hidden");
+    setStatus("AI rewrite ready.");
+  } catch (error) {
+    setStatus(error.message || "Rewrite failed.", true);
   }
 });
 
@@ -183,5 +282,5 @@ if (linkedInStatus === "connected") {
 }
 
 loadSession().catch((error) => {
-  setStatus(error.message || "Unable to load LinkedIn session.", true);
+  setStatus(error.message || "Unable to load app state.", true);
 });
