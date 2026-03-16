@@ -132,7 +132,7 @@ export async function handleRequest(request, { serveStatic = true } = {}) {
       const linkedInProfileText = profileToText(session?.profile);
       const linkedInText = [linkedInProfileText, body.linkedinText || ""].filter(Boolean).join("\n");
       const result = analyzeResume({
-        linkedinText,
+        linkedinText: linkedInText,
         linkedinUrl: body.linkedinUrl || "",
         resumeText: resolvedResumeText,
         targetRole: body.targetRole || ""
