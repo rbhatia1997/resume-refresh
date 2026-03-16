@@ -4,7 +4,7 @@ export const config = {
   runtime: "nodejs"
 };
 
-async function toFetchRequest(req) {
+export async function toFetchRequest(req) {
   const protocol = req.headers["x-forwarded-proto"] || "https";
   const origin = `${protocol}://${req.headers.host}`;
   const url = new URL(req.url || "/", origin).toString();
@@ -40,7 +40,7 @@ async function readChunks(req) {
   return chunks;
 }
 
-async function sendNodeResponse(res, response) {
+export async function sendNodeResponse(res, response) {
   res.statusCode = response.status;
   response.headers.forEach((value, key) => {
     if (key === "set-cookie") {
@@ -55,7 +55,7 @@ async function sendNodeResponse(res, response) {
   res.end(body);
 }
 
-export default async function handler(req, res) {
+export async function nodeHandler(req, res) {
   const request = await toFetchRequest(req);
   const response = await handleRequest(request, { serveStatic: false });
   await sendNodeResponse(res, response);
