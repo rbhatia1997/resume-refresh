@@ -38,6 +38,8 @@ body {
 
 .hero-copy,
 .proof-card,
+.chat-shell,
+.guide-card,
 .panel,
 .card,
 .step-chip {
@@ -50,6 +52,8 @@ body {
 
 .hero-copy,
 .proof-card,
+.chat-shell,
+.guide-card,
 .panel,
 .card {
   padding: 24px;
@@ -98,6 +102,89 @@ h1 {
   margin: 0;
   padding-left: 18px;
   line-height: 1.8;
+}
+
+.chat-shell {
+  margin-bottom: 18px;
+  padding: 18px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(255, 250, 244, 0.9)),
+    var(--panel);
+}
+
+.chat-feed {
+  display: grid;
+  gap: 12px;
+  max-height: 260px;
+  overflow: auto;
+}
+
+.chat-bubble {
+  max-width: min(720px, 100%);
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.chat-bubble.assistant {
+  justify-self: start;
+}
+
+.chat-title,
+.chat-body {
+  margin: 0;
+}
+
+.chat-title {
+  margin-bottom: 6px;
+  font: 700 0.78rem/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-strong);
+}
+
+.chat-body {
+  color: var(--ink);
+  line-height: 1.55;
+}
+
+.chat-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.guide-strip {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.guide-card.compact {
+  padding-top: 22px;
+}
+
+.checklist {
+  display: grid;
+  gap: 10px;
+}
+
+.check-item {
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.64);
+  color: var(--muted);
+  font: 700 0.9rem/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.check-item.is-done {
+  border-color: rgba(208, 92, 47, 0.28);
+  color: var(--ink);
+  background: rgba(208, 92, 47, 0.08);
 }
 
 .stepper {
@@ -152,6 +239,12 @@ form {
   display: grid;
   gap: 16px;
   grid-template-columns: minmax(0, 1.2fr) minmax(220px, 0.8fr);
+}
+
+.inline-note {
+  margin: -2px 0 0;
+  color: var(--muted);
+  line-height: 1.5;
 }
 
 label {
@@ -297,10 +390,25 @@ pre,
   }
 
   .hero,
+  .guide-strip,
   .form-grid,
   .upload-row,
   .stepper,
   .results {
     grid-template-columns: 1fr;
+  }
+
+  h1 {
+    max-width: none;
+  }
+
+  .chat-shell,
+  .guide-card,
+  .panel,
+  .card,
+  .hero-copy,
+  .proof-card {
+    padding: 18px;
+    border-radius: 22px;
   }
 }

@@ -11,8 +11,8 @@
       <section class="hero">
         <div class="hero-copy">
           <p class="eyebrow">Resume Refresh</p>
-          <h1>Build a stronger resume in four steps.</h1>
-          <p class="lede">Connect. Add context. Review. Rewrite.</p>
+          <h1>Tell me about your resume. I’ll guide the rest.</h1>
+          <p class="lede">Chat-first. Step-by-step. Export-ready.</p>
         </div>
         <div class="proof-card">
           <p class="proof-label">Outputs</p>
@@ -25,11 +25,27 @@
         </div>
       </section>
 
+      <section class="chat-shell">
+        <div id="chat-feed" class="chat-feed" aria-live="polite"></div>
+      </section>
+
+      <section class="guide-strip" aria-label="Next actions">
+        <div class="guide-card">
+          <p class="section-kicker">Next</p>
+          <h2 id="guide-title">Connect LinkedIn or skip to manual entry.</h2>
+          <p id="guide-copy" class="panel-copy">If LinkedIn is connected, we prefill basic identity. Then add your resume or paste your LinkedIn text.</p>
+        </div>
+        <div class="guide-card compact">
+          <p class="section-kicker">Need</p>
+          <div id="source-checklist" class="checklist"></div>
+        </div>
+      </section>
+
       <nav class="stepper" aria-label="Application steps">
-        <button class="step-chip is-active" data-go-step="1" type="button">1. Connect</button>
-        <button class="step-chip" data-go-step="2" type="button">2. Sources</button>
-        <button class="step-chip" data-go-step="3" type="button">3. Review</button>
-        <button class="step-chip" data-go-step="4" type="button">4. Rewrite</button>
+        <button class="step-chip is-active" data-go-step="1" type="button">Connect</button>
+        <button class="step-chip" data-go-step="2" type="button">Sources</button>
+        <button class="step-chip" data-go-step="3" type="button">Review</button>
+        <button class="step-chip" data-go-step="4" type="button">Rewrite</button>
       </nav>
 
       <section id="status" class="status" aria-live="polite"></section>
@@ -77,9 +93,11 @@
 
               <label>
                 LinkedIn URL
-                <input id="linkedin-url" name="linkedinUrl" placeholder="linkedin.com/in/you" />
+                <input id="linkedin-url" name="linkedinUrl" placeholder="Paste public profile URL if you want it included" />
               </label>
             </div>
+
+            <p class="inline-note">Best result: add either resume text or a resume file, then add LinkedIn text if you want stronger keyword matching.</p>
 
             <div class="form-grid two-up">
               <label>

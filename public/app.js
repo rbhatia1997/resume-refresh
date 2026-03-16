@@ -15,6 +15,10 @@ const downloadDraftDocxEl = document.querySelector("#download-draft-docx");
 const downloadDraftPdfEl = document.querySelector("#download-draft-pdf");
 const downloadRewriteDocxEl = document.querySelector("#download-rewrite-docx");
 const downloadRewritePdfEl = document.querySelector("#download-rewrite-pdf");
+const chatFeedEl = document.querySelector("#chat-feed");
+const guideTitleEl = document.querySelector("#guide-title");
+const guideCopyEl = document.querySelector("#guide-copy");
+const checklistEl = document.querySelector("#source-checklist");
 const stepPanes = [...document.querySelectorAll(".step-pane")];
 const stepChips = [...document.querySelectorAll(".step-chip")];
 const goStepButtons = [...document.querySelectorAll("[data-go-step], [data-next-step]")];
@@ -54,6 +58,106 @@ function setStatus(message, error = false) {
   statusEl.dataset.error = error ? "true" : "false";
 }
 
+function addChatMessage({ role = "assistant", title = "", body = "", actions = [] }) {
+  const card = document.createElement("article");
+  card.className = `chat-bubble ${role}`;
+
+  if (title) {
+    const heading = document.createElement("p");
+    heading.className = "chat-title";
+    heading.textContent = title;
+    card.appendChild(heading);
+  }
+
+  const copy = document.createElement("p");
+  copy.className = "chat-body";
+  copy.textContent = body;
+  card.appendChild(copy);
+
+  if (actions.length) {
+    const row = document.createElement("div");
+    row.className = "chat-actions";
+    for (const action of actions) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = action.secondary ? "button-secondary" : "button-link";
+      button.textContent = action.label;
+      button.addEventListener("click", action.onClick);
+      row.appendChild(button);
+    }
+    card.appendChild(row);
+  }
+
+  chatFeedEl.appendChild(card);
+  chatFeedEl.scrollTop = chatFeedEl.scrollHeight;
+}
+
+function seedChat() {
+  chatFeedEl.replaceChildren();
+  addChatMessage({
+    title: "Start here",
+    body: "Connect LinkedIn if you want me to prefill your name and email. Then add resume text or a PDF."
+  });
+}
+
+function updateGuide(step) {
+  const guideByStep = {
+    1: {
+      title: sessionProfile ? "LinkedIn is connected. Continue to sources." : "Connect LinkedIn or skip to manual entry.",
+      copy: sessionProfile
+        ? "Your name and email can be prefilled from LinkedIn. Add your resume next."
+        : "Connecting LinkedIn prefills basic identity only. You can still do everything manually."
+    },
+    2: {
+      title: "Add source material, then run analysis.",
+      copy: "Fastest path: paste your resume or upload a PDF. Add LinkedIn text if you want stronger keyword matching."
+    },
+    3: {
+      title: "Review the draft and close the biggest gaps.",
+      copy: "Check the snapshot first. If the draft looks usable, download it or move to AI rewrite."
+    },
+    4: {
+      title: "Review the AI rewrite and export the final version.",
+      copy: "Use the AI version when you want a cleaner tone, then export DOCX or PDF."
+    }
+  };
+  const guide = guideByStep[step] || guideByStep[1];
+  guideTitleEl.textContent = guide.title;
+  guideCopyEl.textContent = guide.copy;
+}
+
+function getChecklistItems() {
+  const hasResumeSource = Boolean(fieldEls.resumeText.value.trim() || fieldEls.resumeFile.files[0]);
+  return [
+    {
+      label: sessionProfile ? "LinkedIn connected" : "LinkedIn optional",
+      done: Boolean(sessionProfile)
+    },
+    {
+      label: "Resume source",
+      done: hasResumeSource
+    },
+    {
+      label: "LinkedIn text",
+      done: Boolean(fieldEls.linkedinText.value.trim())
+    },
+    {
+      label: "Target role",
+      done: Boolean(fieldEls.targetRole.value.trim())
+    }
+  ];
+}
+
+function renderChecklist() {
+  checklistEl.replaceChildren();
+  for (const item of getChecklistItems()) {
+    const row = document.createElement("div");
+    row.className = `check-item ${item.done ? "is-done" : ""}`;
+    row.textContent = `${item.done ? "Done" : "Need"}  ${item.label}`;
+    checklistEl.appendChild(row);
+  }
+}
+
 function setStep(step) {
   currentStep = step;
   for (const pane of stepPanes) {
@@ -62,6 +166,16 @@ function setStep(step) {
   for (const chip of stepChips) {
     chip.classList.toggle("is-active", Number(chip.dataset.goStep) === step);
   }
+
+  const stepMessages = {
+    1: "Connect LinkedIn first, or skip if you want to paste everything manually.",
+    2: "Paste LinkedIn text, paste your resume, or upload a resume PDF. Then run analysis.",
+    3: "Review the snapshot, fix gaps, and download the generated draft if it looks good.",
+    4: "Run AI rewrite when you want a more polished version, then export it."
+  };
+  updateGuide(step);
+  renderChecklist();
+  setStatus(stepMessages[step] || "");
 }
 
 for (const button of goStepButtons) {
@@ -126,6 +240,7 @@ function renderSnapshot(result) {
     ["Detected sections", result?.extracted?.sections?.join(", ") || "None yet"],
     ["Bullet count", String(result?.extracted?.bullets ?? 0)],
     ["Missing keywords", result?.extracted?.missingKeywords?.join(", ") || "None detected"],
+    ["LinkedIn URL", fieldEls.linkedinUrl.value.trim() || "Not provided"],
     ["Source coverage", summarizeCoverage(result)]
   ];
 
@@ -182,6 +297,10 @@ function maybeAutofillFromProfile(profile) {
     return;
   }
 
+  if (!fieldEls.targetRole.value.trim() && profile.headline) {
+    fieldEls.targetRole.value = profile.headline;
+  }
+
   if (!fieldEls.resumeText.value.trim()) {
     const header = [profile.name, profile.email].filter(Boolean).join("\n");
     if (header) {
@@ -194,6 +313,12 @@ function maybeAutofillFromProfile(profile) {
       .filter(Boolean)
       .join("\n");
   }
+
+  if (!fieldEls.linkedinUrl.value.trim()) {
+    fieldEls.linkedinUrl.placeholder = "LinkedIn does not expose your public profile URL here, so paste it if you want it included.";
+  }
+
+  renderChecklist();
 }
 
 function renderProfile(profile) {
@@ -243,6 +368,7 @@ function renderProfile(profile) {
   row.appendChild(copy);
   profileEl.appendChild(row);
   profileCardEl.classList.remove("hidden");
+  renderChecklist();
 }
 
 function updateRewriteButton() {
@@ -267,12 +393,18 @@ async function loadSession() {
   maybeAutofillFromProfile(sessionProfile);
   renderSnapshot(analysisResult);
   updateRewriteButton();
+  updateGuide(currentStep);
+  renderChecklist();
 }
 
 logoutButtonEl.addEventListener("click", async () => {
   await fetch("/api/auth/logout", { method: "POST" });
   sessionProfile = null;
   await loadSession();
+  addChatMessage({
+    title: "LinkedIn disconnected",
+    body: "You can still paste LinkedIn text or upload a resume manually."
+  });
   setStatus("LinkedIn disconnected.");
 });
 
@@ -346,6 +478,13 @@ form.addEventListener("submit", async (event) => {
     if (!fieldEls.resumeText.value.trim() && result.extractedResumeText) {
       fieldEls.resumeText.value = result.extractedResumeText;
     }
+    addChatMessage({
+      title: "Analysis complete",
+      body: "I found the biggest gaps and drafted a cleaner resume. Review the snapshot and suggestions next.",
+      actions: [
+        { label: "Open review", onClick: () => setStep(3) }
+      ]
+    });
     setStep(3);
     setStatus("Review ready.");
   } catch (error) {
@@ -383,6 +522,13 @@ rewriteButtonEl.addEventListener("click", async () => {
 
     aiRewriteEl.textContent = result.rewrittenResume || "No rewrite returned.";
     renderNotes([result.summary, ...result.bulletImprovements, ...result.notes].filter(Boolean));
+    addChatMessage({
+      title: "Rewrite ready",
+      body: "The AI version is ready. Review it, then export DOCX or PDF.",
+      actions: [
+        { label: "Open rewrite", onClick: () => setStep(4) }
+      ]
+    });
     setStep(4);
     setStatus("AI rewrite ready.");
   } catch (error) {
@@ -432,10 +578,24 @@ for (const chip of stepChips) {
   });
 }
 
+for (const element of [fieldEls.targetRole, fieldEls.linkedinUrl, fieldEls.linkedinText, fieldEls.resumeText, fieldEls.resumeFile]) {
+  element.addEventListener("input", renderChecklist);
+  element.addEventListener("change", renderChecklist);
+}
+
+seedChat();
 const linkedInStatus = readLinkedInStatusFromUrl();
 if (linkedInStatus === "connected") {
+  addChatMessage({
+    title: "LinkedIn connected",
+    body: "I pulled your basic LinkedIn identity and prefilled what I can. LinkedIn does not expose your public profile URL here, so paste it manually if you want it included."
+  });
   setStatus("LinkedIn connected.");
 } else if (linkedInStatus === "failed" || linkedInStatus === "invalid" || linkedInStatus === "denied") {
+  addChatMessage({
+    title: "LinkedIn sign-in did not complete",
+    body: "You can still continue by pasting your LinkedIn text and resume manually."
+  });
   setStatus("LinkedIn sign-in did not complete.", true);
 }
 
@@ -443,3 +603,4 @@ renderSnapshot(null);
 loadSession().catch((error) => {
   setStatus(error.message || "Unable to load app state.", true);
 });
+setStep(1);
