@@ -4,7 +4,9 @@ import { createRequire } from "node:module";
 import { promises as fs, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { Document, Packer, Paragraph, TextRun } from "docx";
 import OpenAI from "openai";
+import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { analyzeResume } from "./resume-analyzer.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -152,6 +154,13 @@ export async function handleRequest(request, { serveStatic = true } = {}) {
       const body = await readJsonBody(request);
       const rewritten = await rewriteWithOpenAI(body);
       return jsonResponse(rewritten);
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/export") {
+      enforceSameOrigin(request);
+      enforceRateLimit(request, "export", { limit: 12, windowMs: 60_000 });
+      const body = await readJsonBody(request);
+      return exportResume(body);
     }
 
     if (serveStatic) {
@@ -546,6 +555,16 @@ function textResponse(text, { status = 200 } = {}) {
   });
 }
 
+function binaryResponse(buffer, contentType, fileName) {
+  return new Response(buffer, {
+    status: 200,
+    headers: {
+      ...getSecurityHeaders(contentType),
+      "content-disposition": `attachment; filename="${fileName}"`
+    }
+  });
+}
+
 function redirectResponse(location, { cookies = [] } = {}) {
   return withCookies(new Response(null, {
     status: 302,
@@ -561,4 +580,112 @@ function withCookies(response, cookies) {
     response.headers.append("set-cookie", cookie);
   }
   return response;
+}
+
+async function exportResume(body) {
+  const text = String(body.text || "").trim();
+  const format = String(body.format || "").trim().toLowerCase();
+  const fileStem = sanitizeFileStem(String(body.fileName || "resume-refresh"));
+
+  if (!text) {
+    throw new Error("Nothing to export yet.");
+  }
+
+  if (format === "docx") {
+    const buffer = await buildDocx(text);
+    return binaryResponse(buffer, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", `${fileStem}.docx`);
+  }
+
+  if (format === "pdf") {
+    const buffer = await buildPdf(text);
+    return binaryResponse(buffer, "application/pdf", `${fileStem}.pdf`);
+  }
+
+  throw new Error("Unsupported export format.");
+}
+
+function sanitizeFileStem(fileName) {
+  return fileName.toLowerCase().replace(/[^a-z0-9-_]+/g, "-").replace(/^-+|-+$/g, "") || "resume-refresh";
+}
+
+async function buildDocx(text) {
+  const paragraphs = text.split(/\n{2,}/).map((block) => {
+    const lines = block.split("\n").filter(Boolean);
+    return new Paragraph({
+      children: lines.flatMap((line, index) => {
+        const runs = [new TextRun(line)];
+        if (index < lines.length - 1) {
+          runs.push(new TextRun({ text: "", break: 1 }));
+        }
+        return runs;
+      }),
+      spacing: { after: 220 }
+    });
+  });
+
+  const doc = new Document({
+    sections: [
+      {
+        properties: {},
+        children: paragraphs
+      }
+    ]
+  });
+
+  return Packer.toBuffer(doc);
+}
+
+async function buildPdf(text) {
+  const pdf = await PDFDocument.create();
+  let page = pdf.addPage([612, 792]);
+  const font = await pdf.embedFont(StandardFonts.Helvetica);
+  const fontSize = 11;
+  const lineHeight = 16;
+  const margin = 54;
+  const maxWidth = page.getWidth() - margin * 2;
+  let y = page.getHeight() - margin;
+
+  for (const block of text.split(/\n{2,}/)) {
+    const lines = wrapText(block.replace(/\n/g, " "), font, fontSize, maxWidth);
+    for (const line of lines) {
+      if (y < margin) {
+        page = pdf.addPage([612, 792]);
+        y = page.getHeight() - margin;
+      }
+      page.drawText(line, {
+        x: margin,
+        y,
+        size: fontSize,
+        font,
+        color: rgb(0.07, 0.11, 0.13)
+      });
+      y -= lineHeight;
+    }
+    y -= lineHeight * 0.6;
+  }
+
+  return Buffer.from(await pdf.save());
+}
+
+function wrapText(text, font, fontSize, maxWidth) {
+  const words = text.split(/\s+/).filter(Boolean);
+  if (!words.length) {
+    return [""];
+  }
+
+  const lines = [];
+  let current = words[0];
+
+  for (const word of words.slice(1)) {
+    const next = `${current} ${word}`;
+    if (font.widthOfTextAtSize(next, fontSize) <= maxWidth) {
+      current = next;
+    } else {
+      lines.push(current);
+      current = word;
+    }
+  }
+
+  lines.push(current);
+  return lines;
 }

@@ -11,6 +11,10 @@ const authStateEl = document.querySelector("#auth-state");
 const profileCardEl = document.querySelector("#linkedin-profile-card");
 const profileEl = document.querySelector("#linkedin-profile");
 const rewriteButtonEl = document.querySelector("#rewrite-button");
+const downloadDraftDocxEl = document.querySelector("#download-draft-docx");
+const downloadDraftPdfEl = document.querySelector("#download-draft-pdf");
+const downloadRewriteDocxEl = document.querySelector("#download-rewrite-docx");
+const downloadRewritePdfEl = document.querySelector("#download-rewrite-pdf");
 const stepPanes = [...document.querySelectorAll(".step-pane")];
 const stepChips = [...document.querySelectorAll(".step-chip")];
 const goStepButtons = [...document.querySelectorAll("[data-go-step], [data-next-step]")];
@@ -282,6 +286,39 @@ async function enrichPayloadWithFile(payload) {
   return payload;
 }
 
+async function exportText(format, text) {
+  if (!text.trim()) {
+    setStatus("Nothing to export yet.", true);
+    return;
+  }
+
+  const response = await fetch("/api/export", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      format,
+      text,
+      fileName: fieldEls.targetRole.value || "resume-refresh"
+    })
+  });
+
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new Error(payload.error || "Export failed");
+  }
+
+  const blob = await response.blob();
+  const disposition = response.headers.get("content-disposition") || "";
+  const match = disposition.match(/filename="([^"]+)"/);
+  const fileName = match?.[1] || `resume-refresh.${format}`;
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = fileName;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
 async function runAnalysis(payload) {
   const response = await fetch("/api/analyze", {
     method: "POST",
@@ -350,6 +387,42 @@ rewriteButtonEl.addEventListener("click", async () => {
     setStatus("AI rewrite ready.");
   } catch (error) {
     setStatus(error.message || "Rewrite failed.", true);
+  }
+});
+
+downloadDraftDocxEl.addEventListener("click", async () => {
+  try {
+    await exportText("docx", draftEl.textContent || "");
+    setStatus("DOCX downloaded.");
+  } catch (error) {
+    setStatus(error.message || "DOCX export failed.", true);
+  }
+});
+
+downloadDraftPdfEl.addEventListener("click", async () => {
+  try {
+    await exportText("pdf", draftEl.textContent || "");
+    setStatus("PDF downloaded.");
+  } catch (error) {
+    setStatus(error.message || "PDF export failed.", true);
+  }
+});
+
+downloadRewriteDocxEl.addEventListener("click", async () => {
+  try {
+    await exportText("docx", aiRewriteEl.textContent || "");
+    setStatus("DOCX downloaded.");
+  } catch (error) {
+    setStatus(error.message || "DOCX export failed.", true);
+  }
+});
+
+downloadRewritePdfEl.addEventListener("click", async () => {
+  try {
+    await exportText("pdf", aiRewriteEl.textContent || "");
+    setStatus("PDF downloaded.");
+  } catch (error) {
+    setStatus(error.message || "PDF export failed.", true);
   }
 });
 
