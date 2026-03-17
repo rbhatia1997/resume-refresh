@@ -23,6 +23,8 @@ const chatSkipEl = document.querySelector("#chat-skip");
 const guideTitleEl = document.querySelector("#guide-title");
 const guideCopyEl = document.querySelector("#guide-copy");
 const checklistEl = document.querySelector("#source-checklist");
+const progressLabelEl = document.querySelector("#progress-label");
+const progressBarEl = document.querySelector("#progress-bar");
 const wizardQuestionTitleEl = document.querySelector("#wizard-question-title");
 const wizardQuestionCopyEl = document.querySelector("#wizard-question-copy");
 const wizardAnswerEl = document.querySelector("#wizard-answer");
@@ -277,6 +279,14 @@ function setStep(step) {
     3: "Review the snapshot, fix gaps, and download the generated draft if it looks good.",
     4: "Run AI rewrite when you want a more polished version, then export it."
   };
+  const stepNames = {
+    1: "Connect",
+    2: "Sources",
+    3: "Review",
+    4: "Rewrite"
+  };
+  progressLabelEl.textContent = `Step ${step} of 4 · ${stepNames[step] || "Resume Refresh"}`;
+  progressBarEl.style.width = `${Math.max(25, step * 25)}%`;
   updateGuide(step);
   renderChecklist();
   setStatus(stepMessages[step] || "");
@@ -820,12 +830,6 @@ downloadRewritePdfEl.addEventListener("click", async () => {
     setStatus(error.message || "PDF export failed.", true);
   }
 });
-
-for (const chip of stepChips) {
-  chip.addEventListener("click", () => {
-    setStep(Number(chip.dataset.goStep));
-  });
-}
 
 for (const element of [fieldEls.targetRole, fieldEls.linkedinUrl, fieldEls.linkedinText, fieldEls.resumeText, fieldEls.resumeFile]) {
   element.addEventListener("input", () => {

@@ -55,12 +55,12 @@
         </div>
       </section>
 
-      <nav class="stepper" aria-label="Application steps">
-        <button class="step-chip is-active" data-go-step="1" type="button">Connect</button>
-        <button class="step-chip" data-go-step="2" type="button">Sources</button>
-        <button class="step-chip" data-go-step="3" type="button">Review</button>
-        <button class="step-chip" data-go-step="4" type="button">Rewrite</button>
-      </nav>
+      <section class="progress-strip" aria-label="Progress">
+        <p id="progress-label" class="progress-label">Step 1 of 4 · Connect</p>
+        <div class="progress-track" aria-hidden="true">
+          <div id="progress-bar" class="progress-bar"></div>
+        </div>
+      </section>
 
       <section id="status" class="status" aria-live="polite"></section>
 

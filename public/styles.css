@@ -42,7 +42,7 @@ body {
 .guide-card,
 .panel,
 .card,
-.step-chip {
+.progress-strip {
   border: 1px solid var(--line);
   border-radius: 28px;
   background: var(--panel);
@@ -55,7 +55,8 @@ body {
 .chat-shell,
 .guide-card,
 .panel,
-.card {
+.card,
+.progress-strip {
   padding: 24px;
 }
 
@@ -228,25 +229,32 @@ h1 {
   background: rgba(208, 92, 47, 0.08);
 }
 
-.stepper {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
+.progress-strip {
+  margin-bottom: 18px;
+  padding-top: 18px;
+  padding-bottom: 18px;
+}
+
+.progress-label {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font: 700 0.9rem/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.progress-track {
+  width: 100%;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(17, 27, 32, 0.08);
+  overflow: hidden;
   margin-bottom: 18px;
 }
 
-.step-chip {
-  padding: 14px 16px;
-  text-align: left;
-  cursor: pointer;
-  font: 700 0.94rem/1.2 Georgia, serif;
-  color: var(--muted);
-}
-
-.step-chip.is-active {
-  border-color: rgba(208, 92, 47, 0.35);
-  color: var(--ink);
-  box-shadow: 0 18px 50px rgba(208, 92, 47, 0.14);
+.progress-bar {
+  width: 25%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent), #e58f51);
 }
 
 .hidden {
@@ -474,7 +482,6 @@ pre,
   .guide-strip,
   .form-grid,
   .upload-row,
-  .stepper,
   .results {
     grid-template-columns: 1fr;
   }
@@ -487,6 +494,7 @@ pre,
   .guide-card,
   .panel,
   .card,
+  .progress-strip,
   .hero-copy,
   .proof-card {
     padding: 18px;
