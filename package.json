@@ -9,7 +9,8 @@
     "build:v2:js": "esbuild prototype/main.tsx --bundle --format=esm --outfile=public/v2/app.js",
     "build:v2:css": "tailwindcss -i ./prototype/tailwind.css -o ./public/v2/app.css --minify",
     "build:v2": "npm run build:v2:js && npm run build:v2:css",
-    "test": "node --test"
+    "test": "node --test",
+    "test:e2e": "playwright test"
   },
   "engines": {
     "node": ">=20"
@@ -24,5 +25,8 @@
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "tailwindcss": "^4.2.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2"
   }
 }

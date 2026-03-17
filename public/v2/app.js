@@ -1328,7 +1328,7 @@ var require_react_dom_development = __commonJS({
         return dispatcher;
       }
       "undefined" !== typeof __REACT_DEVTOOLS_GLOBAL_HOOK__ && "function" === typeof __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStart && __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStart(Error());
-      var React2 = require_react(), Internals = {
+      var React3 = require_react(), Internals = {
         d: {
           f: noop,
           r: function() {
@@ -1346,7 +1346,7 @@ var require_react_dom_development = __commonJS({
         },
         p: 0,
         findDOMNode: null
-      }, REACT_PORTAL_TYPE = /* @__PURE__ */ Symbol.for("react.portal"), ReactSharedInternals = React2.__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
+      }, REACT_PORTAL_TYPE = /* @__PURE__ */ Symbol.for("react.portal"), ReactSharedInternals = React3.__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
       "function" === typeof Map && null != Map.prototype && "function" === typeof Map.prototype.forEach && "function" === typeof Set && null != Set.prototype && "function" === typeof Set.prototype.clear && "function" === typeof Set.prototype.forEach || console.error(
         "React depends on Map and Set built-in types. Make sure that you load a polyfill in older browsers. https://reactjs.org/link/react-polyfills"
       );
@@ -2881,7 +2881,7 @@ var require_react_dom_client_development = __commonJS({
         "number" === type && getActiveElement(node.ownerDocument) === node || node.defaultValue === "" + value || (node.defaultValue = "" + value);
       }
       function validateOptionProps(element, props) {
-        null == props.value && ("object" === typeof props.children && null !== props.children ? React2.Children.forEach(props.children, function(child) {
+        null == props.value && ("object" === typeof props.children && null !== props.children ? React3.Children.forEach(props.children, function(child) {
           null == child || "string" === typeof child || "number" === typeof child || "bigint" === typeof child || didWarnInvalidChild || (didWarnInvalidChild = true, console.error(
             "Cannot infer the option value of complex children. Pass a `value` prop or use a plain string as children to <option>."
           ));
@@ -18513,14 +18513,14 @@ var require_react_dom_client_development = __commonJS({
         ));
       }
       "undefined" !== typeof __REACT_DEVTOOLS_GLOBAL_HOOK__ && "function" === typeof __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStart && __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStart(Error());
-      var Scheduler = require_scheduler(), React2 = require_react(), ReactDOM = require_react_dom(), assign = Object.assign, REACT_LEGACY_ELEMENT_TYPE = /* @__PURE__ */ Symbol.for("react.element"), REACT_ELEMENT_TYPE = /* @__PURE__ */ Symbol.for("react.transitional.element"), REACT_PORTAL_TYPE = /* @__PURE__ */ Symbol.for("react.portal"), REACT_FRAGMENT_TYPE = /* @__PURE__ */ Symbol.for("react.fragment"), REACT_STRICT_MODE_TYPE = /* @__PURE__ */ Symbol.for("react.strict_mode"), REACT_PROFILER_TYPE = /* @__PURE__ */ Symbol.for("react.profiler"), REACT_CONSUMER_TYPE = /* @__PURE__ */ Symbol.for("react.consumer"), REACT_CONTEXT_TYPE = /* @__PURE__ */ Symbol.for("react.context"), REACT_FORWARD_REF_TYPE = /* @__PURE__ */ Symbol.for("react.forward_ref"), REACT_SUSPENSE_TYPE = /* @__PURE__ */ Symbol.for("react.suspense"), REACT_SUSPENSE_LIST_TYPE = /* @__PURE__ */ Symbol.for("react.suspense_list"), REACT_MEMO_TYPE = /* @__PURE__ */ Symbol.for("react.memo"), REACT_LAZY_TYPE = /* @__PURE__ */ Symbol.for("react.lazy");
+      var Scheduler = require_scheduler(), React3 = require_react(), ReactDOM = require_react_dom(), assign = Object.assign, REACT_LEGACY_ELEMENT_TYPE = /* @__PURE__ */ Symbol.for("react.element"), REACT_ELEMENT_TYPE = /* @__PURE__ */ Symbol.for("react.transitional.element"), REACT_PORTAL_TYPE = /* @__PURE__ */ Symbol.for("react.portal"), REACT_FRAGMENT_TYPE = /* @__PURE__ */ Symbol.for("react.fragment"), REACT_STRICT_MODE_TYPE = /* @__PURE__ */ Symbol.for("react.strict_mode"), REACT_PROFILER_TYPE = /* @__PURE__ */ Symbol.for("react.profiler"), REACT_CONSUMER_TYPE = /* @__PURE__ */ Symbol.for("react.consumer"), REACT_CONTEXT_TYPE = /* @__PURE__ */ Symbol.for("react.context"), REACT_FORWARD_REF_TYPE = /* @__PURE__ */ Symbol.for("react.forward_ref"), REACT_SUSPENSE_TYPE = /* @__PURE__ */ Symbol.for("react.suspense"), REACT_SUSPENSE_LIST_TYPE = /* @__PURE__ */ Symbol.for("react.suspense_list"), REACT_MEMO_TYPE = /* @__PURE__ */ Symbol.for("react.memo"), REACT_LAZY_TYPE = /* @__PURE__ */ Symbol.for("react.lazy");
       /* @__PURE__ */ Symbol.for("react.scope");
       var REACT_ACTIVITY_TYPE = /* @__PURE__ */ Symbol.for("react.activity");
       /* @__PURE__ */ Symbol.for("react.legacy_hidden");
       /* @__PURE__ */ Symbol.for("react.tracing_marker");
       var REACT_MEMO_CACHE_SENTINEL = /* @__PURE__ */ Symbol.for("react.memo_cache_sentinel");
       /* @__PURE__ */ Symbol.for("react.view_transition");
-      var MAYBE_ITERATOR_SYMBOL = Symbol.iterator, REACT_CLIENT_REFERENCE = /* @__PURE__ */ Symbol.for("react.client.reference"), isArrayImpl = Array.isArray, ReactSharedInternals = React2.__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE, ReactDOMSharedInternals = ReactDOM.__DOM_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE, NotPending = Object.freeze({
+      var MAYBE_ITERATOR_SYMBOL = Symbol.iterator, REACT_CLIENT_REFERENCE = /* @__PURE__ */ Symbol.for("react.client.reference"), isArrayImpl = Array.isArray, ReactSharedInternals = React3.__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE, ReactDOMSharedInternals = ReactDOM.__DOM_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE, NotPending = Object.freeze({
         pending: false,
         data: null,
         method: null,
@@ -21308,7 +21308,7 @@ var require_react_dom_client_development = __commonJS({
         }
       };
       (function() {
-        var isomorphicReactPackageVersion = React2.version;
+        var isomorphicReactPackageVersion = React3.version;
         if ("19.2.4" !== isomorphicReactPackageVersion)
           throw Error(
             'Incompatible React versions: The "react" and "react-dom" packages must have the exact same version. Instead got:\n  - react:      ' + (isomorphicReactPackageVersion + "\n  - react-dom:  19.2.4\nLearn more: https://react.dev/warnings/version-mismatch")
@@ -21449,10 +21449,12 @@ var require_client = __commonJS({
 });
 
 // prototype/main.tsx
+var React2 = __toESM(require_react(), 1);
 var import_react2 = __toESM(require_react(), 1);
 var import_client = __toESM(require_client(), 1);
 
 // prototype/ResumeRefreshPrototype.tsx
+var React = __toESM(require_react(), 1);
 var import_react = __toESM(require_react(), 1);
 var storageKey = "resume_refresh_v2_state";
 var sectionBlueprints = [
@@ -21747,7 +21749,7 @@ function ResumePreview({
 }) {
   const sectionMap = Object.fromEntries(sections.map((section) => [section.id, normalizeText(section.content)]));
   const headerLines = sectionMap.header.split("\n").filter(Boolean);
-  return /* @__PURE__ */ React.createElement("div", { className: "mt-4 rounded-[24px] border border-neutral-200 bg-neutral-50 p-6" }, sectionMap.header ? /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { className: "whitespace-pre-wrap break-words text-xl font-semibold leading-8 text-neutral-950" }, headerLines[0]), headerLines.slice(1).length > 0 && /* @__PURE__ */ React.createElement("div", { className: "mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-neutral-500" }, headerLines.slice(1).join("  |  "))) : /* @__PURE__ */ React.createElement("p", { className: "text-sm text-neutral-500" }, "Your live preview will appear here as sections fill in."), missingKeywords.length > 0 && /* @__PURE__ */ React.createElement("div", { className: "mt-4 rounded-[18px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800" }, "Missing keywords: ", missingKeywords.join(", ")), [
+  return /* @__PURE__ */ React.createElement("div", { "data-testid": "resume-preview", className: "mt-4 rounded-[24px] border border-neutral-200 bg-neutral-50 p-6" }, sectionMap.header ? /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { className: "whitespace-pre-wrap break-words text-xl font-semibold leading-8 text-neutral-950" }, headerLines[0]), headerLines.slice(1).length > 0 && /* @__PURE__ */ React.createElement("div", { className: "mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-neutral-500" }, headerLines.slice(1).join("  |  "))) : /* @__PURE__ */ React.createElement("p", { className: "text-sm text-neutral-500" }, "Your live preview will appear here as sections fill in."), missingKeywords.length > 0 && /* @__PURE__ */ React.createElement("div", { className: "mt-4 rounded-[18px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800" }, "Missing keywords: ", missingKeywords.join(", ")), [
     ["summary", "Summary"],
     ["experience", "Experience"],
     ["skills", "Skills"],
@@ -21854,6 +21856,7 @@ function ImportReview({
     ) }, status)), /* @__PURE__ */ React.createElement(
       "textarea",
       {
+        "data-testid": `review-${section.id}`,
         value: section.content,
         onChange: (event) => onSectionChange(section.id, event.target.value),
         placeholder: section.placeholder,
@@ -21927,6 +21930,7 @@ function Builder({
   ))), /* @__PURE__ */ React.createElement("label", { className: "grid gap-2 text-sm font-medium text-neutral-900" }, "LinkedIn support text", /* @__PURE__ */ React.createElement(
     "textarea",
     {
+      "data-testid": "linkedin-support-text",
       value: linkedinText,
       onChange: (event) => onLinkedinTextChange(event.target.value),
       placeholder: "Paste About, Experience, or Skills",
@@ -21962,6 +21966,7 @@ function Builder({
       {
         key: section.id,
         onClick: () => onSectionSelect(section.id),
+        "data-testid": `section-tab-${section.id}`,
         className: cn(
           "w-full rounded-[18px] border px-4 py-3 text-left transition",
           activeSection === section.id ? "border-neutral-900 bg-neutral-950 text-white" : "border-neutral-200 bg-neutral-50 text-neutral-800 hover:bg-white"
@@ -21973,6 +21978,7 @@ function Builder({
   })), /* @__PURE__ */ React.createElement("div", { className: "rounded-[24px] border border-neutral-200 bg-neutral-50 p-4" }, /* @__PURE__ */ React.createElement("div", { className: "flex items-start justify-between gap-4" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("p", { className: "text-sm font-semibold text-neutral-900" }, selectedSection.title), /* @__PURE__ */ React.createElement("p", { className: "mt-1 text-sm leading-6 text-neutral-600" }, selectedSection.prompt)), /* @__PURE__ */ React.createElement("div", { className: "rounded-full border border-neutral-200 bg-white px-3 py-1 text-xs text-neutral-500" }, selectedSectionLineCount, " line", selectedSectionLineCount === 1 ? "" : "s")), /* @__PURE__ */ React.createElement(
     "textarea",
     {
+      "data-testid": "section-editor",
       value: selectedSection.content,
       onChange: (event) => onSectionChange(selectedSection.id, event.target.value),
       placeholder: selectedSection.placeholder,
@@ -22340,7 +22346,7 @@ function ResumeRefreshPrototype() {
 var rootElement = document.querySelector("#root");
 if (rootElement) {
   (0, import_client.createRoot)(rootElement).render(
-    /* @__PURE__ */ React.createElement(import_react2.StrictMode, null, /* @__PURE__ */ React.createElement(ResumeRefreshPrototype, null))
+    /* @__PURE__ */ React2.createElement(import_react2.StrictMode, null, /* @__PURE__ */ React2.createElement(ResumeRefreshPrototype, null))
   );
 }
 /*! Bundled license information:
