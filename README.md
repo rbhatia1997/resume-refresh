@@ -19,6 +19,15 @@ npm start
 
 Open `http://localhost:3210`.
 
+The current guided rollout surface is `http://localhost:3210/v2.html`.
+
+## Test
+
+```bash
+npm test
+npm run test:e2e
+```
+
 ## Security
 
 - OAuth state and session data are signed with `APP_SECRET`

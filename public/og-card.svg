@@ -1,0 +1,15 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="630" fill="#F7F1E8"/>
+  <circle cx="156" cy="110" r="180" fill="#E5D2BE" fill-opacity="0.55"/>
+  <rect x="72" y="72" width="1056" height="486" rx="44" fill="#FFFDF9" stroke="#E6DDD1"/>
+  <rect x="128" y="132" width="112" height="112" rx="28" fill="#132126"/>
+  <path d="M160 156C160 149.373 165.373 144 172 144H200.5C222.867 144 241 162.133 241 184.5C241 206.867 222.867 225 200.5 225H184V246H160V156Z" fill="#FFF8F1"/>
+  <path d="M184 168V201H200.5C209.613 201 217 193.613 217 184.5C217 175.387 209.613 168 200.5 168H184Z" fill="#D86433"/>
+  <text x="280" y="190" fill="#132126" font-family="Arial, Helvetica, sans-serif" font-size="64" font-weight="700">Resume Refresh</text>
+  <text x="280" y="255" fill="#4E5A5E" font-family="Arial, Helvetica, sans-serif" font-size="30">Import, improve, and export a stronger recruiter-ready resume.</text>
+  <rect x="128" y="306" width="944" height="160" rx="28" fill="#F7F1E8"/>
+  <text x="168" y="366" fill="#132126" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="700">Before</text>
+  <text x="168" y="406" fill="#6F7A7D" font-family="Arial, Helvetica, sans-serif" font-size="24">Worked on onboarding improvements for new users.</text>
+  <text x="168" y="454" fill="#B85A2D" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="700">After</text>
+  <text x="168" y="494" fill="#132126" font-family="Arial, Helvetica, sans-serif" font-size="24">Owned the onboarding experience, launching experiments that improved activation.</text>
+</svg>

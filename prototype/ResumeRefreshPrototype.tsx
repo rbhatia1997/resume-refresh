@@ -135,14 +135,26 @@ const featureCards = [
 
 const beforeAfter = [
   {
-    before: "Led onboarding roadmap for new users.",
-    after: "Owned the onboarding roadmap, driving activation improvements through experiments and cross-functional delivery."
+    before: "Worked on onboarding improvements for new users.",
+    after: "Owned the onboarding experience, partnering with design and engineering to launch experiments that improved activation."
   },
   {
-    before: "Worked with design and engineering to improve signup.",
-    after: "Partnered with design and engineering to simplify signup flows and improve conversion across the first-session experience."
+    before: "Helped with reporting for sales and leadership.",
+    after: "Built weekly revenue and pipeline reporting for sales leadership, giving teams clearer visibility into forecast risk and next actions."
   }
 ];
+
+const sampleResumeSeed = {
+  targetRole: "Senior Product Manager",
+  linkedinText: "Product leader with experience in growth, experimentation, roadmap execution, SQL, and stakeholder management.",
+  sections: buildDefaultSections({
+    header: "Maya Patel\nSan Francisco, CA\nmaya@resumerefresh.app · linkedin.com/in/mayapatel",
+    summary: "Product leader focused on growth, onboarding, and monetization strategy across B2B SaaS products.",
+    experience: "Senior Product Manager, Northstar\n- Owned the onboarding roadmap across web and lifecycle channels, partnering with design and engineering to lift activation for new accounts.\n- Led pricing and packaging experiments with finance and sales, improving expansion readiness for mid-market customers.\n- Built KPI reviews for leadership, translating funnel performance into roadmap decisions and faster cross-functional execution.",
+    skills: "Product Strategy\nExperimentation\nSQL\nStakeholder Management\nLifecycle Growth",
+    education: "University of California, Berkeley\nB.A. Economics"
+  })
+};
 
 const faqs = [
   {
@@ -482,28 +494,45 @@ function ResumePreview({
   );
 }
 
-function Landing({ onStart }: { onStart: () => void }) {
+function Landing({
+  onStart,
+  onViewSample,
+  onUseSample
+}: {
+  onStart: () => void;
+  onViewSample: () => void;
+  onUseSample: () => void;
+}) {
   return (
     <div className="space-y-8">
       <section className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-        <Panel className="overflow-hidden p-8 sm:p-10">
+        <Panel className="overflow-hidden p-6 sm:p-8 lg:p-10">
           <SectionEyebrow>Resume Refresh</SectionEyebrow>
-          <h1 className="mt-4 max-w-[12ch] text-4xl font-semibold tracking-[-0.04em] text-neutral-950 sm:text-6xl">
+          <h1 className="mt-4 max-w-[12ch] text-[clamp(2.6rem,9vw,4.5rem)] font-semibold tracking-[-0.05em] text-neutral-950">
             Turn your experience into a stronger resume.
           </h1>
           <p className="mt-5 max-w-2xl text-base leading-7 text-neutral-600 sm:text-lg">
             Import what you already have, fix what is weak, and leave with a cleaner, sharper resume.
           </p>
-          <div className="mt-8 flex flex-wrap gap-3">
+          <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
             <button
               onClick={onStart}
-              className="rounded-full bg-neutral-950 px-5 py-3 text-sm font-medium text-white transition hover:bg-neutral-800"
+              className="w-full rounded-full bg-neutral-950 px-5 py-3 text-sm font-medium text-white transition hover:bg-neutral-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-950 sm:w-auto"
             >
               Refresh my resume
             </button>
-            <button className="rounded-full border border-neutral-200 bg-white px-5 py-3 text-sm font-medium text-neutral-800 transition hover:bg-neutral-50">
+            <button
+              onClick={onViewSample}
+              className="w-full rounded-full border border-neutral-200 bg-white px-5 py-3 text-sm font-medium text-neutral-800 transition hover:bg-neutral-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-950 sm:w-auto"
+            >
               View sample
             </button>
+          </div>
+          <div className="mt-6 rounded-[22px] border border-emerald-200 bg-emerald-50/80 p-4">
+            <p className="text-sm font-semibold text-emerald-950">What strong bullets look like</p>
+            <p className="mt-2 text-sm leading-6 text-emerald-900">
+              Lead with ownership, show how you executed, and close with what changed. Resume Refresh nudges every draft toward that shape.
+            </p>
           </div>
         </Panel>
 
@@ -520,7 +549,7 @@ function Landing({ onStart }: { onStart: () => void }) {
         </Panel>
       </section>
 
-      <section className="grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
+      <section id="sample-preview" className="grid scroll-mt-20 gap-6 lg:grid-cols-[0.95fr_1.05fr]">
         <Panel className="p-6 sm:p-8">
           <SectionEyebrow>Import trust</SectionEyebrow>
           <h2 className="mt-4 text-2xl font-semibold tracking-[-0.03em] text-neutral-950">
@@ -539,6 +568,17 @@ function Landing({ onStart }: { onStart: () => void }) {
             <h3 className="mt-3 text-lg font-semibold text-neutral-950">
               Better bullets, clearer outcomes
             </h3>
+            <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+              <button
+                onClick={onUseSample}
+                className="w-full rounded-full bg-neutral-950 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-neutral-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-950 sm:w-auto"
+              >
+                Try this sample
+              </button>
+              <p className="text-sm leading-6 text-neutral-500">
+                Loads a polished sample into the builder so you can see the guided workflow immediately.
+              </p>
+            </div>
           </div>
           <div className="grid divide-y divide-neutral-200">
             {beforeAfter.map((item) => (
@@ -561,7 +601,9 @@ function Landing({ onStart }: { onStart: () => void }) {
         {["A faster first draft", "Feels guided, not overwhelming", "Keeps you in control"].map((item) => (
           <Panel key={item} className="p-6">
             <p className="text-lg font-medium text-neutral-900">{item}</p>
-            <p className="mt-2 text-sm leading-6 text-neutral-600">Placeholder for testimonial or proof point.</p>
+            <p className="mt-2 text-sm leading-6 text-neutral-600">
+              Resume Refresh keeps the rewrite editable, shows what changed, and never hides the source material from you.
+            </p>
           </Panel>
         ))}
       </section>
@@ -588,7 +630,7 @@ function Landing({ onStart }: { onStart: () => void }) {
           </div>
           <button
             onClick={onStart}
-            className="mt-8 rounded-full bg-neutral-950 px-5 py-3 text-sm font-medium text-white transition hover:bg-neutral-800"
+            className="mt-8 w-full rounded-full bg-neutral-950 px-5 py-3 text-sm font-medium text-white transition hover:bg-neutral-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-950 sm:w-auto"
           >
             Start Resume Refresh
           </button>
@@ -897,7 +939,7 @@ function Builder({
                 Make each section stronger.
               </h2>
               <p className="mt-2 text-sm leading-6 text-neutral-600">
-                Edit sections directly, generate a draft, then polish wording only if it helps.
+                Edit sections directly, generate a draft, then polish wording only if it helps. Strong bullets should show what you owned, how you did it, and what changed.
               </p>
             </div>
             <div className="grid min-w-[210px] gap-2 rounded-[20px] border border-neutral-200 bg-neutral-50 px-4 py-3 text-xs text-neutral-600">
@@ -1032,35 +1074,40 @@ function Builder({
                 <div className="rounded-[18px] border border-neutral-200 bg-white px-4 py-3">
                   <p className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400">Editing goal</p>
                   <p className="mt-2 text-sm leading-6 text-neutral-600">{selectedSection.helper}</p>
+                  {selectedSection.id === "experience" && (
+                    <p className="mt-2 text-sm leading-6 text-neutral-600">
+                      Try: strong verb + initiative or scope + result. Example: “Owned onboarding experiments across web and lifecycle email, lifting activation for new accounts.”
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
             <button
               onClick={onAnalyze}
               disabled={isAnalyzing || !(targetRole.trim() && (serializeSections(sections) || resumeFileName))}
-              className="rounded-full bg-neutral-950 px-5 py-3 text-sm font-medium text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-300"
+              className="w-full rounded-full bg-neutral-950 px-5 py-3 text-sm font-medium text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-300 sm:w-auto"
             >
               {isAnalyzing ? "Generating..." : "Generate draft"}
             </button>
             <button
               onClick={onRewrite}
               disabled={!canRewrite || isRewriting}
-              className="rounded-full border border-neutral-200 bg-white px-5 py-3 text-sm font-medium text-neutral-800 transition hover:bg-neutral-50 disabled:cursor-not-allowed disabled:text-neutral-400"
+              className="w-full rounded-full border border-neutral-200 bg-white px-5 py-3 text-sm font-medium text-neutral-800 transition hover:bg-neutral-50 disabled:cursor-not-allowed disabled:text-neutral-400 sm:w-auto"
             >
               {isRewriting ? "Polishing..." : "Polish with AI"}
             </button>
             <button
               onClick={onContinue}
-              className="rounded-full border border-neutral-200 bg-white px-5 py-3 text-sm font-medium text-neutral-800 transition hover:bg-neutral-50"
+              className="w-full rounded-full border border-neutral-200 bg-white px-5 py-3 text-sm font-medium text-neutral-800 transition hover:bg-neutral-50 sm:w-auto"
             >
               Export
             </button>
             <button
               onClick={() => onSectionSelect(nextSectionId)}
-              className="rounded-full border border-neutral-200 bg-white px-5 py-3 text-sm font-medium text-neutral-800 transition hover:bg-neutral-50"
+              className="w-full rounded-full border border-neutral-200 bg-white px-5 py-3 text-sm font-medium text-neutral-800 transition hover:bg-neutral-50 sm:w-auto"
             >
               Next section
             </button>
@@ -1130,7 +1177,7 @@ function Builder({
         )}
       </div>
 
-      <Panel className="sticky top-8 h-fit p-6">
+      <Panel className="h-fit p-6 xl:sticky xl:top-8">
         <SectionEyebrow>Live preview</SectionEyebrow>
         <p className="mt-3 text-sm text-neutral-500">
           {rewrite?.rewrittenResume
@@ -1429,6 +1476,24 @@ export default function ResumeRefreshPrototype() {
     setStage("builder");
   }
 
+  function viewSample() {
+    document.getElementById("sample-preview")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function loadSampleResume() {
+    setSourceMethod("manual");
+    setTargetRole(sampleResumeSeed.targetRole);
+    setLinkedinText(sampleResumeSeed.linkedinText);
+    setLinkedinUrl("");
+    setRewriteStyle("balanced");
+    setSections(sampleResumeSeed.sections);
+    setActiveSection("experience");
+    setAnalysis(null);
+    setRewrite(null);
+    setStage("builder");
+    setStatus("Sample resume loaded. You can edit it or generate a draft immediately.");
+  }
+
   function continueImport() {
     if (profile) {
       setSections(deriveSections(profile, linkedinText, serializeSections(sections)));
@@ -1441,10 +1506,14 @@ export default function ResumeRefreshPrototype() {
   const currentDraft = normalizedRewriteDraft || serializeSections(sections);
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(179,120,67,0.12),transparent_28%),linear-gradient(180deg,#fcfaf6_0%,#f4efe8_100%)] px-5 py-8 text-neutral-950 sm:px-8">
+    <div className="min-h-screen overflow-x-hidden bg-[radial-gradient(circle_at_top_left,rgba(179,120,67,0.12),transparent_28%),linear-gradient(180deg,#fcfaf6_0%,#f4efe8_100%)] px-4 py-6 text-neutral-950 sm:px-6 sm:py-8 lg:px-8">
       <div className="mx-auto max-w-7xl">
         {stage === "landing" ? (
-          <Landing onStart={() => setStage("source")} />
+          <Landing
+            onStart={() => setStage("source")}
+            onViewSample={viewSample}
+            onUseSample={loadSampleResume}
+          />
         ) : (
           <>
             <WorkflowHeader stage={stage} onBackToLanding={() => setStage("landing")} />

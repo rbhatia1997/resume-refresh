@@ -33,6 +33,14 @@ const ACTION_VERBS = [
   "Led", "Built", "Launched", "Improved", "Designed", "Delivered", "Scaled",
   "Automated", "Streamlined", "Reduced", "Increased", "Implemented", "Created"
 ];
+const WEAK_BULLET_PATTERNS = [
+  /^(helped|helped with)\b/i,
+  /^(worked on)\b/i,
+  /^(responsible for)\b/i,
+  /^(assisted|assisted with)\b/i,
+  /^(supported)\b/i,
+  /^(tasked with)\b/i
+];
 
 const SECTION_ALIASES = {
   summary: ["summary", "professional summary", "profile", "about"],
@@ -96,6 +104,35 @@ function extractBullets(text = "") {
     .map((line) => line.replace(/^[-*•]\s*/, "").trim());
 }
 
+function isWeakBullet(bullet = "") {
+  const cleaned = bullet.trim();
+  return WEAK_BULLET_PATTERNS.some((pattern) => pattern.test(cleaned));
+}
+
+function hasResultSignal(bullet = "") {
+  return /\b(\d+[%xX]?|\$\d+|revenue|pipeline|conversion|activation|retention|engagement|cost|time|efficiency|growth|reduced|increased|improved|saved|launched)\b/i.test(bullet);
+}
+
+function normalizeWeakOpener(bullet = "") {
+  const cleaned = bullet.trim();
+  const replacements = [
+    [/^(helped with|helped)\s+/i, "Supported "],
+    [/^(worked on)\s+/i, "Executed "],
+    [/^(responsible for)\s+/i, "Owned "],
+    [/^(assisted with|assisted)\s+/i, "Coordinated "],
+    [/^(supported)\s+/i, "Supported "],
+    [/^(tasked with)\s+/i, "Owned "]
+  ];
+
+  for (const [pattern, replacement] of replacements) {
+    if (pattern.test(cleaned)) {
+      return cleaned.replace(pattern, replacement);
+    }
+  }
+
+  return cleaned;
+}
+
 function extractCandidateSkills(text = "") {
   const sanitized = text
     .replace(/https?:\/\/\S+/gi, " ")
@@ -122,6 +159,9 @@ function extractCandidateSkills(text = "") {
       continue;
     }
     if (SECTION_HEADERS.includes(lowered) || Object.keys(SECTION_ALIASES).includes(lowered)) {
+      continue;
+    }
+    if (lowered.endsWith(" experience")) {
       continue;
     }
     if (/^[a-z]+$/.test(token) && token.length < 4) {
@@ -178,12 +218,12 @@ function sectionsFromText(text = "") {
 }
 
 function strengthenBullet(bullet, index) {
-  const cleaned = bullet.replace(/\s+/g, " ").trim();
+  const cleaned = normalizeWeakOpener(bullet.replace(/\s+/g, " ").trim());
   if (!cleaned) {
     return null;
   }
 
-  const startsWithVerb = /^(led|built|launched|improved|designed|delivered|scaled|automated|streamlined|reduced|increased|implemented|created|owned|managed|partnered|developed|drove|grew)\b/i.test(cleaned);
+  const startsWithVerb = /^(led|built|launched|improved|designed|delivered|scaled|automated|streamlined|reduced|increased|implemented|created|owned|managed|partnered|developed|drove|grew|executed|supported|coordinated)\b/i.test(cleaned);
   const verb = ACTION_VERBS[index % ACTION_VERBS.length];
   const prefix = startsWithVerb ? "" : `${verb} `;
   return `${prefix}${cleaned.charAt(0).toUpperCase()}${cleaned.slice(1)}`;
@@ -221,6 +261,8 @@ function buildSuggestions({ sections, bullets, resumeText, linkedinText, targetR
   const experienceLines = sections.experience || sections["work experience"] || sections.employment || [];
   const metricsCount = (resumeText.match(/\b\d+[%xX]?|\$\d/g) || []).length;
   const missingKeywords = topMissingKeywords(linkedinText, resumeText);
+  const weakBullets = bullets.filter((bullet) => isWeakBullet(bullet));
+  const lowSignalBullets = bullets.filter((bullet) => !hasResultSignal(bullet));
 
   if (!summaryLines.length) {
     suggestions.push({
@@ -251,6 +293,22 @@ function buildSuggestions({ sections, bullets, resumeText, linkedinText, targetR
       priority: "high",
       title: "Add more quantified outcomes",
       detail: "Most of your bullets describe work, but not enough of them show measurable impact."
+    });
+  }
+
+  if (weakBullets.length) {
+    suggestions.push({
+      priority: "high",
+      title: "Replace weak bullet openers",
+      detail: `${weakBullets.length} bullet(s) still open with vague phrasing like “helped with” or “worked on.” Rewrite them to show ownership, action, and what changed.`
+    });
+  }
+
+  if (lowSignalBullets.length >= Math.max(2, Math.ceil(bullets.length / 2))) {
+    suggestions.push({
+      priority: "medium",
+      title: "Close more bullets with impact",
+      detail: "Several bullets explain the work but not the result. Add the business effect, user outcome, or measurable shift where you can."
     });
   }
 

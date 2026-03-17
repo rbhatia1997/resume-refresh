@@ -69,3 +69,21 @@ Product leader with growth experience.
   assert.match(result.rewrittenResume, /EXPERIENCE/);
   assert.doesNotMatch(result.rewrittenResume, /Remote\nEXPERIENCE HIGHLIGHTS/);
 });
+
+test("analyzeResume flags weak bullet openers and rewrites them to stronger action verbs", () => {
+  const result = analyzeResume({
+    linkedinText: "Product manager with experimentation, SQL, and analytics experience.",
+    resumeText: `
+Jane Doe
+
+EXPERIENCE
+- Worked on onboarding improvements for new users
+- Helped with executive reporting for leadership
+`,
+    targetRole: "Senior Product Manager"
+  });
+
+  assert.match(result.rewrittenResume, /Executed onboarding improvements/);
+  assert.match(result.rewrittenResume, /Supported executive reporting/);
+  assert.ok(result.suggestions.some((item) => item.title === "Replace weak bullet openers"));
+});
