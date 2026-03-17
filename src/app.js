@@ -73,9 +73,11 @@ export async function handleRequest(request, { serveStatic = true } = {}) {
       }
 
       const redirectUri = `${getBaseUrl(request)}/api/auth/linkedin/callback`;
+      const returnTo = sanitizeReturnTo(url.searchParams.get("return_to"));
       const state = signToken({
         exp: Date.now() + 10 * 60 * 1000,
-        redirectUri
+        redirectUri,
+        returnTo
       });
       const authUrl = new URL("https://www.linkedin.com/oauth/v2/authorization");
       authUrl.search = new URLSearchParams({
@@ -96,11 +98,11 @@ export async function handleRequest(request, { serveStatic = true } = {}) {
       const parsedState = verifyToken(state);
 
       if (error) {
-        return redirectResponse("/?linkedin=denied");
+        return redirectResponse(buildAuthRedirect(parsedState?.returnTo, "denied"));
       }
 
       if (!parsedState || parsedState.exp < Date.now() || !code) {
-        return redirectResponse("/?linkedin=invalid");
+        return redirectResponse(buildAuthRedirect(parsedState?.returnTo, "invalid"));
       }
 
       try {
@@ -109,11 +111,11 @@ export async function handleRequest(request, { serveStatic = true } = {}) {
           redirectUri: parsedState.redirectUri
         });
         const profile = await fetchLinkedInUser(tokenPayload.access_token);
-        return redirectResponse("/?linkedin=connected", {
+        return redirectResponse(buildAuthRedirect(parsedState.returnTo, "connected"), {
           cookies: [buildSessionCookie(profile)]
         });
       } catch {
-        return redirectResponse("/?linkedin=failed");
+        return redirectResponse(buildAuthRedirect(parsedState.returnTo, "failed"));
       }
     }
 
@@ -573,6 +575,22 @@ function redirectResponse(location, { cookies = [] } = {}) {
       location
     }
   }), cookies);
+}
+
+function sanitizeReturnTo(value) {
+  if (!value || typeof value !== "string") {
+    return "/";
+  }
+  if (!value.startsWith("/") || value.startsWith("//")) {
+    return "/";
+  }
+  return value;
+}
+
+function buildAuthRedirect(returnTo = "/", status) {
+  const target = sanitizeReturnTo(returnTo);
+  const separator = target.includes("?") ? "&" : "?";
+  return `${target}${separator}linkedin=${encodeURIComponent(status)}`;
 }
 
 function withCookies(response, cookies) {
