@@ -31,8 +31,14 @@ const STOPWORDS = new Set([
 
 const ACTION_VERBS = [
   "Led", "Built", "Launched", "Improved", "Designed", "Delivered", "Scaled",
-  "Automated", "Streamlined", "Reduced", "Increased", "Implemented", "Created"
+  "Automated", "Streamlined", "Reduced", "Increased", "Implemented", "Created",
+  "Owned", "Drove", "Managed", "Developed", "Optimized", "Executed", "Coordinated"
 ];
+const ACTION_VERB_PATTERN = /^(achieved|analyzed|automated|built|coached|coordinated|created|defined|delivered|designed|developed|drove|executed|expanded|generated|grew|implemented|improved|increased|launched|led|managed|negotiated|optimized|orchestrated|owned|partnered|reduced|researched|scaled|shipped|spearheaded|streamlined)\b/i;
+const WEAK_STARTER_PATTERN = /^(helped|helped with|worked on|responsible for|assisted|assisted with|supported|tasked with)\b/i;
+const RESULT_SIGNAL_PATTERN = /\b(\d+[%xX]?|\$\d+|\d+\+|revenue|pipeline|conversion|activation|retention|engagement|cost|time|efficiency|growth|reduced|increased|improved|saved|launched|cut|lifted|grew|expanded)\b/i;
+const CURRENT_TENSE_HINTS = /\b(lead|manage|build|own|drive|partner|develop|improve|coordinate|support)\b/i;
+const PAST_TENSE_HINTS = /\b(led|managed|built|owned|drove|partnered|developed|improved|coordinated|supported|launched|delivered|implemented)\b/i;
 const WEAK_BULLET_PATTERNS = [
   /^(helped|helped with)\b/i,
   /^(worked on)\b/i,
@@ -110,7 +116,7 @@ function isWeakBullet(bullet = "") {
 }
 
 function hasResultSignal(bullet = "") {
-  return /\b(\d+[%xX]?|\$\d+|revenue|pipeline|conversion|activation|retention|engagement|cost|time|efficiency|growth|reduced|increased|improved|saved|launched)\b/i.test(bullet);
+  return RESULT_SIGNAL_PATTERN.test(bullet);
 }
 
 function normalizeWeakOpener(bullet = "") {
@@ -223,10 +229,89 @@ function strengthenBullet(bullet, index) {
     return null;
   }
 
-  const startsWithVerb = /^(led|built|launched|improved|designed|delivered|scaled|automated|streamlined|reduced|increased|implemented|created|owned|managed|partnered|developed|drove|grew|executed|supported|coordinated)\b/i.test(cleaned);
+  const startsWithVerb = ACTION_VERB_PATTERN.test(cleaned);
   const verb = ACTION_VERBS[index % ACTION_VERBS.length];
   const prefix = startsWithVerb ? "" : `${verb} `;
   return `${prefix}${cleaned.charAt(0).toUpperCase()}${cleaned.slice(1)}`;
+}
+
+function scoreBullet(bullet = "") {
+  const cleaned = bullet.replace(/^[-*•]\s*/, "").trim();
+  if (!cleaned) {
+    return {
+      score: 0,
+      issues: ["empty bullet"]
+    };
+  }
+
+  const issues = [];
+  let score = 0;
+
+  if (WEAK_STARTER_PATTERN.test(cleaned)) {
+    issues.push("starts with weak filler phrasing");
+  } else if (ACTION_VERB_PATTERN.test(cleaned)) {
+    score += 3;
+  } else {
+    issues.push("does not start with a strong action verb");
+  }
+
+  if (/\b(with|across|through|by|for|via|alongside|partnering with|working with)\b/i.test(cleaned) || cleaned.split(/\s+/).length >= 8) {
+    score += 2;
+  } else {
+    issues.push("missing clear scope or execution detail");
+  }
+
+  if (hasResultSignal(cleaned)) {
+    score += 3;
+  } else {
+    issues.push("missing a visible result or outcome");
+  }
+
+  if (/\bI\b|\bmy\b|\bme\b/.test(cleaned)) {
+    issues.push("uses first-person language");
+  }
+
+  if (cleaned.length > 180) {
+    issues.push("too long for easy scanning");
+  } else if (cleaned.length >= 70) {
+    score += 1;
+  }
+
+  return {
+    score: Math.max(0, Math.min(score, 9)),
+    issues
+  };
+}
+
+function detectTenseIssues(bullets = []) {
+  if (bullets.length < 2) {
+    return [];
+  }
+
+  const currentTense = bullets.filter((bullet) => CURRENT_TENSE_HINTS.test(bullet)).length;
+  const pastTense = bullets.filter((bullet) => PAST_TENSE_HINTS.test(bullet)).length;
+  if (currentTense && pastTense) {
+    return ["mixed verb tense across bullets"];
+  }
+  return [];
+}
+
+function lintBullets(bullets = []) {
+  const scoredBullets = bullets.map((bullet) => ({
+    bullet,
+    ...scoreBullet(bullet)
+  }));
+  const failingBullets = scoredBullets.filter((item) => item.score < 5);
+  const tenseIssues = detectTenseIssues(bullets);
+
+  return {
+    scoredBullets,
+    averageScore: scoredBullets.length
+      ? scoredBullets.reduce((sum, item) => sum + item.score, 0) / scoredBullets.length
+      : 0,
+    failingBullets,
+    tenseIssues
+  };
 }
 
 function formatExperienceLines(lines = []) {
@@ -263,6 +348,7 @@ function buildSuggestions({ sections, bullets, resumeText, linkedinText, targetR
   const missingKeywords = topMissingKeywords(linkedinText, resumeText);
   const weakBullets = bullets.filter((bullet) => isWeakBullet(bullet));
   const lowSignalBullets = bullets.filter((bullet) => !hasResultSignal(bullet));
+  const bulletLint = lintBullets(bullets);
 
   if (!summaryLines.length) {
     suggestions.push({
@@ -304,6 +390,14 @@ function buildSuggestions({ sections, bullets, resumeText, linkedinText, targetR
     });
   }
 
+  if (bulletLint.failingBullets.length >= 1) {
+    suggestions.push({
+      priority: "high",
+      title: "Rewrite vague bullets into action and result bullets",
+      detail: `${bulletLint.failingBullets.length} bullet(s) still miss one of the essentials: a strong verb, clear scope, or a visible result. Rewrite them to show what you owned, how you executed it, and what changed.`
+    });
+  }
+
   if (lowSignalBullets.length >= Math.max(2, Math.ceil(bullets.length / 2))) {
     suggestions.push({
       priority: "medium",
@@ -342,6 +436,14 @@ function buildSuggestions({ sections, bullets, resumeText, linkedinText, targetR
       priority: "medium",
       title: "Pull more signal from your LinkedIn profile",
       detail: `These LinkedIn terms do not show up in the resume: ${missingKeywords.join(", ")}.`
+    });
+  }
+
+  if (bulletLint.tenseIssues.length) {
+    suggestions.push({
+      priority: "medium",
+      title: "Make verb tense consistent",
+      detail: "Use present tense for your current role and past tense for past roles so your experience reads cleanly and credibly."
     });
   }
 
@@ -410,6 +512,7 @@ export function analyzeResume({ linkedinText = "", linkedinUrl = "", resumeText 
   const normalizedLinkedIn = normalizeWhitespace(linkedinText);
   const sections = parseSections(normalizedResume);
   const bullets = extractBullets(normalizedResume);
+  const bulletLint = lintBullets(bullets);
   const suggestions = buildSuggestions({
     sections,
     bullets,
@@ -429,8 +532,11 @@ export function analyzeResume({ linkedinText = "", linkedinUrl = "", resumeText 
     extracted: {
       sections: Object.keys(sections),
       bullets: bullets.length,
-      missingKeywords
+      missingKeywords,
+      bulletQualityScore: Number(bulletLint.averageScore.toFixed(1)),
+      weakBulletCount: bulletLint.failingBullets.length
     },
+    lint: bulletLint,
     suggestions,
     rewrittenResume: buildDraft({
       sections,

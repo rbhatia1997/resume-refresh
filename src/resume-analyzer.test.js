@@ -86,4 +86,26 @@ EXPERIENCE
   assert.match(result.rewrittenResume, /Executed onboarding improvements/);
   assert.match(result.rewrittenResume, /Supported executive reporting/);
   assert.ok(result.suggestions.some((item) => item.title === "Replace weak bullet openers"));
+  assert.ok(result.suggestions.some((item) => item.title === "Rewrite vague bullets into action and result bullets"));
+  assert.ok(result.extracted.bulletQualityScore < 6);
+});
+
+test("analyzeResume detects mixed tense and missing outcomes in weaker bullet sets", () => {
+  const result = analyzeResume({
+    linkedinText: "Engineering manager with platform, reliability, and cross-functional delivery experience.",
+    resumeText: `
+Jane Doe
+
+EXPERIENCE
+- Lead sprint planning for platform work
+- Built internal tooling for release coordination
+- Responsible for status updates
+`,
+    targetRole: "Engineering Manager"
+  });
+
+  assert.ok(result.suggestions.some((item) => item.title === "Make verb tense consistent"));
+  assert.ok(result.suggestions.some((item) => item.title === "Close more bullets with impact"));
+  assert.ok(Array.isArray(result.lint.failingBullets));
+  assert.ok(result.lint.failingBullets.length >= 1);
 });
