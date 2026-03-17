@@ -113,7 +113,7 @@
             </div>
 
             <div class="action-row">
-              <button type="submit">Analyze</button>
+              <button id="generate-draft-button" type="submit">Generate draft</button>
               <button class="button-secondary" data-go-step="1" type="button">Back</button>
             </div>
           </form>
@@ -121,18 +121,18 @@
       </section>
 
       <section class="step-pane hidden" data-step="3">
-        <div class="results review-grid">
+        <div class="results flow-stack">
           <div class="card">
             <h2>Snapshot</h2>
             <div id="snapshot" class="snapshot-list"></div>
           </div>
 
           <div class="card">
-            <h2>Suggestions</h2>
+            <h2>Top fixes</h2>
             <div id="suggestions"></div>
           </div>
 
-          <div class="card review-wide">
+          <div class="card">
             <h2>Draft</h2>
             <pre id="draft">Run analysis to generate a draft.</pre>
           </div>
@@ -146,8 +146,8 @@
       </section>
 
       <section class="step-pane hidden" data-step="4">
-        <div class="results rewrite-grid">
-          <div class="card rewrite-wide">
+        <div class="results flow-stack">
+          <div class="card">
             <h2>AI Rewrite</h2>
             <pre id="ai-rewrite">Run AI rewrite to see the polished version.</pre>
           </div>

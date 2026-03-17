@@ -11,6 +11,7 @@ const authStateEl = document.querySelector("#auth-state");
 const profileCardEl = document.querySelector("#linkedin-profile-card");
 const profileEl = document.querySelector("#linkedin-profile");
 const rewriteButtonEl = document.querySelector("#rewrite-button");
+const generateDraftButtonEl = document.querySelector("#generate-draft-button");
 const downloadDraftDocxEl = document.querySelector("#download-draft-docx");
 const downloadDraftPdfEl = document.querySelector("#download-draft-pdf");
 const downloadRewriteDocxEl = document.querySelector("#download-rewrite-docx");
@@ -135,7 +136,7 @@ function seedChat() {
   chatFeedEl.replaceChildren();
   addChatMessage({
     title: "Start here",
-    body: "Connect LinkedIn if you want basic identity prefilled. Then answer each prompt one by one."
+    body: "Connect LinkedIn if you want a name and email prefilled. Then answer one prompt at a time."
   });
 }
 
@@ -177,6 +178,8 @@ function renderWizardStep() {
   const showUpload = activeChatField === "resumeText";
   resumeUploadCardEl.classList.toggle("hidden", !showUpload);
   resumeFileStateEl.textContent = fieldEls.resumeFile.files[0]?.name || "No file selected.";
+  generateDraftButtonEl.disabled = !isReadyForAnalysis() || analysisInFlight;
+  generateDraftButtonEl.textContent = analysisInFlight ? "Generating..." : "Generate draft";
   renderCollectedSummary();
 }
 
@@ -242,10 +245,10 @@ function setStep(step) {
   }
 
   const stepMessages = {
-    1: "Connect LinkedIn first, or skip if you want to paste everything manually.",
-    2: "Answer the current prompt, or skip it and move to the next one.",
-    3: "Review the snapshot, fix gaps, and download the generated draft if it looks good.",
-    4: "Run AI rewrite when you want a more polished version, then export it."
+    1: "Connect LinkedIn, or continue without it.",
+    2: "Answer the current prompt, then move to the next one.",
+    3: "Review your first draft and the top fixes.",
+    4: "Review the polished version and export it."
   };
   const stepNames = {
     1: "Connect",
@@ -434,7 +437,7 @@ function saveChatInput(value) {
     addChatMessage({ role: "user", body: normalized });
     addChatMessage({
       title: "Saved LinkedIn URL",
-      body: "Good. Add resume text or upload a file next so I can analyze it."
+      body: "Saved. Continue to the next prompt."
     });
     focusChatField(nextIncompleteField());
     setStep(2);
@@ -449,7 +452,7 @@ function saveChatInput(value) {
     addChatMessage({ role: "user", body: normalized });
     addChatMessage({
       title: "Saved target role",
-      body: "Next, paste your resume text or upload a resume file."
+      body: "Saved. Next I need your current resume."
     });
     focusChatField(nextIncompleteField());
     setStep(2);
@@ -465,8 +468,8 @@ function saveChatInput(value) {
     addChatMessage({
       title: "Saved LinkedIn text",
       body: fieldEls.resumeText.value.trim() || fieldEls.resumeFile.files[0]
-        ? "You have enough to run analysis now."
-        : "Now paste your resume text or upload a resume file."
+        ? "Saved. You have enough to generate a draft."
+        : "Saved. Next I need your current resume."
     });
     focusChatField(nextIncompleteField());
     renderSnapshot(analysisResult);
@@ -480,8 +483,8 @@ function saveChatInput(value) {
   addChatMessage({
     title: "Saved resume text",
     body: fieldEls.targetRole.value.trim()
-      ? "You can run analysis now, or add LinkedIn text for stronger matching."
-      : "Add a target role next so I can tailor the analysis."
+      ? "Saved. You can generate a draft now, or keep answering prompts."
+      : "Saved. Next I need the role you want this resume tailored for."
   });
   focusChatField(nextIncompleteField());
   renderSnapshot(analysisResult);
@@ -543,11 +546,11 @@ function renderProfile(profile) {
 function updateRewriteButton() {
   if (!appConfig.openAiRewriteEnabled) {
     rewriteButtonEl.disabled = true;
-    rewriteButtonEl.textContent = "AI Rewrite Unavailable";
+    rewriteButtonEl.textContent = "AI rewrite unavailable";
     return;
   }
   rewriteButtonEl.disabled = false;
-  rewriteButtonEl.textContent = "AI Rewrite";
+  rewriteButtonEl.textContent = "Polish with AI";
 }
 
 async function loadSession() {
@@ -649,6 +652,7 @@ async function executeAnalysis({ auto = false } = {}) {
   }
 
   analysisInFlight = true;
+  renderWizardStep();
   setStatus(auto ? "Analyzing from chat..." : "Analyzing...");
 
   try {
@@ -659,10 +663,10 @@ async function executeAnalysis({ auto = false } = {}) {
     }
     addChatMessage({
       title: auto ? "Analysis ran automatically" : "Analysis complete",
-      body: "I found the biggest gaps and drafted a cleaner resume. Review the snapshot and suggestions next.",
+      body: "Your first draft is ready. Review it, then export it or polish it with AI.",
       actions: [
         { label: "Open review", onClick: () => setStep(3) },
-        { label: "AI rewrite", onClick: () => rewriteButtonEl.click(), secondary: true }
+        { label: "Polish with AI", onClick: () => rewriteButtonEl.click(), secondary: true }
       ]
     });
     setStep(3);
@@ -672,6 +676,7 @@ async function executeAnalysis({ auto = false } = {}) {
     setStatus(error.message || "Something went wrong.", true);
   } finally {
     analysisInFlight = false;
+    renderWizardStep();
   }
 }
 
@@ -704,7 +709,7 @@ chatFormEl.addEventListener("submit", (event) => {
 chatSkipEl.addEventListener("click", () => {
   addChatMessage({
     title: "Skipped",
-    body: "That field is optional for now. You can come back to it later."
+    body: "Skipped. Moving to the next prompt."
   });
   const currentIndex = sourceQuestions.findIndex((item) => item.field === activeChatField);
   const nextField = sourceQuestions[currentIndex + 1]?.field || activeChatField;
@@ -749,7 +754,7 @@ rewriteButtonEl.addEventListener("click", async () => {
     renderNotes([result.summary, ...result.bulletImprovements, ...result.notes].filter(Boolean));
     addChatMessage({
       title: "Rewrite ready",
-      body: "The AI version is ready. Review it, then export DOCX or PDF.",
+      body: "The polished version is ready. Export DOCX or PDF when you are done.",
       actions: [
         { label: "Open rewrite", onClick: () => setStep(4) }
       ]
@@ -817,14 +822,14 @@ const linkedInStatus = readLinkedInStatusFromUrl();
 if (linkedInStatus === "connected") {
   addChatMessage({
     title: "LinkedIn connected",
-    body: "I pulled your basic LinkedIn identity and prefilled what I can. LinkedIn does not expose your public profile URL here, so paste it manually if you want it included."
+    body: "Connected. I prefilled what LinkedIn shares here. If you want your public LinkedIn URL included, paste it later when asked."
   });
   focusChatField(nextIncompleteField());
   setStatus("LinkedIn connected.");
 } else if (linkedInStatus === "failed" || linkedInStatus === "invalid" || linkedInStatus === "denied") {
   addChatMessage({
     title: "LinkedIn sign-in did not complete",
-    body: "You can still continue by pasting your LinkedIn text and resume manually."
+    body: "No problem. You can continue manually."
   });
   setStatus("LinkedIn sign-in did not complete.", true);
 }
