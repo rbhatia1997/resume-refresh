@@ -63,7 +63,7 @@ test("manual v2 flow runs end-to-end through draft, AI rewrite, and export", asy
   await expect(page.getByText("Import your resume. Leave with a stronger one.")).toBeVisible();
   await page.getByRole("button", { name: "View sample" }).click();
   await expect(page.getByRole("button", { name: "Try this sample" })).toBeVisible();
-  await page.getByRole("button", { name: "Refresh my resume" }).click();
+  await page.getByRole("button", { name: "Start Resume Refresh" }).click();
   await page.getByRole("button", { name: "Build it step by step" }).click();
 
   await expect(page.getByRole("heading", { name: "Make each section stronger." })).toBeVisible();
@@ -113,7 +113,7 @@ test("import review stage stays editable and leads back into the builder", async
 
 test("import path presents the permissions screen and LinkedIn redirect remains wired", async ({ page, request, baseURL }) => {
   await page.goto("/v2.html");
-  await page.getByRole("button", { name: "Refresh my resume" }).click();
+  await page.getByRole("button", { name: "Start Resume Refresh" }).click();
   await page.getByRole("button", { name: "Bring in what you already have" }).click();
 
   await expect(page.getByRole("heading", { name: "Import is visible and reversible." })).toBeVisible();
@@ -132,11 +132,22 @@ test("import path presents the permissions screen and LinkedIn redirect remains 
   expect(decodedState.returnTo).toBe("/v2.html");
 });
 
+test("landing CTA and layout stay intact across target breakpoints", async ({ page }) => {
+  for (const width of [1440, 1024, 768, 390]) {
+    await page.setViewportSize({ width, height: 960 });
+    await page.goto("/v2.html");
+    await expect(page.getByRole("button", { name: "Start Resume Refresh" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "View sample" })).toBeVisible();
+    const hasOverflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1);
+    expect(hasOverflow).toBe(false);
+  }
+});
+
 test("mobile landing and builder do not introduce obvious horizontal overflow", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/v2.html");
-  await expect(page.getByRole("button", { name: "Refresh my resume" })).toBeVisible();
-  await page.getByRole("button", { name: "Refresh my resume" }).click();
+  await expect(page.getByRole("button", { name: "Start Resume Refresh" })).toBeVisible();
+  await page.getByRole("button", { name: "Start Resume Refresh" }).click();
   await page.getByRole("button", { name: "Build it step by step" }).click();
   await expect(page.getByRole("heading", { name: "Make each section stronger." })).toBeVisible();
 

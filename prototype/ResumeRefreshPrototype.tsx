@@ -36,6 +36,8 @@ type AnalysisResult = {
     sections?: string[];
     bullets?: number;
     missingKeywords?: string[];
+    bulletQualityScore?: number;
+    weakBulletCount?: number;
   };
   suggestions?: Suggestion[];
   rewrittenResume?: string;
@@ -127,16 +129,15 @@ const defaultPersistedState: PersistedState = {
 };
 
 const featureCards = [
-  ["Import", "Bring in a resume or LinkedIn details instead of starting from a blank page."],
-  ["Improve", "Strengthen weak bullets into clearer ownership, action, and impact."],
-  ["Tailor", "Align the resume to the role you want without losing credibility."],
-  ["Export", "Leave with a clean draft you can send, refine, or save."]
+  ["Section-by-section editing", "Fix one section at a time instead of wrestling with a full page of inputs."],
+  ["Stronger bullet coaching", "Weak bullets get pushed toward ownership, execution, and outcomes."],
+  ["Live resume preview", "You can see the draft improve before you export anything."]
 ];
 
 const beforeAfter = [
   {
     before: "Worked on onboarding improvements for new users.",
-    after: "Owned the onboarding experience, partnering with design and engineering to launch experiments that improved activation."
+    after: "Owned onboarding across signup and activation, partnering with design and engineering to launch experiments that improved new-user activation."
   },
   {
     before: "Helped with reporting for sales and leadership.",
@@ -147,26 +148,16 @@ const beforeAfter = [
 const workflowSteps = [
   {
     title: "Import what you have",
-    copy: "Start with a resume, LinkedIn details, or a blank draft. The product meets you where you are."
+    copy: "Start with a resume, LinkedIn details, or a blank draft."
   },
   {
-    title: "Tighten each section",
-    copy: "Review summary, experience, skills, and education one section at a time so nothing feels overwhelming."
-  },
-  {
-    title: "Strengthen the wording",
-    copy: "Resume Refresh pushes bullets toward ownership, action, and measurable change."
+    title: "Tighten the draft",
+    copy: "Review each section, fix weak bullets, and clarify what you owned."
   },
   {
     title: "Export with confidence",
-    copy: "Download a cleaner recruiter-ready version once the draft feels strong enough to send."
+    copy: "Leave with a cleaner, recruiter-ready resume in PDF or DOCX."
   }
-];
-
-const benefitRows = [
-  ["Less blank-page stress", "You never have to invent the whole resume from scratch."],
-  ["Stronger bullets faster", "Weak task language gets pushed toward action, scope, and results."],
-  ["Control without guesswork", "Every section stays editable, visible, and under your control."]
 ];
 
 const trustPoints = [
@@ -186,21 +177,6 @@ const sampleResumeSeed = {
     education: "University of California, Berkeley\nB.A. Economics"
   })
 };
-
-const faqs = [
-  {
-    q: "What does LinkedIn import actually use?",
-    a: "Only the data you approve. Resume Refresh never posts to LinkedIn or edits your account."
-  },
-  {
-    q: "Can I edit generated resume content manually?",
-    a: "Yes. Every section remains editable after import, draft generation, and AI polish."
-  },
-  {
-    q: "What if imported content is messy?",
-    a: "You review it section by section, fix missing parts, and decide what stays before it becomes your draft."
-  }
-];
 
 function cn(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -455,7 +431,7 @@ function Panel({
   return (
     <div
       className={cn(
-        "rounded-[28px] border border-neutral-200 bg-white/90 shadow-[0_12px_40px_rgba(21,21,21,0.06)] backdrop-blur",
+        "rounded-2xl border border-neutral-200 bg-white shadow-sm",
         className
       )}
     >
@@ -475,7 +451,7 @@ function ResumePreview({
   const headerLines = sectionMap.header.split("\n").filter(Boolean);
 
   return (
-    <div data-testid="resume-preview" className="mt-4 rounded-[24px] border border-neutral-200 bg-neutral-50 p-6">
+    <div data-testid="resume-preview" className="mt-4 rounded-2xl border border-neutral-200 bg-neutral-50 p-6">
       {sectionMap.header ? (
         <div>
           <div className="whitespace-pre-wrap break-words text-xl font-semibold leading-8 text-neutral-950">
@@ -492,7 +468,7 @@ function ResumePreview({
       )}
 
       {missingKeywords.length > 0 && (
-        <div className="mt-4 rounded-[18px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           Missing keywords: {missingKeywords.join(", ")}
         </div>
       )}
@@ -589,7 +565,7 @@ function Landing({
       <section className="py-14 sm:py-20">
         <div className="grid gap-8 lg:grid-cols-[1.02fr_0.98fr] lg:items-center">
           <div className="space-y-8">
-          <div className="inline-flex items-center gap-2 rounded-full border border-neutral-200 bg-white/80 px-4 py-2 text-xs font-medium uppercase tracking-[0.16em] text-neutral-500 shadow-[0_10px_24px_rgba(19,33,38,0.05)]">
+          <div className="inline-flex items-center gap-2 rounded-full border border-neutral-200 bg-white px-4 py-2 text-xs font-medium uppercase tracking-[0.16em] text-neutral-500 shadow-sm">
             <span className="h-2 w-2 rounded-full bg-emerald-500" />
             Resume Refresh
           </div>
@@ -598,7 +574,7 @@ function Landing({
               Import your resume. Leave with a stronger one.
             </h1>
             <p className="mt-4 max-w-2xl text-base leading-7 text-neutral-600 sm:text-lg">
-              Bring in an existing resume or LinkedIn details, improve weak bullets, and walk away with a cleaner recruiter-ready draft.
+              Bring in a resume or LinkedIn details, tighten weak bullets, and leave with a cleaner recruiter-ready draft.
             </p>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
@@ -606,7 +582,7 @@ function Landing({
               onClick={onStart}
               className="w-full rounded-full bg-neutral-950 px-5 py-3 text-sm font-medium text-white transition hover:bg-neutral-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-950 sm:w-auto"
             >
-              Refresh my resume
+              Start Resume Refresh
             </button>
             <button
               onClick={onViewSample}
@@ -691,10 +667,10 @@ function Landing({
         <div>
           <SectionEyebrow>How it works</SectionEyebrow>
           <h2 className="mt-3 max-w-[12ch] text-4xl font-semibold tracking-[-0.05em] text-neutral-950 sm:text-5xl">
-            Tight, guided, and built to get you moving.
+            Three clear steps. No blank-page spiral.
           </h2>
         </div>
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-6 md:grid-cols-3">
           {workflowSteps.map((item, index) => (
             <Panel key={item.title} className="p-6">
               <div className="flex items-center gap-3">
@@ -703,7 +679,7 @@ function Landing({
                 </div>
                 <p className="text-base font-semibold text-neutral-950">{item.title}</p>
               </div>
-              <p className="mt-4 text-sm leading-6 text-neutral-600">{item.copy}</p>
+              <p className="mt-4 text-base leading-7 text-neutral-600">{item.copy}</p>
             </Panel>
           ))}
         </div>
@@ -711,68 +687,40 @@ function Landing({
       </section>
 
       <section className="py-14 sm:py-20">
-        <div className="grid gap-8 lg:grid-cols-[1.08fr_0.92fr]">
+        <div className="grid gap-8 lg:grid-cols-[0.95fr_1.05fr] lg:items-start">
           <div className="space-y-8">
           <div>
             <SectionEyebrow>Product preview</SectionEyebrow>
             <h2 className="mt-3 max-w-[12ch] text-4xl font-semibold tracking-[-0.05em] text-neutral-950 sm:text-5xl">
-              It shows the work, not just the answer.
+              You stay in control of every edit.
             </h2>
           </div>
-          <div className="grid gap-8 lg:grid-cols-[0.42fr_0.58fr] lg:items-start">
-            <div className="space-y-6">
-              {featureCards.map(([title, copy]) => (
-                <div key={title}>
-                  <p className="text-base font-semibold text-neutral-950">{title}</p>
-                  <p className="mt-2 text-base leading-7 text-neutral-600">{copy}</p>
-                </div>
-              ))}
-            </div>
-            <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm">
-              <div className="border-b border-neutral-200 pb-4">
-                <p className="text-sm font-semibold text-neutral-950">Product preview</p>
-                <p className="mt-1 text-base leading-7 text-neutral-600">
-                  Edit one section at a time, review stronger wording, and watch the draft update in place.
-                </p>
+          <div className="space-y-6">
+            {featureCards.map(([title, copy]) => (
+              <div key={title}>
+                <p className="text-base font-semibold text-neutral-950">{title}</p>
+                <p className="mt-2 text-base leading-7 text-neutral-600">{copy}</p>
               </div>
-              <div className="grid gap-6 pt-6">
-                <div className="text-sm leading-6 text-neutral-700">
-                  <p className="font-medium text-neutral-900">Experience</p>
-                  <p className="mt-3">Owned onboarding experiments across web and lifecycle email, lifting activation for new accounts.</p>
-                  <p className="mt-2">Led pricing tests with finance and sales, improving expansion readiness for mid-market customers.</p>
-                </div>
-                <div className="border-t border-neutral-200 pt-6 text-sm leading-6 text-neutral-700">
-                  <p className="font-semibold text-neutral-950">Maya Patel</p>
-                  <p className="mt-1 text-neutral-500">San Francisco, CA  |  maya@resumerefresh.app</p>
-                  <p className="mt-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-neutral-400">Summary</p>
-                  <p className="mt-2">Product leader focused on growth, onboarding, and monetization strategy.</p>
-                </div>
-              </div>
-            </div>
+            ))}
           </div>
           </div>
 
-          <div className="space-y-6">
-            <div>
-              <SectionEyebrow>Trust and benefits</SectionEyebrow>
-              <h2 className="mt-3 text-4xl font-semibold tracking-[-0.05em] text-neutral-950 sm:text-5xl">
-                Clear inputs. Better outputs. Full control.
-              </h2>
-            </div>
-            <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm">
-              <div className="space-y-6">
-                {[
-                  ...trustPoints.map((point) => ["Trust", point] as const),
-                  ...benefitRows
-                ].map(([title, copy]) => (
-                  <div key={`${title}-${copy}`} className="flex gap-4 border-b border-neutral-200 pb-6 last:border-b-0 last:pb-0">
-                    <span className="mt-2 h-2 w-2 rounded-full bg-emerald-500" />
-                    <div>
-                      <p className="text-base font-semibold text-neutral-950">{title}</p>
-                      <p className="mt-2 text-base leading-7 text-neutral-600">{copy}</p>
-                    </div>
-                  </div>
-                ))}
+          <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm">
+            <p className="text-sm font-semibold text-neutral-950">Product preview</p>
+            <p className="mt-1 text-base leading-7 text-neutral-600">
+              Edit one section at a time, review stronger wording, and watch the draft update in place.
+            </p>
+            <div className="mt-6 space-y-6 text-sm leading-6 text-neutral-700">
+              <div>
+                <p className="font-medium text-neutral-900">Experience</p>
+                <p className="mt-3">Owned onboarding experiments across web and lifecycle email, lifting activation for new accounts.</p>
+                <p className="mt-2">Led pricing tests with finance and sales, improving expansion readiness for mid-market customers.</p>
+              </div>
+              <div className="border-t border-neutral-200 pt-6">
+                <p className="font-semibold text-neutral-950">Maya Patel</p>
+                <p className="mt-1 text-neutral-500">San Francisco, CA  |  maya@resumerefresh.app</p>
+                <p className="mt-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-neutral-400">Summary</p>
+                <p className="mt-2">Product leader focused on growth, onboarding, and monetization strategy.</p>
               </div>
             </div>
           </div>
@@ -780,37 +728,42 @@ function Landing({
       </section>
 
       <section className="py-14 sm:py-20">
-        <div className="grid gap-8 lg:grid-cols-[1fr_0.9fr]">
-        <Panel className="p-6 sm:p-8">
-          <SectionEyebrow>FAQ</SectionEyebrow>
-          <div className="mt-5 divide-y divide-neutral-200">
-            {faqs.map((item) => (
-              <div key={item.q} className="py-4 first:pt-0 last:pb-0">
-                <p className="text-sm font-semibold text-neutral-900">{item.q}</p>
-                <p className="mt-2 text-sm leading-6 text-neutral-600">{item.a}</p>
-              </div>
-            ))}
-          </div>
-        </Panel>
+        <div className="grid gap-8 lg:grid-cols-[0.8fr_1.2fr] lg:items-start">
+            <div>
+              <SectionEyebrow>Trust</SectionEyebrow>
+              <h2 className="mt-3 text-4xl font-semibold tracking-[-0.05em] text-neutral-950 sm:text-5xl">
+                Helpful, not a black box.
+              </h2>
+            </div>
+            <div className="space-y-6">
+              {trustPoints.map((point) => (
+                <div key={point} className="flex gap-4 border-b border-neutral-200 pb-6 last:border-b-0 last:pb-0">
+                  <span className="mt-2 h-2 w-2 rounded-full bg-emerald-500" />
+                  <p className="text-base leading-7 text-neutral-700">{point}</p>
+                </div>
+              ))}
+            </div>
+        </div>
+      </section>
 
-        <Panel className="flex flex-col justify-between bg-neutral-950 p-8 text-white">
+      <section className="py-14 sm:py-20">
+        <Panel className="flex flex-col justify-between gap-8 bg-neutral-950 p-8 text-white sm:p-10">
           <div>
             <SectionEyebrow>Start now</SectionEyebrow>
             <h2 className="mt-4 text-3xl font-semibold tracking-[-0.04em] text-white">
               Start with what you have. Finish with something stronger.
             </h2>
-            <p className="mt-4 max-w-md text-sm leading-7 text-white/72">
-              Resume Refresh is built to reduce blank-page stress, clarify what strong bullets look like, and get you to a better draft faster.
+            <p className="mt-4 max-w-md text-base leading-7 text-white/72">
+              Resume Refresh helps you turn rough inputs into a cleaner resume you can actually send.
             </p>
           </div>
           <button
             onClick={onStart}
             className="mt-8 w-full rounded-full bg-white px-5 py-3 text-sm font-medium text-neutral-950 transition hover:bg-white/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:w-auto"
           >
-            Start Resume Refresh
+            Start now
           </button>
         </Panel>
-        </div>
       </section>
     </div>
   );
@@ -870,7 +823,7 @@ function SourceChoice({
       <div className="mt-8 grid gap-4 md:grid-cols-2">
         <button
           onClick={onImport}
-          className="rounded-[24px] border border-neutral-200 bg-neutral-50 p-6 text-left transition hover:border-neutral-300 hover:bg-white"
+          className="rounded-2xl border border-neutral-200 bg-neutral-50 p-6 text-left transition hover:border-neutral-300 hover:bg-white"
         >
           <p className="text-base font-semibold text-neutral-950">Bring in what you already have</p>
           <p className="mt-2 text-sm leading-6 text-neutral-600">
@@ -879,7 +832,7 @@ function SourceChoice({
         </button>
         <button
           onClick={onManual}
-          className="rounded-[24px] border border-neutral-200 bg-neutral-50 p-6 text-left transition hover:border-neutral-300 hover:bg-white"
+          className="rounded-2xl border border-neutral-200 bg-neutral-50 p-6 text-left transition hover:border-neutral-300 hover:bg-white"
         >
           <p className="text-base font-semibold text-neutral-950">Build it step by step</p>
           <p className="mt-2 text-sm leading-6 text-neutral-600">
@@ -973,15 +926,15 @@ function ImportReview({
           Imported content is only a starting point. Clean up each section now so the draft generator works with better material.
         </p>
         <div className="mt-6 grid gap-3 sm:grid-cols-3">
-          <div className="rounded-[20px] border border-emerald-200 bg-emerald-50 px-4 py-3">
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-700">Ready</p>
             <p className="mt-2 text-2xl font-semibold text-emerald-900">{sectionSummary.ready}</p>
           </div>
-          <div className="rounded-[20px] border border-amber-200 bg-amber-50 px-4 py-3">
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-amber-700">Needs detail</p>
             <p className="mt-2 text-2xl font-semibold text-amber-900">{sectionSummary.needsDetail}</p>
           </div>
-          <div className="rounded-[20px] border border-neutral-200 bg-neutral-50 px-4 py-3">
+          <div className="rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3">
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-500">Missing</p>
             <p className="mt-2 text-2xl font-semibold text-neutral-900">{sectionSummary.missing}</p>
           </div>
@@ -1015,7 +968,7 @@ function ImportReview({
                 value={section.content}
                 onChange={(event) => onSectionChange(section.id, event.target.value)}
                 placeholder={section.placeholder}
-                className="mt-4 min-h-[140px] w-full rounded-[20px] border border-neutral-200 bg-white px-4 py-3 text-sm leading-6 text-neutral-900 outline-none"
+                className="mt-4 min-h-[140px] w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm leading-6 text-neutral-900 outline-none"
               />
 
               <p className="mt-3 text-xs leading-5 text-neutral-500">{section.helper}</p>
@@ -1118,7 +1071,7 @@ function Builder({
                 Edit sections directly, generate a draft, then polish wording only if it helps. Strong bullets should show what you owned, how you did it, and what changed.
               </p>
             </div>
-            <div className="grid min-w-[210px] gap-2 rounded-[20px] border border-neutral-200 bg-neutral-50 px-4 py-3 text-xs text-neutral-600">
+            <div className="grid min-w-[210px] gap-2 rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-xs text-neutral-600">
               <div className="flex items-center justify-between gap-3">
                 <span>Sections ready</span>
                 <span className="font-semibold text-neutral-900">{sectionSummary.ready}/{sections.length}</span>
@@ -1139,7 +1092,7 @@ function Builder({
                 value={targetRole}
                 onChange={(event) => onTargetRoleChange(event.target.value)}
                 placeholder="Senior Product Manager"
-                className="rounded-[18px] border border-neutral-200 bg-white px-4 py-3 text-sm text-neutral-900 outline-none"
+                className="rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm text-neutral-900 outline-none"
               />
             </label>
             <label className="grid gap-2 text-sm font-medium text-neutral-900">
@@ -1148,7 +1101,7 @@ function Builder({
                 value={linkedinUrl}
                 onChange={(event) => onLinkedinUrlChange(event.target.value)}
                 placeholder="Paste your public profile URL"
-                className="rounded-[18px] border border-neutral-200 bg-white px-4 py-3 text-sm text-neutral-900 outline-none"
+                className="rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm text-neutral-900 outline-none"
               />
             </label>
           </div>
@@ -1160,7 +1113,7 @@ function Builder({
               value={linkedinText}
               onChange={(event) => onLinkedinTextChange(event.target.value)}
               placeholder="Paste About, Experience, or Skills"
-              className="min-h-[120px] rounded-[18px] border border-neutral-200 bg-white px-4 py-3 text-sm leading-6 text-neutral-900 outline-none"
+              className="min-h-[120px] rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm leading-6 text-neutral-900 outline-none"
             />
           </label>
 
@@ -1171,7 +1124,7 @@ function Builder({
                 type="file"
                 accept=".pdf,.txt,.md"
                 onChange={(event) => onResumeUpload(event.target.files?.[0] || null)}
-                className="rounded-[18px] border border-neutral-200 bg-white px-4 py-3 text-sm text-neutral-900 outline-none file:mr-3 file:rounded-full file:border-0 file:bg-neutral-950 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-white"
+                className="rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm text-neutral-900 outline-none file:mr-3 file:rounded-full file:border-0 file:bg-neutral-950 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-white"
               />
               <span className="text-xs text-neutral-500">{resumeFileName || "No file selected"}</span>
             </label>
@@ -1209,7 +1162,7 @@ function Builder({
                     onClick={() => onSectionSelect(section.id)}
                     data-testid={`section-tab-${section.id}`}
                     className={cn(
-                      "w-full rounded-[18px] border px-4 py-3 text-left transition",
+                      "w-full rounded-2xl border px-4 py-3 text-left transition",
                       activeSection === section.id
                         ? "border-neutral-900 bg-neutral-950 text-white"
                         : "border-neutral-200 bg-neutral-50 text-neutral-800 hover:bg-white"
@@ -1224,7 +1177,7 @@ function Builder({
               })}
             </div>
 
-            <div className="rounded-[24px] border border-neutral-200 bg-neutral-50 p-4">
+            <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <p className="text-sm font-semibold text-neutral-900">{selectedSection.title}</p>
@@ -1239,15 +1192,15 @@ function Builder({
                 value={selectedSection.content}
                 onChange={(event) => onSectionChange(selectedSection.id, event.target.value)}
                 placeholder={selectedSection.placeholder}
-                className="mt-4 min-h-[220px] w-full rounded-[20px] border border-neutral-200 bg-white px-4 py-3 text-sm leading-6 text-neutral-900 outline-none"
+                className="mt-4 min-h-[220px] w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm leading-6 text-neutral-900 outline-none"
               />
               <p className="mt-3 text-xs text-neutral-500">Changes are saved in this browser session while you work.</p>
               <div className="mt-3 grid gap-3 md:grid-cols-2">
-                <div className="rounded-[18px] border border-neutral-200 bg-white px-4 py-3">
+                <div className="rounded-2xl border border-neutral-200 bg-white px-4 py-3">
                   <p className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400">Section guidance</p>
                   <p className="mt-2 text-sm leading-6 text-neutral-600">{sectionToneTips(selectedSection.id)}</p>
                 </div>
-                <div className="rounded-[18px] border border-neutral-200 bg-white px-4 py-3">
+                <div className="rounded-2xl border border-neutral-200 bg-white px-4 py-3">
                   <p className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400">Editing goal</p>
                   <p className="mt-2 text-sm leading-6 text-neutral-600">{selectedSection.helper}</p>
                   {selectedSection.id === "experience" && (
@@ -1293,9 +1246,12 @@ function Builder({
         {analysis && (
           <Panel className="p-6">
             <SectionEyebrow>Top fixes</SectionEyebrow>
+            <p className="mt-4 text-sm leading-6 text-neutral-600">
+              Bullet quality score: {analysis.extracted?.bulletQualityScore || 0}/9. Strong bullets usually show clear ownership, execution, and a visible result.
+            </p>
             <div className="mt-4 space-y-4">
               {(analysis.suggestions || []).map((item) => (
-                <div key={item.title} className="rounded-[20px] border border-neutral-200 bg-neutral-50 p-4">
+                <div key={item.title} className="rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
                   <p className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400">{item.priority}</p>
                   <p className="mt-2 text-sm font-semibold text-neutral-900">{item.title}</p>
                   <p className="mt-1 text-sm leading-6 text-neutral-600">{item.detail}</p>
@@ -1311,7 +1267,7 @@ function Builder({
             <p className="mt-4 text-sm leading-6 text-neutral-600">
               Review the polished draft before applying it back into your editable sections.
             </p>
-            <div className="mt-4 rounded-[20px] border border-neutral-200 bg-neutral-50 p-4">
+            <div className="mt-4 rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400">Summary</p>
               <p className="mt-2 text-sm leading-6 text-neutral-700">{rewrite.summary}</p>
               {rewrite.notes && rewrite.notes.length > 0 && (
@@ -1327,13 +1283,13 @@ function Builder({
             </div>
             {rewrittenSectionText && rewrittenSectionText !== currentSectionText && (
               <div className="mt-4 grid gap-4 lg:grid-cols-2">
-                <div className="rounded-[20px] border border-neutral-200 bg-white p-4">
+                <div className="rounded-2xl border border-neutral-200 bg-white p-4">
                   <p className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400">Before</p>
                   <div className="mt-2 whitespace-pre-wrap text-sm leading-6 text-neutral-600">
                     {currentSectionText || "Nothing written yet for this section."}
                   </div>
                 </div>
-                <div className="rounded-[20px] border border-emerald-200 bg-emerald-50 p-4">
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
                   <p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-700">After</p>
                   <div className="mt-2 whitespace-pre-wrap text-sm leading-6 text-emerald-950">
                     {rewrittenSectionText}
@@ -1361,7 +1317,7 @@ function Builder({
             : "Preview updates as you edit sections."}
         </p>
         <ResumePreview sections={deferredPreviewSections} missingKeywords={missingKeywords} />
-        <div className="mt-5 rounded-[20px] border border-neutral-200 bg-white p-4">
+        <div className="mt-5 rounded-2xl border border-neutral-200 bg-white p-4">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400">What to do next</p>
           <p className="mt-2 text-sm leading-6 text-neutral-700">
             {sectionSummary.missing > 0
@@ -1682,8 +1638,8 @@ export default function ResumeRefreshPrototype() {
   const currentDraft = normalizedRewriteDraft || serializeSections(sections);
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-[radial-gradient(circle_at_top_left,rgba(179,120,67,0.12),transparent_28%),linear-gradient(180deg,#fcfaf6_0%,#f4efe8_100%)] px-4 py-6 text-neutral-950 sm:px-6 sm:py-8 lg:px-8">
-      <div className="mx-auto max-w-7xl">
+    <div className="min-h-screen overflow-x-hidden bg-[radial-gradient(circle_at_top_left,rgba(179,120,67,0.12),transparent_28%),linear-gradient(180deg,#fcfaf6_0%,#f4efe8_100%)] px-4 py-6 text-neutral-950 sm:px-6 sm:py-8">
+      <div className="mx-auto max-w-6xl">
         {stage === "landing" ? (
           <Landing
             onStart={() => setStage("source")}
@@ -1697,7 +1653,7 @@ export default function ResumeRefreshPrototype() {
             {(status || error) && (
               <div
                 className={cn(
-                  "mb-5 rounded-[20px] border px-4 py-3 text-sm",
+                  "mb-5 rounded-2xl border px-4 py-3 text-sm",
                   error ? "border-amber-200 bg-amber-50 text-amber-800" : "border-neutral-200 bg-white text-neutral-700"
                 )}
               >
