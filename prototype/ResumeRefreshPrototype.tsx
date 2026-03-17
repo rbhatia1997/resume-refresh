@@ -1,5 +1,6 @@
 import {
   startTransition,
+  useDeferredValue,
   useEffect,
   useMemo,
   useState
@@ -8,6 +9,7 @@ import {
 type Stage = "landing" | "source" | "permissions" | "review" | "builder" | "export";
 type SourceMethod = "import" | "manual" | null;
 type RewriteStyle = "concise" | "balanced" | "achievement";
+type SectionId = "header" | "summary" | "experience" | "skills" | "education";
 
 type SessionProfile = {
   name?: string;
@@ -46,17 +48,71 @@ type RewriteResult = {
   notes?: string[];
 };
 
+type ResumeSection = {
+  id: SectionId;
+  title: string;
+  prompt: string;
+  helper: string;
+  placeholder: string;
+  required: boolean;
+  content: string;
+};
+
 type PersistedState = {
   stage: Stage;
   sourceMethod: SourceMethod;
   targetRole: string;
   linkedinUrl: string;
   linkedinText: string;
-  resumeText: string;
   rewriteStyle: RewriteStyle;
+  activeSection: SectionId;
+  sections: ResumeSection[];
 };
 
 const storageKey = "resume_refresh_v2_state";
+
+const sectionBlueprints: Array<Omit<ResumeSection, "content">> = [
+  {
+    id: "header",
+    title: "Header",
+    prompt: "Confirm your name, contact details, and location.",
+    helper: "Keep this clean and factual. No paragraphs here.",
+    placeholder: "Maya Patel\nSan Francisco, CA\nmaya@email.com · linkedin.com/in/maya",
+    required: true
+  },
+  {
+    id: "summary",
+    title: "Summary",
+    prompt: "Write a short profile that makes your direction clear.",
+    helper: "Focus on strengths, scope, and direction. Avoid vague adjectives.",
+    placeholder: "Product manager with experience in growth, onboarding, and experimentation.",
+    required: true
+  },
+  {
+    id: "experience",
+    title: "Experience",
+    prompt: "Capture the strongest experience bullets.",
+    helper: "Lead with ownership, then show outcomes, scope, or complexity.",
+    placeholder: "Product Manager, Atlas\n- Owned onboarding roadmap...\n- Partnered with design and engineering...",
+    required: true
+  },
+  {
+    id: "skills",
+    title: "Skills",
+    prompt: "List the skills or tools that support your target role.",
+    helper: "Keep this tight and relevant. Think hiring manager scanability.",
+    placeholder: "Product strategy\nExperimentation\nSQL\nStakeholder management",
+    required: false
+  },
+  {
+    id: "education",
+    title: "Education",
+    prompt: "Add education only if it helps this resume.",
+    helper: "School, degree, year. Keep it concise.",
+    placeholder: "University of California, Berkeley\nB.A. Economics",
+    required: false
+  }
+];
 
 const defaultPersistedState: PersistedState = {
   stage: "landing",
@@ -64,15 +120,16 @@ const defaultPersistedState: PersistedState = {
   targetRole: "",
   linkedinUrl: "",
   linkedinText: "",
-  resumeText: "",
-  rewriteStyle: "balanced"
+  rewriteStyle: "balanced",
+  activeSection: "summary",
+  sections: sectionBlueprints.map((item) => ({ ...item, content: "" }))
 };
 
 const featureCards = [
-  ["Build", "Answer guided prompts without getting lost in a big form."],
-  ["Refresh", "Import existing material and clean it up section by section."],
-  ["Tailor", "Rewrite bullets around impact, ownership, and clarity."],
-  ["Export", "Download DOCX or PDF when the draft feels ready."]
+  ["Build", "Answer guided prompts instead of wrestling with a large form."],
+  ["Refresh", "Import what you already have, then fix each section clearly."],
+  ["Tailor", "Rewrite bullets toward impact, ownership, and clarity."],
+  ["Export", "Leave with a cleaner PDF or DOCX when it feels ready."]
 ];
 
 const beforeAfter = [
@@ -93,16 +150,171 @@ const faqs = [
   },
   {
     q: "Can I edit generated resume content manually?",
-    a: "Yes. Everything stays editable, including bullets, summaries, and imported sections."
+    a: "Yes. Every section remains editable after import, draft generation, and AI polish."
   },
   {
     q: "What if imported content is messy?",
-    a: "You review it first, then fix or skip anything that is incomplete before it reaches the builder."
+    a: "You review it section by section, fix missing parts, and decide what stays before it becomes your draft."
   }
 ];
 
 function cn(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function buildDefaultSections(seed?: Partial<Record<SectionId, string>>) {
+  return sectionBlueprints.map((item) => ({
+    ...item,
+    content: seed?.[item.id]?.trim() || ""
+  }));
+}
+
+function normalizeText(value: string) {
+  return value.replace(/\r/g, "").trim();
+}
+
+function extractSectionBlock(text: string, headings: string[]) {
+  const normalized = normalizeText(text);
+  if (!normalized) {
+    return "";
+  }
+
+  for (const heading of headings) {
+    const pattern = new RegExp(
+      `(?:^|\\n)${escapeRegExp(heading)}\\s*\\n([\\s\\S]*?)(?=\\n(?:SUMMARY|PROFESSIONAL SUMMARY|PROFILE|ABOUT|EXPERIENCE|WORK EXPERIENCE|SKILLS|CORE SKILLS|EDUCATION)\\s*\\n|$)`,
+      "i"
+    );
+    const match = normalized.match(pattern);
+    if (match?.[1]?.trim()) {
+      return match[1].trim();
+    }
+  }
+
+  return "";
+}
+
+function extractHeaderBlock(text: string) {
+  const normalized = normalizeText(text);
+  if (!normalized) {
+    return "";
+  }
+  const lines = normalized.split("\n").map((line) => line.trim()).filter(Boolean);
+  const collected: string[] = [];
+
+  for (const line of lines) {
+    const upper = line.toUpperCase();
+    if (["SUMMARY", "PROFESSIONAL SUMMARY", "PROFILE", "ABOUT", "EXPERIENCE", "WORK EXPERIENCE", "SKILLS", "CORE SKILLS", "EDUCATION"].includes(upper)) {
+      break;
+    }
+    collected.push(line);
+    if (collected.length >= 3) {
+      break;
+    }
+  }
+
+  return collected.join("\n");
+}
+
+function deriveSections(profile: SessionProfile | null, linkedinText: string, resumeText: string) {
+  const normalizedLinkedIn = normalizeText(linkedinText);
+  const normalizedResume = normalizeText(resumeText);
+
+  const headerFromProfile = [profile?.name, profile?.email].filter(Boolean).join("\n");
+  const header = headerFromProfile || extractHeaderBlock(normalizedResume);
+  const summary =
+    extractSectionBlock(normalizedResume, ["SUMMARY", "PROFESSIONAL SUMMARY", "PROFILE", "ABOUT"]) ||
+    normalizedLinkedIn.split(/\n{2,}/)[0] ||
+    "";
+  const experience =
+    extractSectionBlock(normalizedResume, ["EXPERIENCE", "WORK EXPERIENCE"]) ||
+    normalizedLinkedIn ||
+    "";
+  const skills =
+    extractSectionBlock(normalizedResume, ["SKILLS", "CORE SKILLS"]) ||
+    "";
+  const education = extractSectionBlock(normalizedResume, ["EDUCATION"]);
+
+  return buildDefaultSections({
+    header,
+    summary,
+    experience,
+    skills,
+    education
+  });
+}
+
+function serializeSections(sections: ResumeSection[]) {
+  const sectionMap = Object.fromEntries(sections.map((section) => [section.id, normalizeText(section.content)])) as Record<SectionId, string>;
+  const blocks = [
+    sectionMap.header,
+    sectionMap.summary ? `SUMMARY\n${sectionMap.summary}` : "",
+    sectionMap.experience ? `EXPERIENCE\n${sectionMap.experience}` : "",
+    sectionMap.skills ? `SKILLS\n${sectionMap.skills}` : "",
+    sectionMap.education ? `EDUCATION\n${sectionMap.education}` : ""
+  ].filter(Boolean);
+  return blocks.join("\n\n").trim();
+}
+
+function getSectionStatus(section: ResumeSection) {
+  const value = normalizeText(section.content);
+  if (!value) {
+    return section.required ? "Missing" : "Optional";
+  }
+  if (value.length < 36) {
+    return "Needs detail";
+  }
+  return "Ready";
+}
+
+function countSectionStatuses(sections: ResumeSection[]) {
+  return sections.reduce(
+    (summary, section) => {
+      const status = getSectionStatus(section);
+      if (status === "Ready") {
+        summary.ready += 1;
+      } else if (status === "Needs detail") {
+        summary.needsDetail += 1;
+      } else if (status === "Missing") {
+        summary.missing += 1;
+      } else {
+        summary.optional += 1;
+      }
+      return summary;
+    },
+    { ready: 0, needsDetail: 0, missing: 0, optional: 0 }
+  );
+}
+
+function findNextSection(sections: ResumeSection[], activeSection: SectionId) {
+  const statuses = sections.map((section) => ({
+    id: section.id,
+    status: getSectionStatus(section)
+  }));
+  const preferred =
+    statuses.find((section) => section.status === "Missing") ||
+    statuses.find((section) => section.status === "Needs detail");
+
+  if (preferred && preferred.id !== activeSection) {
+    return preferred.id;
+  }
+
+  const currentIndex = sections.findIndex((section) => section.id === activeSection);
+  const fallback = sections[(currentIndex + 1) % sections.length];
+  return fallback?.id || activeSection;
+}
+
+function sectionToneTips(sectionId: SectionId) {
+  return {
+    header: "Keep this factual, scan-friendly, and compact.",
+    summary: "Aim for 2-3 lines. Explain direction and strengths without sounding inflated.",
+    experience: "Prefer action + outcome. Show scope, ownership, or results when possible.",
+    skills: "List only what helps the target role. Cut generic filler.",
+    education: "Only include details that still help your story."
+  }[sectionId];
 }
 
 function readPersistedState(): PersistedState {
@@ -111,7 +323,13 @@ function readPersistedState(): PersistedState {
   }
   try {
     const parsed = JSON.parse(window.sessionStorage.getItem(storageKey) || "{}");
-    return { ...defaultPersistedState, ...parsed };
+    return {
+      ...defaultPersistedState,
+      ...parsed,
+      sections: Array.isArray(parsed.sections)
+        ? buildDefaultSections(Object.fromEntries(parsed.sections.map((item: ResumeSection) => [item.id, item.content])))
+        : defaultPersistedState.sections
+    };
   } catch {
     return defaultPersistedState;
   }
@@ -165,11 +383,53 @@ function Panel({
   );
 }
 
-function Landing({
-  onStart
+function ResumePreview({
+  sections,
+  missingKeywords
 }: {
-  onStart: () => void;
+  sections: ResumeSection[];
+  missingKeywords: string[];
 }) {
+  const sectionMap = Object.fromEntries(sections.map((section) => [section.id, normalizeText(section.content)])) as Record<SectionId, string>;
+
+  return (
+    <div className="mt-4 rounded-[24px] border border-neutral-200 bg-neutral-50 p-6">
+      {sectionMap.header ? (
+        <div>
+          <div className="whitespace-pre-wrap break-words text-lg font-semibold leading-7 text-neutral-950">
+            {sectionMap.header}
+          </div>
+        </div>
+      ) : (
+        <p className="text-sm text-neutral-500">Your live preview will appear here as sections fill in.</p>
+      )}
+
+      {missingKeywords.length > 0 && (
+        <div className="mt-4 rounded-[18px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          Missing keywords: {missingKeywords.join(", ")}
+        </div>
+      )}
+
+      {([
+        ["summary", "Summary"],
+        ["experience", "Experience"],
+        ["skills", "Skills"],
+        ["education", "Education"]
+      ] as const).map(([id, label]) =>
+        sectionMap[id] ? (
+          <section key={id} className="mt-6">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-neutral-400">{label}</p>
+            <div className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-neutral-700">
+              {sectionMap[id]}
+            </div>
+          </section>
+        ) : null
+      )}
+    </div>
+  );
+}
+
+function Landing({ onStart }: { onStart: () => void }) {
   return (
     <div className="space-y-8">
       <section className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
@@ -299,7 +559,6 @@ function WorkflowHeader({
     ["builder", "Build"],
     ["export", "Export"]
   ];
-
   const currentIndex = Math.max(0, stages.findIndex(([key]) => key === stage));
 
   return (
@@ -422,37 +681,15 @@ function ImportPermissions({
 }
 
 function ImportReview({
-  profile,
-  linkedinText,
-  resumeText,
-  onLinkedinTextChange,
-  onResumeTextChange,
+  sections,
+  onSectionChange,
   onContinue
 }: {
-  profile: SessionProfile | null;
-  linkedinText: string;
-  resumeText: string;
-  onLinkedinTextChange: (value: string) => void;
-  onResumeTextChange: (value: string) => void;
+  sections: ResumeSection[];
+  onSectionChange: (id: SectionId, value: string) => void;
   onContinue: () => void;
 }) {
-  const sections = [
-    {
-      title: "Header",
-      status: profile?.name ? "Imported" : "Needs input",
-      content: [profile?.name, profile?.email].filter(Boolean).join(" · ") || "Add your name and contact details."
-    },
-    {
-      title: "LinkedIn text",
-      status: linkedinText ? "Ready" : "Missing",
-      content: linkedinText || "Paste About, Experience, or Skills."
-    },
-    {
-      title: "Resume text",
-      status: resumeText ? "Ready" : "Missing",
-      content: resumeText || "Paste your current resume or upload it in the builder."
-    }
-  ];
+  const sectionSummary = countSectionStatuses(sections);
 
   return (
     <div className="space-y-5">
@@ -462,40 +699,57 @@ function ImportReview({
           Confirm what came in.
         </h2>
         <p className="mt-4 text-sm leading-7 text-neutral-600">
-          Imported content is only a starting point. Edit anything before it reaches your final resume.
+          Imported content is only a starting point. Clean up each section now so the draft generator works with better material.
         </p>
+        <div className="mt-6 grid gap-3 sm:grid-cols-3">
+          <div className="rounded-[20px] border border-emerald-200 bg-emerald-50 px-4 py-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-700">Ready</p>
+            <p className="mt-2 text-2xl font-semibold text-emerald-900">{sectionSummary.ready}</p>
+          </div>
+          <div className="rounded-[20px] border border-amber-200 bg-amber-50 px-4 py-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-amber-700">Needs detail</p>
+            <p className="mt-2 text-2xl font-semibold text-amber-900">{sectionSummary.needsDetail}</p>
+          </div>
+          <div className="rounded-[20px] border border-neutral-200 bg-neutral-50 px-4 py-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-500">Missing</p>
+            <p className="mt-2 text-2xl font-semibold text-neutral-900">{sectionSummary.missing}</p>
+          </div>
+        </div>
       </Panel>
 
       <div className="grid gap-4">
-        {sections.map((section) => (
-          <Panel key={section.title} className="p-5">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-base font-semibold text-neutral-950">{section.title}</p>
-                <p className="mt-2 text-sm leading-6 text-neutral-600">{section.content}</p>
+        {sections.map((section) => {
+          const status = getSectionStatus(section);
+          return (
+            <Panel key={section.id} className="p-5">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-base font-semibold text-neutral-950">{section.title}</p>
+                  <p className="mt-1 text-sm leading-6 text-neutral-600">{section.prompt}</p>
+                </div>
+                <span className={cn(
+                  "rounded-full px-3 py-1 text-xs font-medium",
+                  status === "Ready"
+                    ? "bg-emerald-50 text-emerald-700"
+                    : status === "Needs detail"
+                      ? "bg-amber-50 text-amber-700"
+                      : "bg-neutral-100 text-neutral-700"
+                )}>
+                  {status}
+                </span>
               </div>
-              <span className="rounded-full bg-neutral-100 px-3 py-1 text-xs font-medium text-neutral-700">
-                {section.status}
-              </span>
-            </div>
-            {section.title === "LinkedIn text" && (
+
               <textarea
-                value={linkedinText}
-                onChange={(event) => onLinkedinTextChange(event.target.value)}
-                placeholder="Paste LinkedIn headline, about, experience, or skills"
-                className="mt-4 min-h-[120px] w-full rounded-[20px] border border-neutral-200 bg-white px-4 py-3 text-sm leading-6 text-neutral-900 outline-none"
-              />
-            )}
-            {section.title === "Resume text" && (
-              <textarea
-                value={resumeText}
-                onChange={(event) => onResumeTextChange(event.target.value)}
-                placeholder="Paste your current resume"
+                value={section.content}
+                onChange={(event) => onSectionChange(section.id, event.target.value)}
+                placeholder={section.placeholder}
                 className="mt-4 min-h-[140px] w-full rounded-[20px] border border-neutral-200 bg-white px-4 py-3 text-sm leading-6 text-neutral-900 outline-none"
               />
-            )}
-          </Panel>
-        ))}
+
+              <p className="mt-3 text-xs leading-5 text-neutral-500">{section.helper}</p>
+            </Panel>
+          );
+        })}
       </div>
 
       <div className="flex justify-end">
@@ -514,17 +768,20 @@ function Builder({
   targetRole,
   linkedinUrl,
   linkedinText,
-  resumeText,
   rewriteStyle,
+  sections,
+  activeSection,
   onTargetRoleChange,
   onLinkedinUrlChange,
   onLinkedinTextChange,
-  onResumeTextChange,
   onRewriteStyleChange,
   onResumeUpload,
   resumeFileName,
+  onSectionSelect,
+  onSectionChange,
   onAnalyze,
   onRewrite,
+  onApplyRewrite,
   analysis,
   rewrite,
   isAnalyzing,
@@ -535,17 +792,20 @@ function Builder({
   targetRole: string;
   linkedinUrl: string;
   linkedinText: string;
-  resumeText: string;
   rewriteStyle: RewriteStyle;
+  sections: ResumeSection[];
+  activeSection: SectionId;
   onTargetRoleChange: (value: string) => void;
   onLinkedinUrlChange: (value: string) => void;
   onLinkedinTextChange: (value: string) => void;
-  onResumeTextChange: (value: string) => void;
   onRewriteStyleChange: (value: RewriteStyle) => void;
   onResumeUpload: (file: File | null) => void;
   resumeFileName: string;
+  onSectionSelect: (id: SectionId) => void;
+  onSectionChange: (id: SectionId, value: string) => void;
   onAnalyze: () => void;
   onRewrite: () => void;
+  onApplyRewrite: () => void;
   analysis: AnalysisResult | null;
   rewrite: RewriteResult | null;
   isAnalyzing: boolean;
@@ -553,8 +813,23 @@ function Builder({
   canRewrite: boolean;
   onContinue: () => void;
 }) {
-  const previewText = rewrite?.rewrittenResume || analysis?.rewrittenResume || resumeText || "Your preview will appear here once you generate a draft.";
+  const selectedSection = sections.find((section) => section.id === activeSection) || sections[0];
+  const sectionSummary = countSectionStatuses(sections);
+  const nextSectionId = findNextSection(sections, activeSection);
+  const deferredPreviewSections = useDeferredValue(
+    rewrite?.rewrittenResume
+      ? deriveSections(null, "", rewrite.rewrittenResume)
+      : sections
+  );
   const missingKeywords = analysis?.extracted?.missingKeywords || [];
+  const rewrittenSections = rewrite?.rewrittenResume
+    ? deriveSections(null, "", rewrite.rewrittenResume)
+    : [];
+  const rewrittenSectionMap = Object.fromEntries(
+    rewrittenSections.map((section) => [section.id, normalizeText(section.content)])
+  ) as Partial<Record<SectionId, string>>;
+  const currentSectionText = normalizeText(selectedSection.content);
+  const rewrittenSectionText = rewrittenSectionMap[selectedSection.id] || "";
 
   return (
     <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
@@ -567,11 +842,18 @@ function Builder({
                 Make each section stronger.
               </h2>
               <p className="mt-2 text-sm leading-6 text-neutral-600">
-                Focus on impact, ownership, and clarity. Edit anything manually.
+                Edit sections directly, generate a draft, then polish wording only if it helps.
               </p>
             </div>
-            <div className="rounded-full border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
-              Fit score: {analysis ? 82 : 64}
+            <div className="grid min-w-[210px] gap-2 rounded-[20px] border border-neutral-200 bg-neutral-50 px-4 py-3 text-xs text-neutral-600">
+              <div className="flex items-center justify-between gap-3">
+                <span>Sections ready</span>
+                <span className="font-semibold text-neutral-900">{sectionSummary.ready}/{sections.length}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span>Need attention</span>
+                <span className="font-semibold text-neutral-900">{sectionSummary.needsDetail + sectionSummary.missing}</span>
+              </div>
             </div>
           </div>
         </Panel>
@@ -599,22 +881,12 @@ function Builder({
           </div>
 
           <label className="grid gap-2 text-sm font-medium text-neutral-900">
-            LinkedIn text
+            LinkedIn support text
             <textarea
               value={linkedinText}
               onChange={(event) => onLinkedinTextChange(event.target.value)}
               placeholder="Paste About, Experience, or Skills"
-              className="min-h-[140px] rounded-[18px] border border-neutral-200 bg-white px-4 py-3 text-sm leading-6 text-neutral-900 outline-none"
-            />
-          </label>
-
-          <label className="grid gap-2 text-sm font-medium text-neutral-900">
-            Resume text
-            <textarea
-              value={resumeText}
-              onChange={(event) => onResumeTextChange(event.target.value)}
-              placeholder="Paste your current resume"
-              className="min-h-[180px] rounded-[18px] border border-neutral-200 bg-white px-4 py-3 text-sm leading-6 text-neutral-900 outline-none"
+              className="min-h-[120px] rounded-[18px] border border-neutral-200 bg-white px-4 py-3 text-sm leading-6 text-neutral-900 outline-none"
             />
           </label>
 
@@ -652,10 +924,57 @@ function Builder({
             </div>
           </div>
 
+          <div className="grid gap-4 lg:grid-cols-[0.34fr_0.66fr]">
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-neutral-900">Resume sections</p>
+              {sections.map((section) => {
+                const status = getSectionStatus(section);
+                return (
+                  <button
+                    key={section.id}
+                    onClick={() => onSectionSelect(section.id)}
+                    className={cn(
+                      "w-full rounded-[18px] border px-4 py-3 text-left transition",
+                      activeSection === section.id
+                        ? "border-neutral-900 bg-neutral-950 text-white"
+                        : "border-neutral-200 bg-neutral-50 text-neutral-800 hover:bg-white"
+                    )}
+                  >
+                    <p className="text-sm font-medium">{section.title}</p>
+                    <p className={cn("mt-1 text-xs", activeSection === section.id ? "text-white/70" : "text-neutral-500")}>
+                      {status}
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="rounded-[24px] border border-neutral-200 bg-neutral-50 p-4">
+              <p className="text-sm font-semibold text-neutral-900">{selectedSection.title}</p>
+              <p className="mt-1 text-sm leading-6 text-neutral-600">{selectedSection.prompt}</p>
+              <textarea
+                value={selectedSection.content}
+                onChange={(event) => onSectionChange(selectedSection.id, event.target.value)}
+                placeholder={selectedSection.placeholder}
+                className="mt-4 min-h-[220px] w-full rounded-[20px] border border-neutral-200 bg-white px-4 py-3 text-sm leading-6 text-neutral-900 outline-none"
+              />
+              <div className="mt-3 grid gap-3 md:grid-cols-2">
+                <div className="rounded-[18px] border border-neutral-200 bg-white px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400">Section guidance</p>
+                  <p className="mt-2 text-sm leading-6 text-neutral-600">{sectionToneTips(selectedSection.id)}</p>
+                </div>
+                <div className="rounded-[18px] border border-neutral-200 bg-white px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400">Editing goal</p>
+                  <p className="mt-2 text-sm leading-6 text-neutral-600">{selectedSection.helper}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div className="flex flex-wrap gap-3">
             <button
               onClick={onAnalyze}
-              disabled={isAnalyzing || !(targetRole.trim() && (resumeText.trim() || resumeFileName))}
+              disabled={isAnalyzing || !(targetRole.trim() && (serializeSections(sections) || resumeFileName))}
               className="rounded-full bg-neutral-950 px-5 py-3 text-sm font-medium text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-300"
             >
               {isAnalyzing ? "Generating..." : "Generate draft"}
@@ -672,6 +991,12 @@ function Builder({
               className="rounded-full border border-neutral-200 bg-white px-5 py-3 text-sm font-medium text-neutral-800 transition hover:bg-neutral-50"
             >
               Export
+            </button>
+            <button
+              onClick={() => onSectionSelect(nextSectionId)}
+              className="rounded-full border border-neutral-200 bg-white px-5 py-3 text-sm font-medium text-neutral-800 transition hover:bg-neutral-50"
+            >
+              Next section
             </button>
           </div>
         </Panel>
@@ -690,27 +1015,72 @@ function Builder({
             </div>
           </Panel>
         )}
+
+        {rewrite && (
+          <Panel className="p-6">
+            <SectionEyebrow>AI polish</SectionEyebrow>
+            <p className="mt-4 text-sm leading-6 text-neutral-600">
+              Review the polished draft before applying it back into your editable sections.
+            </p>
+            <div className="mt-4 rounded-[20px] border border-neutral-200 bg-neutral-50 p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400">Summary</p>
+              <p className="mt-2 text-sm leading-6 text-neutral-700">{rewrite.summary}</p>
+              {rewrite.notes && rewrite.notes.length > 0 && (
+                <>
+                  <p className="mt-4 text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400">Notes</p>
+                  <ul className="mt-2 space-y-2 text-sm leading-6 text-neutral-600">
+                    {rewrite.notes.map((note) => (
+                      <li key={note}>{note}</li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </div>
+            {rewrittenSectionText && rewrittenSectionText !== currentSectionText && (
+              <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                <div className="rounded-[20px] border border-neutral-200 bg-white p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400">Before</p>
+                  <div className="mt-2 whitespace-pre-wrap text-sm leading-6 text-neutral-600">
+                    {currentSectionText || "Nothing written yet for this section."}
+                  </div>
+                </div>
+                <div className="rounded-[20px] border border-emerald-200 bg-emerald-50 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-700">After</p>
+                  <div className="mt-2 whitespace-pre-wrap text-sm leading-6 text-emerald-950">
+                    {rewrittenSectionText}
+                  </div>
+                </div>
+              </div>
+            )}
+            <div className="mt-4 flex flex-wrap gap-3">
+              <button
+                onClick={onApplyRewrite}
+                className="rounded-full bg-neutral-950 px-5 py-3 text-sm font-medium text-white transition hover:bg-neutral-800"
+              >
+                Apply AI polish to sections
+              </button>
+            </div>
+          </Panel>
+        )}
       </div>
 
       <Panel className="sticky top-8 h-fit p-6">
         <SectionEyebrow>Live preview</SectionEyebrow>
-        <div className="mt-4 rounded-[24px] border border-neutral-200 bg-neutral-50 p-6">
-          <p className="text-xl font-semibold text-neutral-950">{targetRole || "Resume draft"}</p>
-          <p className="mt-1 text-sm text-neutral-600">
-            {(analysis?.extracted?.sections || []).length
-              ? `${analysis?.extracted?.sections?.length} sections detected`
-              : "Generate a draft to see a structured preview"}
+        <p className="mt-3 text-sm text-neutral-500">
+          {rewrite?.rewrittenResume
+            ? "Previewing the AI-polished version. Apply it if you want these edits in the builder."
+            : "Preview updates as you edit sections."}
+        </p>
+        <ResumePreview sections={deferredPreviewSections} missingKeywords={missingKeywords} />
+        <div className="mt-5 rounded-[20px] border border-neutral-200 bg-white p-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400">What to do next</p>
+          <p className="mt-2 text-sm leading-6 text-neutral-700">
+            {sectionSummary.missing > 0
+              ? "Fill the missing required sections first so the generated draft has enough structure."
+              : sectionSummary.needsDetail > 0
+                ? "Tighten the sections marked as needing detail, then generate a new draft."
+                : "Generate a draft, review the suggestions, and use AI polish only if the wording needs help."}
           </p>
-
-          {missingKeywords.length > 0 && (
-            <div className="mt-4 rounded-[18px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-              Missing keywords: {missingKeywords.join(", ")}
-            </div>
-          )}
-
-          <pre className="mt-6 whitespace-pre-wrap break-words text-sm leading-6 text-neutral-700">
-            {previewText}
-          </pre>
         </div>
       </Panel>
     </div>
@@ -785,8 +1155,9 @@ export default function ResumeRefreshPrototype() {
   const [targetRole, setTargetRole] = useState(persisted.targetRole);
   const [linkedinUrl, setLinkedinUrl] = useState(persisted.linkedinUrl);
   const [linkedinText, setLinkedinText] = useState(persisted.linkedinText);
-  const [resumeText, setResumeText] = useState(persisted.resumeText);
   const [rewriteStyle, setRewriteStyle] = useState<RewriteStyle>(persisted.rewriteStyle);
+  const [activeSection, setActiveSection] = useState<SectionId>(persisted.activeSection);
+  const [sections, setSections] = useState<ResumeSection[]>(persisted.sections);
   const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [resumeFileName, setResumeFileName] = useState("");
   const [config, setConfig] = useState<AppConfig | null>(null);
@@ -795,10 +1166,6 @@ export default function ResumeRefreshPrototype() {
   const [rewrite, setRewrite] = useState<RewriteResult | null>(null);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
-  const deferredDraft = useMemo(
-    () => rewrite?.rewrittenResume || analysis?.rewrittenResume || resumeText,
-    [rewrite, analysis, resumeText]
-  );
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isRewriting, setIsRewriting] = useState(false);
 
@@ -811,11 +1178,12 @@ export default function ResumeRefreshPrototype() {
         targetRole,
         linkedinUrl,
         linkedinText,
-        resumeText,
-        rewriteStyle
+        rewriteStyle,
+        activeSection,
+        sections
       } satisfies PersistedState)
     );
-  }, [stage, sourceMethod, targetRole, linkedinUrl, linkedinText, resumeText, rewriteStyle]);
+  }, [stage, sourceMethod, targetRole, linkedinUrl, linkedinText, rewriteStyle, activeSection, sections]);
 
   useEffect(() => {
     const url = new URL(window.location.href);
@@ -843,25 +1211,44 @@ export default function ResumeRefreshPrototype() {
       .then(([nextConfig, session]) => {
         setConfig(nextConfig);
         setProfile(session.profile);
-        if (session.profile?.name && !resumeText.trim()) {
-          setResumeText([session.profile.name, session.profile.email].filter(Boolean).join("\n"));
-        }
       })
       .catch((requestError) => {
         setError(requestError.message || "Unable to load app state.");
       });
   }, []);
 
+  useEffect(() => {
+    if (sourceMethod !== "import") {
+      return;
+    }
+    const hasContent = sections.some((section) => normalizeText(section.content));
+    if (hasContent) {
+      return;
+    }
+    setSections(deriveSections(profile, linkedinText, ""));
+  }, [sourceMethod, profile, linkedinText, sections]);
+
+  function updateSection(id: SectionId, content: string) {
+    setRewrite(null);
+    setAnalysis(null);
+    setSections((current) =>
+      current.map((section) => (section.id === id ? { ...section, content } : section))
+    );
+  }
+
   async function runAnalyze() {
     setError("");
     setStatus("Generating draft...");
     setIsAnalyzing(true);
+    setRewrite(null);
+
     try {
+      const serializedResume = serializeSections(sections);
       const payload: Record<string, string> = {
         targetRole,
         linkedinUrl,
         linkedinText,
-        resumeText,
+        resumeText: serializedResume,
         style: rewriteStyle
       };
       if (resumeFile) {
@@ -874,11 +1261,12 @@ export default function ResumeRefreshPrototype() {
         body: JSON.stringify(payload)
       });
       setAnalysis(result);
-      if (!resumeText.trim() && result.extractedResumeText) {
-        setResumeText(result.extractedResumeText);
+      const draftedText = result.rewrittenResume || result.extractedResumeText || serializedResume;
+      if (draftedText) {
+        setSections(deriveSections(profile, linkedinText, draftedText));
       }
-      startTransition(() => setStage("builder"));
       setStatus("Draft ready.");
+      startTransition(() => setStage("builder"));
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Analyze failed");
     } finally {
@@ -890,12 +1278,14 @@ export default function ResumeRefreshPrototype() {
     setError("");
     setStatus("Polishing draft...");
     setIsRewriting(true);
+
     try {
+      const serializedResume = serializeSections(sections);
       const payload: Record<string, string> = {
         targetRole,
         linkedinUrl,
         linkedinText,
-        resumeText: analysis?.extractedResumeText || resumeText,
+        resumeText: serializedResume,
         style: rewriteStyle
       };
       if (resumeFile) {
@@ -916,16 +1306,26 @@ export default function ResumeRefreshPrototype() {
     }
   }
 
+  function applyRewriteToSections() {
+    if (!rewrite?.rewrittenResume) {
+      return;
+    }
+    setSections(deriveSections(profile, linkedinText, rewrite.rewrittenResume));
+    setRewrite(null);
+    setStatus("AI polish applied back into editable sections.");
+  }
+
   async function handleDownload(format: "pdf" | "docx") {
     setError("");
     setStatus(`Preparing ${format.toUpperCase()}...`);
     try {
+      const finalText = rewrite?.rewrittenResume || serializeSections(sections);
       const response = await fetch("/api/export", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           format,
-          text: deferredDraft,
+          text: finalText,
           fileName: targetRole || "resume-refresh"
         })
       });
@@ -961,11 +1361,14 @@ export default function ResumeRefreshPrototype() {
 
   function continueImport() {
     if (profile) {
+      setSections(deriveSections(profile, linkedinText, serializeSections(sections)));
       setStage("review");
       return;
     }
     window.location.href = "/api/auth/linkedin?return_to=/v2.html";
   }
+
+  const currentDraft = rewrite?.rewrittenResume || serializeSections(sections);
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(179,120,67,0.12),transparent_28%),linear-gradient(180deg,#fcfaf6_0%,#f4efe8_100%)] px-5 py-8 text-neutral-950 sm:px-8">
@@ -977,10 +1380,12 @@ export default function ResumeRefreshPrototype() {
             <WorkflowHeader stage={stage} onBackToLanding={() => setStage("landing")} />
 
             {(status || error) && (
-              <div className={cn(
-                "mb-5 rounded-[20px] border px-4 py-3 text-sm",
-                error ? "border-amber-200 bg-amber-50 text-amber-800" : "border-neutral-200 bg-white text-neutral-700"
-              )}>
+              <div
+                className={cn(
+                  "mb-5 rounded-[20px] border px-4 py-3 text-sm",
+                  error ? "border-amber-200 bg-amber-50 text-amber-800" : "border-neutral-200 bg-white text-neutral-700"
+                )}
+              >
                 {error || status}
               </div>
             )}
@@ -997,11 +1402,8 @@ export default function ResumeRefreshPrototype() {
 
             {stage === "review" && (
               <ImportReview
-                profile={profile}
-                linkedinText={linkedinText}
-                resumeText={resumeText}
-                onLinkedinTextChange={setLinkedinText}
-                onResumeTextChange={setResumeText}
+                sections={sections}
+                onSectionChange={updateSection}
                 onContinue={() => setStage("builder")}
               />
             )}
@@ -1011,25 +1413,40 @@ export default function ResumeRefreshPrototype() {
                 targetRole={targetRole}
                 linkedinUrl={linkedinUrl}
                 linkedinText={linkedinText}
-                resumeText={resumeText}
                 rewriteStyle={rewriteStyle}
-                onTargetRoleChange={setTargetRole}
-                onLinkedinUrlChange={setLinkedinUrl}
-                onLinkedinTextChange={setLinkedinText}
-                onResumeTextChange={setResumeText}
+                sections={sections}
+                activeSection={activeSection}
+                onTargetRoleChange={(value) => {
+                  setAnalysis(null);
+                  setRewrite(null);
+                  setTargetRole(value);
+                }}
+                onLinkedinUrlChange={(value) => {
+                  setAnalysis(null);
+                  setRewrite(null);
+                  setLinkedinUrl(value);
+                }}
+                onLinkedinTextChange={(value) => {
+                  setAnalysis(null);
+                  setRewrite(null);
+                  setLinkedinText(value);
+                }}
                 onRewriteStyleChange={setRewriteStyle}
                 onResumeUpload={(file) => {
                   setResumeFile(file);
                   setResumeFileName(file?.name || "");
                 }}
                 resumeFileName={resumeFileName}
+                onSectionSelect={setActiveSection}
+                onSectionChange={updateSection}
                 onAnalyze={runAnalyze}
                 onRewrite={runRewrite}
+                onApplyRewrite={applyRewriteToSections}
                 analysis={analysis}
                 rewrite={rewrite}
                 isAnalyzing={isAnalyzing}
                 isRewriting={isRewriting}
-                canRewrite={Boolean(config?.openAiRewriteEnabled && (analysis || resumeText.trim()))}
+                canRewrite={Boolean(config?.openAiRewriteEnabled && currentDraft.trim())}
                 onContinue={() => setStage("export")}
               />
             )}
@@ -1038,8 +1455,8 @@ export default function ResumeRefreshPrototype() {
               <ExportStep
                 onDownload={handleDownload}
                 onBack={() => setStage("builder")}
-                hasDraft={Boolean(deferredDraft.trim())}
-                resumeText={deferredDraft}
+                hasDraft={Boolean(currentDraft.trim())}
+                resumeText={currentDraft}
               />
             )}
           </>
