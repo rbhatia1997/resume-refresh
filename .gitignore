@@ -3,3 +3,5 @@
 npm-debug.log*
 .vercel
 node_modules
+test-results
+playwright-report

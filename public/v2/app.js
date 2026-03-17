@@ -21517,14 +21517,25 @@ var featureCards = [
 ];
 var beforeAfter = [
   {
-    before: "Led onboarding roadmap for new users.",
-    after: "Owned the onboarding roadmap, driving activation improvements through experiments and cross-functional delivery."
+    before: "Worked on onboarding improvements for new users.",
+    after: "Owned the onboarding experience, partnering with design and engineering to launch experiments that improved activation."
   },
   {
-    before: "Worked with design and engineering to improve signup.",
-    after: "Partnered with design and engineering to simplify signup flows and improve conversion across the first-session experience."
+    before: "Helped with reporting for sales and leadership.",
+    after: "Built weekly revenue and pipeline reporting for sales leadership, giving teams clearer visibility into forecast risk and next actions."
   }
 ];
+var sampleResumeSeed = {
+  targetRole: "Senior Product Manager",
+  linkedinText: "Product leader with experience in growth, experimentation, roadmap execution, SQL, and stakeholder management.",
+  sections: buildDefaultSections({
+    header: "Maya Patel\nSan Francisco, CA\nmaya@resumerefresh.app \xB7 linkedin.com/in/mayapatel",
+    summary: "Product leader focused on growth, onboarding, and monetization strategy across B2B SaaS products.",
+    experience: "Senior Product Manager, Northstar\n- Owned the onboarding roadmap across web and lifecycle channels, partnering with design and engineering to lift activation for new accounts.\n- Led pricing and packaging experiments with finance and sales, improving expansion readiness for mid-market customers.\n- Built KPI reviews for leadership, translating funnel performance into roadmap decisions and faster cross-functional execution.",
+    skills: "Product Strategy\nExperimentation\nSQL\nStakeholder Management\nLifecycle Growth",
+    education: "University of California, Berkeley\nB.A. Economics"
+  })
+};
 var faqs = [
   {
     q: "What does LinkedIn import actually use?",
@@ -21760,19 +21771,37 @@ function ResumePreview({
     ))) : null
   ));
 }
-function Landing({ onStart }) {
-  return /* @__PURE__ */ React.createElement("div", { className: "space-y-8" }, /* @__PURE__ */ React.createElement("section", { className: "grid gap-6 lg:grid-cols-[1.1fr_0.9fr]" }, /* @__PURE__ */ React.createElement(Panel, { className: "overflow-hidden p-8 sm:p-10" }, /* @__PURE__ */ React.createElement(SectionEyebrow, null, "Resume Refresh"), /* @__PURE__ */ React.createElement("h1", { className: "mt-4 max-w-[12ch] text-4xl font-semibold tracking-[-0.04em] text-neutral-950 sm:text-6xl" }, "Turn your experience into a stronger resume."), /* @__PURE__ */ React.createElement("p", { className: "mt-5 max-w-2xl text-base leading-7 text-neutral-600 sm:text-lg" }, "Import what you already have, fix what is weak, and leave with a cleaner, sharper resume."), /* @__PURE__ */ React.createElement("div", { className: "mt-8 flex flex-wrap gap-3" }, /* @__PURE__ */ React.createElement(
+function Landing({
+  onStart,
+  onViewSample,
+  onUseSample
+}) {
+  return /* @__PURE__ */ React.createElement("div", { className: "space-y-8" }, /* @__PURE__ */ React.createElement("section", { className: "grid gap-6 lg:grid-cols-[1.1fr_0.9fr]" }, /* @__PURE__ */ React.createElement(Panel, { className: "overflow-hidden p-6 sm:p-8 lg:p-10" }, /* @__PURE__ */ React.createElement(SectionEyebrow, null, "Resume Refresh"), /* @__PURE__ */ React.createElement("h1", { className: "mt-4 max-w-[12ch] text-[clamp(2.6rem,9vw,4.5rem)] font-semibold tracking-[-0.05em] text-neutral-950" }, "Turn your experience into a stronger resume."), /* @__PURE__ */ React.createElement("p", { className: "mt-5 max-w-2xl text-base leading-7 text-neutral-600 sm:text-lg" }, "Import what you already have, fix what is weak, and leave with a cleaner, sharper resume."), /* @__PURE__ */ React.createElement("div", { className: "mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap" }, /* @__PURE__ */ React.createElement(
     "button",
     {
       onClick: onStart,
-      className: "rounded-full bg-neutral-950 px-5 py-3 text-sm font-medium text-white transition hover:bg-neutral-800"
+      className: "w-full rounded-full bg-neutral-950 px-5 py-3 text-sm font-medium text-white transition hover:bg-neutral-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-950 sm:w-auto"
     },
     "Refresh my resume"
-  ), /* @__PURE__ */ React.createElement("button", { className: "rounded-full border border-neutral-200 bg-white px-5 py-3 text-sm font-medium text-neutral-800 transition hover:bg-neutral-50" }, "View sample"))), /* @__PURE__ */ React.createElement(Panel, { className: "p-6 sm:p-8" }, /* @__PURE__ */ React.createElement(SectionEyebrow, null, "Why it works"), /* @__PURE__ */ React.createElement("div", { className: "mt-5 space-y-4" }, featureCards.map(([title, copy]) => /* @__PURE__ */ React.createElement("div", { key: title, className: "rounded-2xl border border-neutral-200 bg-neutral-50 p-4" }, /* @__PURE__ */ React.createElement("p", { className: "text-sm font-semibold text-neutral-900" }, title), /* @__PURE__ */ React.createElement("p", { className: "mt-1 text-sm leading-6 text-neutral-600" }, copy)))))), /* @__PURE__ */ React.createElement("section", { className: "grid gap-6 lg:grid-cols-[0.95fr_1.05fr]" }, /* @__PURE__ */ React.createElement(Panel, { className: "p-6 sm:p-8" }, /* @__PURE__ */ React.createElement(SectionEyebrow, null, "Import trust"), /* @__PURE__ */ React.createElement("h2", { className: "mt-4 text-2xl font-semibold tracking-[-0.03em] text-neutral-950" }, "Import is a shortcut, not a black box."), /* @__PURE__ */ React.createElement("div", { className: "mt-5 space-y-3 text-sm leading-6 text-neutral-600" }, /* @__PURE__ */ React.createElement("p", null, "You always see what will be imported before it is used."), /* @__PURE__ */ React.createElement("p", null, "You review imported content before it becomes part of the resume draft."), /* @__PURE__ */ React.createElement("p", null, "You can edit, skip, or replace anything manually."))), /* @__PURE__ */ React.createElement(Panel, { className: "overflow-hidden p-0" }, /* @__PURE__ */ React.createElement("div", { className: "border-b border-neutral-200 px-6 py-5" }, /* @__PURE__ */ React.createElement(SectionEyebrow, null, "Example improvements"), /* @__PURE__ */ React.createElement("h3", { className: "mt-3 text-lg font-semibold text-neutral-950" }, "Better bullets, clearer outcomes")), /* @__PURE__ */ React.createElement("div", { className: "grid divide-y divide-neutral-200" }, beforeAfter.map((item) => /* @__PURE__ */ React.createElement("div", { key: item.before, className: "grid gap-4 p-6 sm:grid-cols-2" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.16em] text-neutral-400" }, "Before"), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-500" }, item.before)), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.16em] text-amber-700" }, "After"), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-900" }, item.after))))))), /* @__PURE__ */ React.createElement("section", { className: "grid gap-6 lg:grid-cols-3" }, ["A faster first draft", "Feels guided, not overwhelming", "Keeps you in control"].map((item) => /* @__PURE__ */ React.createElement(Panel, { key: item, className: "p-6" }, /* @__PURE__ */ React.createElement("p", { className: "text-lg font-medium text-neutral-900" }, item), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-600" }, "Placeholder for testimonial or proof point.")))), /* @__PURE__ */ React.createElement("section", { className: "grid gap-6 lg:grid-cols-[1fr_0.9fr]" }, /* @__PURE__ */ React.createElement(Panel, { className: "p-6 sm:p-8" }, /* @__PURE__ */ React.createElement(SectionEyebrow, null, "FAQ"), /* @__PURE__ */ React.createElement("div", { className: "mt-5 divide-y divide-neutral-200" }, faqs.map((item) => /* @__PURE__ */ React.createElement("div", { key: item.q, className: "py-4 first:pt-0 last:pb-0" }, /* @__PURE__ */ React.createElement("p", { className: "text-sm font-semibold text-neutral-900" }, item.q), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-600" }, item.a))))), /* @__PURE__ */ React.createElement(Panel, { className: "flex flex-col justify-between p-8" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement(SectionEyebrow, null, "Ready to start"), /* @__PURE__ */ React.createElement("h2", { className: "mt-4 text-2xl font-semibold tracking-[-0.03em] text-neutral-950" }, "Bring in what you have. Leave with something stronger.")), /* @__PURE__ */ React.createElement(
+  ), /* @__PURE__ */ React.createElement(
+    "button",
+    {
+      onClick: onViewSample,
+      className: "w-full rounded-full border border-neutral-200 bg-white px-5 py-3 text-sm font-medium text-neutral-800 transition hover:bg-neutral-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-950 sm:w-auto"
+    },
+    "View sample"
+  )), /* @__PURE__ */ React.createElement("div", { className: "mt-6 rounded-[22px] border border-emerald-200 bg-emerald-50/80 p-4" }, /* @__PURE__ */ React.createElement("p", { className: "text-sm font-semibold text-emerald-950" }, "What strong bullets look like"), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-emerald-900" }, "Lead with ownership, show how you executed, and close with what changed. Resume Refresh nudges every draft toward that shape."))), /* @__PURE__ */ React.createElement(Panel, { className: "p-6 sm:p-8" }, /* @__PURE__ */ React.createElement(SectionEyebrow, null, "Why it works"), /* @__PURE__ */ React.createElement("div", { className: "mt-5 space-y-4" }, featureCards.map(([title, copy]) => /* @__PURE__ */ React.createElement("div", { key: title, className: "rounded-2xl border border-neutral-200 bg-neutral-50 p-4" }, /* @__PURE__ */ React.createElement("p", { className: "text-sm font-semibold text-neutral-900" }, title), /* @__PURE__ */ React.createElement("p", { className: "mt-1 text-sm leading-6 text-neutral-600" }, copy)))))), /* @__PURE__ */ React.createElement("section", { id: "sample-preview", className: "grid scroll-mt-20 gap-6 lg:grid-cols-[0.95fr_1.05fr]" }, /* @__PURE__ */ React.createElement(Panel, { className: "p-6 sm:p-8" }, /* @__PURE__ */ React.createElement(SectionEyebrow, null, "Import trust"), /* @__PURE__ */ React.createElement("h2", { className: "mt-4 text-2xl font-semibold tracking-[-0.03em] text-neutral-950" }, "Import is a shortcut, not a black box."), /* @__PURE__ */ React.createElement("div", { className: "mt-5 space-y-3 text-sm leading-6 text-neutral-600" }, /* @__PURE__ */ React.createElement("p", null, "You always see what will be imported before it is used."), /* @__PURE__ */ React.createElement("p", null, "You review imported content before it becomes part of the resume draft."), /* @__PURE__ */ React.createElement("p", null, "You can edit, skip, or replace anything manually."))), /* @__PURE__ */ React.createElement(Panel, { className: "overflow-hidden p-0" }, /* @__PURE__ */ React.createElement("div", { className: "border-b border-neutral-200 px-6 py-5" }, /* @__PURE__ */ React.createElement(SectionEyebrow, null, "Example improvements"), /* @__PURE__ */ React.createElement("h3", { className: "mt-3 text-lg font-semibold text-neutral-950" }, "Better bullets, clearer outcomes"), /* @__PURE__ */ React.createElement("div", { className: "mt-4 flex flex-col gap-3 sm:flex-row" }, /* @__PURE__ */ React.createElement(
+    "button",
+    {
+      onClick: onUseSample,
+      className: "w-full rounded-full bg-neutral-950 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-neutral-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-950 sm:w-auto"
+    },
+    "Try this sample"
+  ), /* @__PURE__ */ React.createElement("p", { className: "text-sm leading-6 text-neutral-500" }, "Loads a polished sample into the builder so you can see the guided workflow immediately."))), /* @__PURE__ */ React.createElement("div", { className: "grid divide-y divide-neutral-200" }, beforeAfter.map((item) => /* @__PURE__ */ React.createElement("div", { key: item.before, className: "grid gap-4 p-6 sm:grid-cols-2" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.16em] text-neutral-400" }, "Before"), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-500" }, item.before)), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.16em] text-amber-700" }, "After"), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-900" }, item.after))))))), /* @__PURE__ */ React.createElement("section", { className: "grid gap-6 lg:grid-cols-3" }, ["A faster first draft", "Feels guided, not overwhelming", "Keeps you in control"].map((item) => /* @__PURE__ */ React.createElement(Panel, { key: item, className: "p-6" }, /* @__PURE__ */ React.createElement("p", { className: "text-lg font-medium text-neutral-900" }, item), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-600" }, "Resume Refresh keeps the rewrite editable, shows what changed, and never hides the source material from you.")))), /* @__PURE__ */ React.createElement("section", { className: "grid gap-6 lg:grid-cols-[1fr_0.9fr]" }, /* @__PURE__ */ React.createElement(Panel, { className: "p-6 sm:p-8" }, /* @__PURE__ */ React.createElement(SectionEyebrow, null, "FAQ"), /* @__PURE__ */ React.createElement("div", { className: "mt-5 divide-y divide-neutral-200" }, faqs.map((item) => /* @__PURE__ */ React.createElement("div", { key: item.q, className: "py-4 first:pt-0 last:pb-0" }, /* @__PURE__ */ React.createElement("p", { className: "text-sm font-semibold text-neutral-900" }, item.q), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-600" }, item.a))))), /* @__PURE__ */ React.createElement(Panel, { className: "flex flex-col justify-between p-8" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement(SectionEyebrow, null, "Ready to start"), /* @__PURE__ */ React.createElement("h2", { className: "mt-4 text-2xl font-semibold tracking-[-0.03em] text-neutral-950" }, "Bring in what you have. Leave with something stronger.")), /* @__PURE__ */ React.createElement(
     "button",
     {
       onClick: onStart,
-      className: "mt-8 rounded-full bg-neutral-950 px-5 py-3 text-sm font-medium text-white transition hover:bg-neutral-800"
+      className: "mt-8 w-full rounded-full bg-neutral-950 px-5 py-3 text-sm font-medium text-white transition hover:bg-neutral-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-950 sm:w-auto"
     },
     "Start Resume Refresh"
   ))));
@@ -21911,7 +21940,7 @@ function Builder({
   const currentSectionText = normalizeText(selectedSection.content);
   const rewrittenSectionText = rewrittenSectionMap[selectedSection.id] || "";
   const selectedSectionLineCount = currentSectionText ? currentSectionText.split("\n").filter(Boolean).length : 0;
-  return /* @__PURE__ */ React.createElement("div", { className: "grid gap-6 xl:grid-cols-[1.05fr_0.95fr]" }, /* @__PURE__ */ React.createElement("div", { className: "space-y-5" }, /* @__PURE__ */ React.createElement(Panel, { className: "p-6" }, /* @__PURE__ */ React.createElement(SectionEyebrow, null, "Builder"), /* @__PURE__ */ React.createElement("div", { className: "mt-4 flex flex-wrap items-center justify-between gap-4" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("h2", { className: "text-3xl font-semibold tracking-[-0.04em] text-neutral-950" }, "Make each section stronger."), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-600" }, "Edit sections directly, generate a draft, then polish wording only if it helps.")), /* @__PURE__ */ React.createElement("div", { className: "grid min-w-[210px] gap-2 rounded-[20px] border border-neutral-200 bg-neutral-50 px-4 py-3 text-xs text-neutral-600" }, /* @__PURE__ */ React.createElement("div", { className: "flex items-center justify-between gap-3" }, /* @__PURE__ */ React.createElement("span", null, "Sections ready"), /* @__PURE__ */ React.createElement("span", { className: "font-semibold text-neutral-900" }, sectionSummary.ready, "/", sections.length)), /* @__PURE__ */ React.createElement("div", { className: "flex items-center justify-between gap-3" }, /* @__PURE__ */ React.createElement("span", null, "Need attention"), /* @__PURE__ */ React.createElement("span", { className: "font-semibold text-neutral-900" }, sectionSummary.needsDetail + sectionSummary.missing))))), /* @__PURE__ */ React.createElement(Panel, { className: "grid gap-5 p-6" }, /* @__PURE__ */ React.createElement("div", { className: "grid gap-4 md:grid-cols-2" }, /* @__PURE__ */ React.createElement("label", { className: "grid gap-2 text-sm font-medium text-neutral-900" }, "Target role", /* @__PURE__ */ React.createElement(
+  return /* @__PURE__ */ React.createElement("div", { className: "grid gap-6 xl:grid-cols-[1.05fr_0.95fr]" }, /* @__PURE__ */ React.createElement("div", { className: "space-y-5" }, /* @__PURE__ */ React.createElement(Panel, { className: "p-6" }, /* @__PURE__ */ React.createElement(SectionEyebrow, null, "Builder"), /* @__PURE__ */ React.createElement("div", { className: "mt-4 flex flex-wrap items-center justify-between gap-4" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("h2", { className: "text-3xl font-semibold tracking-[-0.04em] text-neutral-950" }, "Make each section stronger."), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-600" }, "Edit sections directly, generate a draft, then polish wording only if it helps. Strong bullets should show what you owned, how you did it, and what changed.")), /* @__PURE__ */ React.createElement("div", { className: "grid min-w-[210px] gap-2 rounded-[20px] border border-neutral-200 bg-neutral-50 px-4 py-3 text-xs text-neutral-600" }, /* @__PURE__ */ React.createElement("div", { className: "flex items-center justify-between gap-3" }, /* @__PURE__ */ React.createElement("span", null, "Sections ready"), /* @__PURE__ */ React.createElement("span", { className: "font-semibold text-neutral-900" }, sectionSummary.ready, "/", sections.length)), /* @__PURE__ */ React.createElement("div", { className: "flex items-center justify-between gap-3" }, /* @__PURE__ */ React.createElement("span", null, "Need attention"), /* @__PURE__ */ React.createElement("span", { className: "font-semibold text-neutral-900" }, sectionSummary.needsDetail + sectionSummary.missing))))), /* @__PURE__ */ React.createElement(Panel, { className: "grid gap-5 p-6" }, /* @__PURE__ */ React.createElement("div", { className: "grid gap-4 md:grid-cols-2" }, /* @__PURE__ */ React.createElement("label", { className: "grid gap-2 text-sm font-medium text-neutral-900" }, "Target role", /* @__PURE__ */ React.createElement(
     "input",
     {
       value: targetRole,
@@ -21984,12 +22013,12 @@ function Builder({
       placeholder: selectedSection.placeholder,
       className: "mt-4 min-h-[220px] w-full rounded-[20px] border border-neutral-200 bg-white px-4 py-3 text-sm leading-6 text-neutral-900 outline-none"
     }
-  ), /* @__PURE__ */ React.createElement("p", { className: "mt-3 text-xs text-neutral-500" }, "Changes are saved in this browser session while you work."), /* @__PURE__ */ React.createElement("div", { className: "mt-3 grid gap-3 md:grid-cols-2" }, /* @__PURE__ */ React.createElement("div", { className: "rounded-[18px] border border-neutral-200 bg-white px-4 py-3" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400" }, "Section guidance"), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-600" }, sectionToneTips(selectedSection.id))), /* @__PURE__ */ React.createElement("div", { className: "rounded-[18px] border border-neutral-200 bg-white px-4 py-3" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400" }, "Editing goal"), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-600" }, selectedSection.helper))))), /* @__PURE__ */ React.createElement("div", { className: "flex flex-wrap gap-3" }, /* @__PURE__ */ React.createElement(
+  ), /* @__PURE__ */ React.createElement("p", { className: "mt-3 text-xs text-neutral-500" }, "Changes are saved in this browser session while you work."), /* @__PURE__ */ React.createElement("div", { className: "mt-3 grid gap-3 md:grid-cols-2" }, /* @__PURE__ */ React.createElement("div", { className: "rounded-[18px] border border-neutral-200 bg-white px-4 py-3" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400" }, "Section guidance"), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-600" }, sectionToneTips(selectedSection.id))), /* @__PURE__ */ React.createElement("div", { className: "rounded-[18px] border border-neutral-200 bg-white px-4 py-3" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400" }, "Editing goal"), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-600" }, selectedSection.helper), selectedSection.id === "experience" && /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-600" }, "Try: strong verb + initiative or scope + result. Example: \u201COwned onboarding experiments across web and lifecycle email, lifting activation for new accounts.\u201D"))))), /* @__PURE__ */ React.createElement("div", { className: "flex flex-col gap-3 sm:flex-row sm:flex-wrap" }, /* @__PURE__ */ React.createElement(
     "button",
     {
       onClick: onAnalyze,
       disabled: isAnalyzing || !(targetRole.trim() && (serializeSections(sections) || resumeFileName)),
-      className: "rounded-full bg-neutral-950 px-5 py-3 text-sm font-medium text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-300"
+      className: "w-full rounded-full bg-neutral-950 px-5 py-3 text-sm font-medium text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-300 sm:w-auto"
     },
     isAnalyzing ? "Generating..." : "Generate draft"
   ), /* @__PURE__ */ React.createElement(
@@ -21997,21 +22026,21 @@ function Builder({
     {
       onClick: onRewrite,
       disabled: !canRewrite || isRewriting,
-      className: "rounded-full border border-neutral-200 bg-white px-5 py-3 text-sm font-medium text-neutral-800 transition hover:bg-neutral-50 disabled:cursor-not-allowed disabled:text-neutral-400"
+      className: "w-full rounded-full border border-neutral-200 bg-white px-5 py-3 text-sm font-medium text-neutral-800 transition hover:bg-neutral-50 disabled:cursor-not-allowed disabled:text-neutral-400 sm:w-auto"
     },
     isRewriting ? "Polishing..." : "Polish with AI"
   ), /* @__PURE__ */ React.createElement(
     "button",
     {
       onClick: onContinue,
-      className: "rounded-full border border-neutral-200 bg-white px-5 py-3 text-sm font-medium text-neutral-800 transition hover:bg-neutral-50"
+      className: "w-full rounded-full border border-neutral-200 bg-white px-5 py-3 text-sm font-medium text-neutral-800 transition hover:bg-neutral-50 sm:w-auto"
     },
     "Export"
   ), /* @__PURE__ */ React.createElement(
     "button",
     {
       onClick: () => onSectionSelect(nextSectionId),
-      className: "rounded-full border border-neutral-200 bg-white px-5 py-3 text-sm font-medium text-neutral-800 transition hover:bg-neutral-50"
+      className: "w-full rounded-full border border-neutral-200 bg-white px-5 py-3 text-sm font-medium text-neutral-800 transition hover:bg-neutral-50 sm:w-auto"
     },
     "Next section"
   ))), analysis && /* @__PURE__ */ React.createElement(Panel, { className: "p-6" }, /* @__PURE__ */ React.createElement(SectionEyebrow, null, "Top fixes"), /* @__PURE__ */ React.createElement("div", { className: "mt-4 space-y-4" }, (analysis.suggestions || []).map((item) => /* @__PURE__ */ React.createElement("div", { key: item.title, className: "rounded-[20px] border border-neutral-200 bg-neutral-50 p-4" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400" }, item.priority), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm font-semibold text-neutral-900" }, item.title), /* @__PURE__ */ React.createElement("p", { className: "mt-1 text-sm leading-6 text-neutral-600" }, item.detail))))), rewrite && /* @__PURE__ */ React.createElement(Panel, { className: "p-6" }, /* @__PURE__ */ React.createElement(SectionEyebrow, null, "AI polish"), /* @__PURE__ */ React.createElement("p", { className: "mt-4 text-sm leading-6 text-neutral-600" }, "Review the polished draft before applying it back into your editable sections."), /* @__PURE__ */ React.createElement("div", { className: "mt-4 rounded-[20px] border border-neutral-200 bg-neutral-50 p-4" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400" }, "Summary"), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-700" }, rewrite.summary), rewrite.notes && rewrite.notes.length > 0 && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("p", { className: "mt-4 text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400" }, "Notes"), /* @__PURE__ */ React.createElement("ul", { className: "mt-2 space-y-2 text-sm leading-6 text-neutral-600" }, rewrite.notes.map((note) => /* @__PURE__ */ React.createElement("li", { key: note }, note))))), rewrittenSectionText && rewrittenSectionText !== currentSectionText && /* @__PURE__ */ React.createElement("div", { className: "mt-4 grid gap-4 lg:grid-cols-2" }, /* @__PURE__ */ React.createElement("div", { className: "rounded-[20px] border border-neutral-200 bg-white p-4" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400" }, "Before"), /* @__PURE__ */ React.createElement("div", { className: "mt-2 whitespace-pre-wrap text-sm leading-6 text-neutral-600" }, currentSectionText || "Nothing written yet for this section.")), /* @__PURE__ */ React.createElement("div", { className: "rounded-[20px] border border-emerald-200 bg-emerald-50 p-4" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-emerald-700" }, "After"), /* @__PURE__ */ React.createElement("div", { className: "mt-2 whitespace-pre-wrap text-sm leading-6 text-emerald-950" }, rewrittenSectionText))), /* @__PURE__ */ React.createElement("div", { className: "mt-4 flex flex-wrap gap-3" }, /* @__PURE__ */ React.createElement(
@@ -22021,7 +22050,7 @@ function Builder({
       className: "rounded-full bg-neutral-950 px-5 py-3 text-sm font-medium text-white transition hover:bg-neutral-800"
     },
     "Apply AI polish to sections"
-  )))), /* @__PURE__ */ React.createElement(Panel, { className: "sticky top-8 h-fit p-6" }, /* @__PURE__ */ React.createElement(SectionEyebrow, null, "Live preview"), /* @__PURE__ */ React.createElement("p", { className: "mt-3 text-sm text-neutral-500" }, rewrite?.rewrittenResume ? "Previewing the AI-polished version. Apply it if you want these edits in the builder." : "Preview updates as you edit sections."), /* @__PURE__ */ React.createElement(ResumePreview, { sections: deferredPreviewSections, missingKeywords }), /* @__PURE__ */ React.createElement("div", { className: "mt-5 rounded-[20px] border border-neutral-200 bg-white p-4" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400" }, "What to do next"), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-700" }, sectionSummary.missing > 0 ? "Fill the missing required sections first so the generated draft has enough structure." : sectionSummary.needsDetail > 0 ? "Tighten the sections marked as needing detail, then generate a new draft." : "Generate a draft, review the suggestions, and use AI polish only if the wording needs help."))));
+  )))), /* @__PURE__ */ React.createElement(Panel, { className: "h-fit p-6 xl:sticky xl:top-8" }, /* @__PURE__ */ React.createElement(SectionEyebrow, null, "Live preview"), /* @__PURE__ */ React.createElement("p", { className: "mt-3 text-sm text-neutral-500" }, rewrite?.rewrittenResume ? "Previewing the AI-polished version. Apply it if you want these edits in the builder." : "Preview updates as you edit sections."), /* @__PURE__ */ React.createElement(ResumePreview, { sections: deferredPreviewSections, missingKeywords }), /* @__PURE__ */ React.createElement("div", { className: "mt-5 rounded-[20px] border border-neutral-200 bg-white p-4" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400" }, "What to do next"), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-700" }, sectionSummary.missing > 0 ? "Fill the missing required sections first so the generated draft has enough structure." : sectionSummary.needsDetail > 0 ? "Tighten the sections marked as needing detail, then generate a new draft." : "Generate a draft, review the suggestions, and use AI polish only if the wording needs help."))));
 }
 function ExportStep({
   onDownload,
@@ -22257,6 +22286,22 @@ function ResumeRefreshPrototype() {
     setSourceMethod("manual");
     setStage("builder");
   }
+  function viewSample() {
+    document.getElementById("sample-preview")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+  function loadSampleResume() {
+    setSourceMethod("manual");
+    setTargetRole(sampleResumeSeed.targetRole);
+    setLinkedinText(sampleResumeSeed.linkedinText);
+    setLinkedinUrl("");
+    setRewriteStyle("balanced");
+    setSections(sampleResumeSeed.sections);
+    setActiveSection("experience");
+    setAnalysis(null);
+    setRewrite(null);
+    setStage("builder");
+    setStatus("Sample resume loaded. You can edit it or generate a draft immediately.");
+  }
   function continueImport() {
     if (profile) {
       setSections(deriveSections(profile, linkedinText, serializeSections(sections)));
@@ -22266,7 +22311,14 @@ function ResumeRefreshPrototype() {
     window.location.href = "/api/auth/linkedin?return_to=/v2.html";
   }
   const currentDraft = normalizedRewriteDraft || serializeSections(sections);
-  return /* @__PURE__ */ React.createElement("div", { className: "min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(179,120,67,0.12),transparent_28%),linear-gradient(180deg,#fcfaf6_0%,#f4efe8_100%)] px-5 py-8 text-neutral-950 sm:px-8" }, /* @__PURE__ */ React.createElement("div", { className: "mx-auto max-w-7xl" }, stage === "landing" ? /* @__PURE__ */ React.createElement(Landing, { onStart: () => setStage("source") }) : /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(WorkflowHeader, { stage, onBackToLanding: () => setStage("landing") }), (status || error) && /* @__PURE__ */ React.createElement(
+  return /* @__PURE__ */ React.createElement("div", { className: "min-h-screen overflow-x-hidden bg-[radial-gradient(circle_at_top_left,rgba(179,120,67,0.12),transparent_28%),linear-gradient(180deg,#fcfaf6_0%,#f4efe8_100%)] px-4 py-6 text-neutral-950 sm:px-6 sm:py-8 lg:px-8" }, /* @__PURE__ */ React.createElement("div", { className: "mx-auto max-w-7xl" }, stage === "landing" ? /* @__PURE__ */ React.createElement(
+    Landing,
+    {
+      onStart: () => setStage("source"),
+      onViewSample: viewSample,
+      onUseSample: loadSampleResume
+    }
+  ) : /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(WorkflowHeader, { stage, onBackToLanding: () => setStage("landing") }), (status || error) && /* @__PURE__ */ React.createElement(
     "div",
     {
       className: cn(

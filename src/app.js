@@ -475,7 +475,7 @@ async function rewriteWithOpenAI(body) {
         content: [
           {
             type: "input_text",
-            text: "You are an expert resume writer. Rewrite resumes to be crisp, ATS-friendly, quantified where possible, and tailored to the target role. Never invent facts. If information is missing, preserve the claim but avoid fabricating metrics."
+            text: "You are an expert resume writer. Rewrite resumes to be crisp, ATS-friendly, and tailored to the target role. Every experience bullet should read like a strong modern resume bullet: start with a concrete action verb, show ownership or scope, and end with a clear result when the source supports it. Avoid vague openers like 'helped with', 'worked on', 'responsible for', or 'assisted with'. Never invent facts or fabricate metrics. If impact is missing, keep the bullet credible and note the gap separately."
           }
         ]
       },
@@ -484,7 +484,7 @@ async function rewriteWithOpenAI(body) {
         content: [
           {
             type: "input_text",
-            text: `Target role: ${targetRole || "Not provided"}\nPreferred style: ${style}\n\nSource material:\n${sourceText}\n\nReturn JSON with keys: summary, rewritten_resume, bullet_improvements, notes. summary should be 1 short sentence. rewritten_resume should be plain text. bullet_improvements should be an array of short rewrite tips. notes should be an array of caveats where facts or metrics are missing.`
+            text: `Target role: ${targetRole || "Not provided"}\nPreferred style: ${style}\n\nSource material:\n${sourceText}\n\nReturn JSON with keys: summary, rewritten_resume, bullet_improvements, notes.\n- summary: 1 short sentence.\n- rewritten_resume: plain text resume with sections in this order when present: SUMMARY, EXPERIENCE, SKILLS, EDUCATION.\n- EXPERIENCE bullets should be concise, recruiter-friendly, and reflect STAR thinking without labels: what was owned, how it was done, and what changed.\n- bullet_improvements: an array of short before/after style guidance focused on ownership, action, and impact.\n- notes: caveats where facts, metrics, dates, or scope are missing.\nDo not use fake metrics. Do not use fluff or generic buzzwords.`
           }
         ]
       }

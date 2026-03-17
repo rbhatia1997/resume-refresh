@@ -61,6 +61,8 @@ test("manual v2 flow runs end-to-end through draft, AI rewrite, and export", asy
   await page.goto("/v2.html");
 
   await expect(page.getByText("Turn your experience into a stronger resume.")).toBeVisible();
+  await page.getByRole("button", { name: "View sample" }).click();
+  await expect(page.getByRole("button", { name: "Try this sample" })).toBeVisible();
   await page.getByRole("button", { name: "Refresh my resume" }).click();
   await page.getByRole("button", { name: "Build it step by step" }).click();
 
@@ -128,4 +130,16 @@ test("import path presents the permissions screen and LinkedIn redirect remains 
   const [encodedState] = stateToken.split(".");
   const decodedState = JSON.parse(Buffer.from(encodedState, "base64url").toString("utf8"));
   expect(decodedState.returnTo).toBe("/v2.html");
+});
+
+test("mobile landing and builder do not introduce obvious horizontal overflow", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/v2.html");
+  await expect(page.getByRole("button", { name: "Refresh my resume" })).toBeVisible();
+  await page.getByRole("button", { name: "Refresh my resume" }).click();
+  await page.getByRole("button", { name: "Build it step by step" }).click();
+  await expect(page.getByRole("heading", { name: "Make each section stronger." })).toBeVisible();
+
+  const hasOverflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1);
+  expect(hasOverflow).toBe(false);
 });
