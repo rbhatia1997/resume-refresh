@@ -28,7 +28,6 @@
       <section class="chat-shell">
         <div id="chat-feed" class="chat-feed" aria-live="polite"></div>
         <form id="chat-form" class="chat-composer">
-          <div id="chat-shortcuts" class="chat-shortcuts" aria-label="Chat shortcuts"></div>
           <label class="chat-input-wrap">
             <span id="chat-prompt-label" class="sr-only">Chat input</span>
             <textarea
@@ -94,54 +93,38 @@
           <div class="panel-head">
             <div>
               <p class="section-kicker">Step 2</p>
-              <h2>Add source material</h2>
+              <h2>Answer one thing at a time</h2>
             </div>
             <button class="button-secondary" data-next-step="3" type="button" id="skip-to-review">Skip to review</button>
           </div>
 
           <form id="analyze-form">
-            <div class="form-grid">
-              <label>
-                Target role
-                <input id="target-role" name="targetRole" placeholder="Senior Product Manager" />
-              </label>
+            <section class="wizard-card">
+              <p class="section-kicker">Current prompt</p>
+              <h3 id="wizard-question-title">Target role</h3>
+              <p id="wizard-question-copy" class="panel-copy">Tell me the role you want this resume tailored for.</p>
+              <div id="wizard-answer" class="wizard-answer">Nothing saved yet.</div>
+            </section>
 
-              <label>
-                LinkedIn URL
-                <input id="linkedin-url" name="linkedinUrl" placeholder="Paste public profile URL if you want it included" />
-              </label>
-            </div>
-
-            <p class="inline-note">Best result: add either resume text or a resume file, then add LinkedIn text if you want stronger keyword matching.</p>
-
-            <div class="form-grid two-up">
-              <label>
-                LinkedIn text
-                <textarea
-                  id="linkedin-text"
-                  name="linkedinText"
-                  rows="10"
-                  placeholder="Paste About, Experience, Skills."
-                ></textarea>
-              </label>
-
-              <label>
-                Resume text
-                <textarea
-                  id="resume-text"
-                  name="resumeText"
-                  rows="10"
-                  placeholder="Paste your current resume."
-                ></textarea>
-              </label>
-            </div>
-
-            <div class="upload-row">
+            <section id="resume-upload-card" class="wizard-card hidden">
+              <p class="section-kicker">Resume file</p>
               <label class="file-picker">
-                <span>Resume file</span>
+                <span>Upload PDF, TXT, or MD</span>
                 <input id="resume-file" name="resumeFile" type="file" accept=".pdf,.txt,.md" />
               </label>
+              <p id="resume-file-state" class="panel-copy">No file selected.</p>
+            </section>
 
+            <section class="wizard-card wizard-summary">
+              <p class="section-kicker">Collected</p>
+              <div id="collected-summary" class="collected-summary"></div>
+            </section>
+
+            <div class="wizard-hidden-fields">
+              <input id="target-role" name="targetRole" />
+              <input id="linkedin-url" name="linkedinUrl" />
+              <textarea id="linkedin-text" name="linkedinText" rows="10"></textarea>
+              <textarea id="resume-text" name="resumeText" rows="10"></textarea>
               <label>
                 AI rewrite tone
                 <select id="rewrite-style" name="rewriteStyle">

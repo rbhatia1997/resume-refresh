@@ -170,17 +170,6 @@ h1 {
   border-top: 1px solid var(--line);
 }
 
-.chat-shortcuts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.chat-shortcut {
-  min-height: 40px;
-  padding: 10px 14px;
-}
-
 .chat-input-wrap {
   display: block;
 }
@@ -297,6 +286,46 @@ form {
   margin: -2px 0 0;
   color: var(--muted);
   line-height: 1.5;
+}
+
+.wizard-card {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.56);
+}
+
+.wizard-answer {
+  min-height: 72px;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.82);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.wizard-summary,
+.collected-summary {
+  display: grid;
+  gap: 12px;
+}
+
+.summary-row {
+  display: grid;
+  gap: 4px;
+}
+
+.summary-row + .summary-row {
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.wizard-hidden-fields {
+  display: none;
 }
 
 label {
