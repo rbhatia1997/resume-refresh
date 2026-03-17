@@ -41,3 +41,31 @@ Product Manager, Atlas
   assert.doesNotMatch(result.rewrittenResume, /Led Led/);
   assert.doesNotMatch(result.rewrittenResume, /Partnered Partnered/);
 });
+
+test("analyzeResume handles messy alternate headings without leaking them into the header", () => {
+  const result = analyzeResume({
+    linkedinText: "Product leader with experimentation, SQL, and stakeholder management experience.",
+    resumeText: `
+Jane Doe
+Remote
+
+EXPERIENCE HIGHLIGHTS
+Product Manager, Atlas
+- Built onboarding flows
+- Improved activation
+
+CORE SKILLS
+Product Strategy
+Analytics
+SQL
+
+PROFILE
+Product leader with growth experience.
+`,
+    targetRole: "Senior Product Manager"
+  });
+
+  assert.match(result.rewrittenResume, /SUMMARY/);
+  assert.match(result.rewrittenResume, /EXPERIENCE/);
+  assert.doesNotMatch(result.rewrittenResume, /Remote\nEXPERIENCE HIGHLIGHTS/);
+});

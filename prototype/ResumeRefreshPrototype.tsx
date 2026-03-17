@@ -1,3 +1,4 @@
+import * as React from "react";
 import {
   startTransition,
   useDeferredValue,
@@ -431,7 +432,7 @@ function ResumePreview({
   const headerLines = sectionMap.header.split("\n").filter(Boolean);
 
   return (
-    <div className="mt-4 rounded-[24px] border border-neutral-200 bg-neutral-50 p-6">
+    <div data-testid="resume-preview" className="mt-4 rounded-[24px] border border-neutral-200 bg-neutral-50 p-6">
       {sectionMap.header ? (
         <div>
           <div className="whitespace-pre-wrap break-words text-xl font-semibold leading-8 text-neutral-950">
@@ -792,6 +793,7 @@ function ImportReview({
               </div>
 
               <textarea
+                data-testid={`review-${section.id}`}
                 value={section.content}
                 onChange={(event) => onSectionChange(section.id, event.target.value)}
                 placeholder={section.placeholder}
@@ -936,6 +938,7 @@ function Builder({
           <label className="grid gap-2 text-sm font-medium text-neutral-900">
             LinkedIn support text
             <textarea
+              data-testid="linkedin-support-text"
               value={linkedinText}
               onChange={(event) => onLinkedinTextChange(event.target.value)}
               placeholder="Paste About, Experience, or Skills"
@@ -986,6 +989,7 @@ function Builder({
                   <button
                     key={section.id}
                     onClick={() => onSectionSelect(section.id)}
+                    data-testid={`section-tab-${section.id}`}
                     className={cn(
                       "w-full rounded-[18px] border px-4 py-3 text-left transition",
                       activeSection === section.id
@@ -1013,6 +1017,7 @@ function Builder({
                 </div>
               </div>
               <textarea
+                data-testid="section-editor"
                 value={selectedSection.content}
                 onChange={(event) => onSectionChange(selectedSection.id, event.target.value)}
                 placeholder={selectedSection.placeholder}
