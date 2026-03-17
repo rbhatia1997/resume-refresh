@@ -16,6 +16,11 @@ const downloadDraftPdfEl = document.querySelector("#download-draft-pdf");
 const downloadRewriteDocxEl = document.querySelector("#download-rewrite-docx");
 const downloadRewritePdfEl = document.querySelector("#download-rewrite-pdf");
 const chatFeedEl = document.querySelector("#chat-feed");
+const chatFormEl = document.querySelector("#chat-form");
+const chatInputEl = document.querySelector("#chat-input");
+const chatPromptLabelEl = document.querySelector("#chat-prompt-label");
+const chatShortcutsEl = document.querySelector("#chat-shortcuts");
+const chatSkipEl = document.querySelector("#chat-skip");
 const guideTitleEl = document.querySelector("#guide-title");
 const guideCopyEl = document.querySelector("#guide-copy");
 const checklistEl = document.querySelector("#source-checklist");
@@ -41,6 +46,7 @@ let appConfig = {
 let sessionProfile = null;
 let analysisResult = null;
 let currentStep = 1;
+let activeChatField = "targetRole";
 
 function readLinkedInStatusFromUrl() {
   const url = new URL(window.location.href);
@@ -96,8 +102,58 @@ function seedChat() {
   chatFeedEl.replaceChildren();
   addChatMessage({
     title: "Start here",
-    body: "Connect LinkedIn if you want me to prefill your name and email. Then add resume text or a PDF."
+    body: "Connect LinkedIn if you want me to prefill your name and email. Then answer the prompts here or use the form below."
   });
+}
+
+function buildShortcutButton({ label, onClick, secondary = true }) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = secondary ? "button-secondary chat-shortcut" : "button-link chat-shortcut";
+  button.textContent = label;
+  button.addEventListener("click", onClick);
+  return button;
+}
+
+function focusChatField(fieldName) {
+  activeChatField = fieldName;
+  const labels = {
+    targetRole: "Target role",
+    linkedinUrl: "LinkedIn URL",
+    linkedinText: "LinkedIn text",
+    resumeText: "Resume text"
+  };
+  const placeholders = {
+    targetRole: "Example: Senior Product Manager",
+    linkedinUrl: "Paste your public LinkedIn URL",
+    linkedinText: "Paste About, Experience, Skills",
+    resumeText: "Paste your current resume"
+  };
+  chatPromptLabelEl.textContent = labels[fieldName] || "Chat input";
+  chatInputEl.placeholder = placeholders[fieldName] || "Type here";
+  chatInputEl.focus();
+}
+
+function renderShortcuts() {
+  chatShortcutsEl.replaceChildren();
+  const shortcuts = [
+    { label: "Target role", onClick: () => { setStep(2); focusChatField("targetRole"); } },
+    { label: "LinkedIn URL", onClick: () => { setStep(2); focusChatField("linkedinUrl"); } },
+    { label: "LinkedIn text", onClick: () => { setStep(2); focusChatField("linkedinText"); } },
+    { label: "Resume text", onClick: () => { setStep(2); focusChatField("resumeText"); } }
+  ];
+
+  if (fieldEls.resumeText.value.trim() || fieldEls.resumeFile.files[0]) {
+    shortcuts.push({
+      label: "Analyze now",
+      secondary: false,
+      onClick: () => form.requestSubmit()
+    });
+  }
+
+  for (const shortcut of shortcuts) {
+    chatShortcutsEl.appendChild(buildShortcutButton(shortcut));
+  }
 }
 
 function updateGuide(step) {
@@ -156,6 +212,7 @@ function renderChecklist() {
     row.textContent = `${item.done ? "Done" : "Need"}  ${item.label}`;
     checklistEl.appendChild(row);
   }
+  renderShortcuts();
 }
 
 function setStep(step) {
@@ -319,6 +376,73 @@ function maybeAutofillFromProfile(profile) {
   }
 
   renderChecklist();
+}
+
+function saveChatInput(value) {
+  const normalized = value.trim();
+  if (!normalized) {
+    return false;
+  }
+
+  if (activeChatField === "linkedinUrl" || /^https?:\/\/(www\.)?linkedin\.com\//i.test(normalized)) {
+    fieldEls.linkedinUrl.value = normalized;
+    addChatMessage({ role: "user", body: normalized });
+    addChatMessage({
+      title: "Saved LinkedIn URL",
+      body: "Good. Add resume text or upload a file next so I can analyze it."
+    });
+    focusChatField(fieldEls.resumeText.value.trim() ? "linkedinText" : "resumeText");
+    setStep(2);
+    renderSnapshot(analysisResult);
+    renderChecklist();
+    return true;
+  }
+
+  if (activeChatField === "targetRole") {
+    fieldEls.targetRole.value = normalized;
+    addChatMessage({ role: "user", body: normalized });
+    addChatMessage({
+      title: "Saved target role",
+      body: "Next, paste your resume text or upload a resume file."
+    });
+    focusChatField("resumeText");
+    setStep(2);
+    renderSnapshot(analysisResult);
+    renderChecklist();
+    return true;
+  }
+
+  if (activeChatField === "linkedinText") {
+    fieldEls.linkedinText.value = normalized;
+    addChatMessage({ role: "user", body: normalized.slice(0, 240) + (normalized.length > 240 ? "..." : "") });
+    addChatMessage({
+      title: "Saved LinkedIn text",
+      body: fieldEls.resumeText.value.trim() || fieldEls.resumeFile.files[0]
+        ? "You have enough to run analysis now."
+        : "Now paste your resume text or upload a resume file."
+    });
+    if (!fieldEls.resumeText.value.trim() && !fieldEls.resumeFile.files[0]) {
+      focusChatField("resumeText");
+    }
+    renderSnapshot(analysisResult);
+    renderChecklist();
+    return true;
+  }
+
+  fieldEls.resumeText.value = normalized;
+  addChatMessage({ role: "user", body: normalized.slice(0, 240) + (normalized.length > 240 ? "..." : "") });
+  addChatMessage({
+    title: "Saved resume text",
+    body: fieldEls.targetRole.value.trim()
+      ? "You can run analysis now, or add LinkedIn text for stronger matching."
+      : "Add a target role next so I can tailor the analysis."
+  });
+  if (!fieldEls.targetRole.value.trim()) {
+    focusChatField("targetRole");
+  }
+  renderSnapshot(analysisResult);
+  renderChecklist();
+  return true;
 }
 
 function renderProfile(profile) {
@@ -492,6 +616,33 @@ form.addEventListener("submit", async (event) => {
   }
 });
 
+chatFormEl.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const value = chatInputEl.value;
+  if (!saveChatInput(value)) {
+    setStatus("Add a response first.", true);
+    return;
+  }
+  chatInputEl.value = "";
+  setStatus("Saved.");
+});
+
+chatSkipEl.addEventListener("click", () => {
+  const nextField = {
+    targetRole: "resumeText",
+    resumeText: "linkedinText",
+    linkedinText: "linkedinUrl",
+    linkedinUrl: "targetRole"
+  };
+  addChatMessage({
+    title: "Skipped",
+    body: "That field is optional for now. You can come back to it later."
+  });
+  focusChatField(nextField[activeChatField] || "targetRole");
+  setStep(activeChatField === "targetRole" ? 2 : currentStep);
+  setStatus("Skipped.");
+});
+
 rewriteButtonEl.addEventListener("click", async () => {
   if (!appConfig.openAiRewriteEnabled) {
     setStatus("OpenAI rewrite is not configured.", true);
@@ -584,12 +735,15 @@ for (const element of [fieldEls.targetRole, fieldEls.linkedinUrl, fieldEls.linke
 }
 
 seedChat();
+renderShortcuts();
+focusChatField("targetRole");
 const linkedInStatus = readLinkedInStatusFromUrl();
 if (linkedInStatus === "connected") {
   addChatMessage({
     title: "LinkedIn connected",
     body: "I pulled your basic LinkedIn identity and prefilled what I can. LinkedIn does not expose your public profile URL here, so paste it manually if you want it included."
   });
+  focusChatField(fieldEls.resumeText.value.trim() ? "linkedinUrl" : "resumeText");
   setStatus("LinkedIn connected.");
 } else if (linkedInStatus === "failed" || linkedInStatus === "invalid" || linkedInStatus === "denied") {
   addChatMessage({

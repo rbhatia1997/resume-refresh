@@ -27,6 +27,21 @@
 
       <section class="chat-shell">
         <div id="chat-feed" class="chat-feed" aria-live="polite"></div>
+        <form id="chat-form" class="chat-composer">
+          <div id="chat-shortcuts" class="chat-shortcuts" aria-label="Chat shortcuts"></div>
+          <label class="chat-input-wrap">
+            <span id="chat-prompt-label" class="sr-only">Chat input</span>
+            <textarea
+              id="chat-input"
+              rows="3"
+              placeholder="Type here. I can capture your target role, LinkedIn URL, LinkedIn text, or resume text."
+            ></textarea>
+          </label>
+          <div class="chat-composer-actions">
+            <button id="chat-skip" class="button-secondary" type="button">Skip</button>
+            <button id="chat-send" type="submit">Send</button>
+          </div>
+        </form>
       </section>
 
       <section class="guide-strip" aria-label="Next actions">
