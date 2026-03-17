@@ -34,7 +34,7 @@ const ACTION_VERBS = [
   "Automated", "Streamlined", "Reduced", "Increased", "Implemented", "Created",
   "Owned", "Drove", "Managed", "Developed", "Optimized", "Executed", "Coordinated"
 ];
-const ACTION_VERB_PATTERN = /^(achieved|analyzed|automated|built|coached|coordinated|created|defined|delivered|designed|developed|drove|executed|expanded|generated|grew|implemented|improved|increased|launched|led|managed|negotiated|optimized|orchestrated|owned|partnered|reduced|researched|scaled|shipped|spearheaded|streamlined)\b/i;
+const ACTION_VERB_PATTERN = /^(achieved|analyzed|automated|build|built|coach|coached|coordinate|coordinated|create|created|define|defined|deliver|delivered|design|designed|develop|developed|drive|drove|execute|executed|expand|expanded|generate|generated|grew|grow|implement|implemented|improve|improved|increase|increased|launch|launched|lead|led|manage|managed|negotiate|negotiated|optimize|optimized|orchestrated|own|owned|partner|partnered|reduce|reduced|research|researched|scale|scaled|ship|shipped|spearheaded|streamlined|support|supported)\b/i;
 const WEAK_STARTER_PATTERN = /^(helped|helped with|worked on|responsible for|assisted|assisted with|supported|tasked with)\b/i;
 const RESULT_SIGNAL_PATTERN = /\b(\d+[%xX]?|\$\d+|\d+\+|revenue|pipeline|conversion|activation|retention|engagement|cost|time|efficiency|growth|reduced|increased|improved|saved|launched|cut|lifted|grew|expanded)\b/i;
 const CURRENT_TENSE_HINTS = /\b(lead|manage|build|own|drive|partner|develop|improve|coordinate|support)\b/i;
@@ -180,11 +180,19 @@ function extractCandidateSkills(text = "") {
     scored.set(token, score + 1);
   }
 
-  return [...scored.entries()]
+  const deduped = new Map();
+  for (const token of [...scored.entries()]
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
     .map(([token]) => token)
     .filter((token) => /[A-Z]|[+#/.]/.test(token) || token.length > 5)
-    .slice(0, 20);
+    .slice(0, 30)) {
+    const normalized = token.toLowerCase();
+    if (!deduped.has(normalized)) {
+      deduped.set(normalized, token);
+    }
+  }
+
+  return [...deduped.values()].slice(0, 20);
 }
 
 function topMissingKeywords(linkedinText = "", resumeText = "") {
