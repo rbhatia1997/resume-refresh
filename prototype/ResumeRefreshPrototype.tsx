@@ -847,11 +847,13 @@ function SourceChoice({
 function ImportPermissions({
   onContinue,
   onManual,
-  isLinkedInReady
+  isLinkedInReady,
+  isConfigReady
 }: {
   onContinue: () => void;
   onManual: () => void;
   isLinkedInReady: boolean;
+  isConfigReady: boolean;
 }) {
   return (
     <Panel className="p-8 sm:p-10">
@@ -883,10 +885,10 @@ function ImportPermissions({
       <div className="mt-8 flex flex-wrap gap-3">
         <button
           onClick={onContinue}
-          disabled={!isLinkedInReady}
+          disabled={!isConfigReady}
           className="rounded-full bg-neutral-950 px-5 py-3 text-sm font-medium text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-300"
         >
-          Continue import
+          {!isConfigReady ? "Checking import options..." : isLinkedInReady ? "Continue import" : "Continue without LinkedIn"}
         </button>
         <button
           onClick={onManual}
@@ -895,9 +897,14 @@ function ImportPermissions({
           Start manually instead
         </button>
       </div>
-      {!isLinkedInReady && (
+      {!isConfigReady && (
+        <p className="mt-4 text-sm text-neutral-500">
+          Checking whether LinkedIn import is available in this environment.
+        </p>
+      )}
+      {isConfigReady && !isLinkedInReady && (
         <p className="mt-4 text-sm text-amber-700">
-          LinkedIn auth is not currently configured, so import is unavailable in this environment.
+          LinkedIn auth is not currently configured, but you can still continue with a pasted profile summary or an uploaded resume.
         </p>
       )}
     </Panel>
@@ -1627,12 +1634,23 @@ export default function ResumeRefreshPrototype() {
   }
 
   function continueImport() {
-    if (profile) {
-      setSections(deriveSections(profile, linkedinText, serializeSections(sections)));
-      setStage("review");
+    if (!config) {
+      setStatus("Checking import options...");
       return;
     }
-    window.location.href = "/api/auth/linkedin?return_to=/v2.html";
+
+    if (config?.linkedInAuthEnabled && !profile) {
+      window.location.href = "/api/auth/linkedin?return_to=/v2.html";
+      return;
+    }
+
+    if (profile) {
+      setSections(deriveSections(profile, linkedinText, serializeSections(sections)));
+    } else if (!sections.some((section) => normalizeText(section.content))) {
+      setSections(deriveSections(null, linkedinText, ""));
+    }
+
+    setStage("review");
   }
 
   const currentDraft = normalizedRewriteDraft || serializeSections(sections);
@@ -1668,6 +1686,7 @@ export default function ResumeRefreshPrototype() {
                 onContinue={continueImport}
                 onManual={beginManual}
                 isLinkedInReady={Boolean(config?.linkedInAuthEnabled)}
+                isConfigReady={Boolean(config)}
               />
             )}
 
