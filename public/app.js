@@ -47,6 +47,8 @@ let sessionProfile = null;
 let analysisResult = null;
 let currentStep = 1;
 let activeChatField = "targetRole";
+let analysisInFlight = false;
+let rewriteInFlight = false;
 
 function readLinkedInStatusFromUrl() {
   const url = new URL(window.location.href);
@@ -266,6 +268,23 @@ function getFormPayload() {
   };
 }
 
+function hasResumeSource() {
+  return Boolean(fieldEls.resumeText.value.trim() || fieldEls.resumeFile.files[0]);
+}
+
+function isReadyForAnalysis() {
+  return Boolean(fieldEls.targetRole.value.trim() && hasResumeSource());
+}
+
+function resetAnalysisOutputs() {
+  analysisResult = null;
+  renderSnapshot(null);
+  suggestionsEl.textContent = "";
+  draftEl.textContent = "Run analysis to generate a draft.";
+  aiRewriteEl.textContent = "Run AI rewrite to see the polished version.";
+  aiNotesEl.textContent = "";
+}
+
 function renderSuggestions(suggestions) {
   suggestionsEl.replaceChildren();
   if (!suggestions.length) {
@@ -384,6 +403,8 @@ function saveChatInput(value) {
     return false;
   }
 
+  resetAnalysisOutputs();
+
   if (activeChatField === "linkedinUrl" || /^https?:\/\/(www\.)?linkedin\.com\//i.test(normalized)) {
     fieldEls.linkedinUrl.value = normalized;
     addChatMessage({ role: "user", body: normalized });
@@ -395,6 +416,7 @@ function saveChatInput(value) {
     setStep(2);
     renderSnapshot(analysisResult);
     renderChecklist();
+    maybeAutoAnalyze();
     return true;
   }
 
@@ -409,6 +431,7 @@ function saveChatInput(value) {
     setStep(2);
     renderSnapshot(analysisResult);
     renderChecklist();
+    maybeAutoAnalyze();
     return true;
   }
 
@@ -426,6 +449,7 @@ function saveChatInput(value) {
     }
     renderSnapshot(analysisResult);
     renderChecklist();
+    maybeAutoAnalyze();
     return true;
   }
 
@@ -442,6 +466,7 @@ function saveChatInput(value) {
   }
   renderSnapshot(analysisResult);
   renderChecklist();
+  maybeAutoAnalyze();
   return true;
 }
 
@@ -592,9 +617,19 @@ async function runAnalysis(payload) {
   return result;
 }
 
-form.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  setStatus("Analyzing...");
+async function executeAnalysis({ auto = false } = {}) {
+  if (analysisInFlight) {
+    return;
+  }
+  if (!isReadyForAnalysis()) {
+    if (!auto) {
+      setStatus("Add a target role and resume text or file first.", true);
+    }
+    return;
+  }
+
+  analysisInFlight = true;
+  setStatus(auto ? "Analyzing from chat..." : "Analyzing...");
 
   try {
     const payload = await enrichPayloadWithFile(getFormPayload());
@@ -603,17 +638,36 @@ form.addEventListener("submit", async (event) => {
       fieldEls.resumeText.value = result.extractedResumeText;
     }
     addChatMessage({
-      title: "Analysis complete",
+      title: auto ? "Analysis ran automatically" : "Analysis complete",
       body: "I found the biggest gaps and drafted a cleaner resume. Review the snapshot and suggestions next.",
       actions: [
-        { label: "Open review", onClick: () => setStep(3) }
+        { label: "Open review", onClick: () => setStep(3) },
+        { label: "AI rewrite", onClick: () => rewriteButtonEl.click(), secondary: true }
       ]
     });
     setStep(3);
+    renderChecklist();
     setStatus("Review ready.");
   } catch (error) {
     setStatus(error.message || "Something went wrong.", true);
+  } finally {
+    analysisInFlight = false;
   }
+}
+
+function maybeAutoAnalyze() {
+  if (!isReadyForAnalysis()) {
+    return;
+  }
+  if (analysisResult) {
+    return;
+  }
+  executeAnalysis({ auto: true });
+}
+
+form.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  await executeAnalysis();
 });
 
 chatFormEl.addEventListener("submit", (event) => {
@@ -644,11 +698,15 @@ chatSkipEl.addEventListener("click", () => {
 });
 
 rewriteButtonEl.addEventListener("click", async () => {
+  if (rewriteInFlight) {
+    return;
+  }
   if (!appConfig.openAiRewriteEnabled) {
     setStatus("OpenAI rewrite is not configured.", true);
     return;
   }
 
+  rewriteInFlight = true;
   setStatus("Rewriting...");
   try {
     const payload = await enrichPayloadWithFile(getFormPayload());
@@ -684,6 +742,8 @@ rewriteButtonEl.addEventListener("click", async () => {
     setStatus("AI rewrite ready.");
   } catch (error) {
     setStatus(error.message || "Rewrite failed.", true);
+  } finally {
+    rewriteInFlight = false;
   }
 });
 
@@ -730,8 +790,15 @@ for (const chip of stepChips) {
 }
 
 for (const element of [fieldEls.targetRole, fieldEls.linkedinUrl, fieldEls.linkedinText, fieldEls.resumeText, fieldEls.resumeFile]) {
-  element.addEventListener("input", renderChecklist);
-  element.addEventListener("change", renderChecklist);
+  element.addEventListener("input", () => {
+    resetAnalysisOutputs();
+    renderChecklist();
+  });
+  element.addEventListener("change", () => {
+    resetAnalysisOutputs();
+    renderChecklist();
+    maybeAutoAnalyze();
+  });
 }
 
 seedChat();
