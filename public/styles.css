@@ -24,22 +24,17 @@ body {
 }
 
 .shell {
-  width: min(1120px, calc(100vw - 32px));
+  width: min(820px, calc(100vw - 32px));
   margin: 0 auto;
   padding: 28px 0 72px;
 }
 
-.hero {
-  display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(240px, 0.8fr);
-  gap: 18px;
+.app-header {
   margin-bottom: 18px;
 }
 
-.hero-copy,
-.proof-card,
+.app-header,
 .chat-shell,
-.guide-card,
 .panel,
 .card,
 .progress-strip {
@@ -50,10 +45,8 @@ body {
   backdrop-filter: blur(14px);
 }
 
-.hero-copy,
-.proof-card,
+.app-header,
 .chat-shell,
-.guide-card,
 .panel,
 .card,
 .progress-strip {
@@ -99,18 +92,16 @@ h1 {
   font-size: 1.1rem;
 }
 
-.proof-list {
-  margin: 0;
-  padding-left: 18px;
-  line-height: 1.8;
-}
-
 .chat-shell {
   margin-bottom: 18px;
   padding: 18px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(255, 250, 244, 0.9)),
     var(--panel);
+}
+
+.chat-shell.embedded {
+  margin-top: 18px;
 }
 
 .chat-feed {
@@ -196,37 +187,6 @@ h1 {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
-}
-
-.guide-strip {
-  display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
-  gap: 18px;
-  margin-bottom: 18px;
-}
-
-.guide-card.compact {
-  padding-top: 22px;
-}
-
-.checklist {
-  display: grid;
-  gap: 10px;
-}
-
-.check-item {
-  padding: 12px 14px;
-  border: 1px solid var(--line);
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.64);
-  color: var(--muted);
-  font: 700 0.9rem/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
-}
-
-.check-item.is-done {
-  border-color: rgba(208, 92, 47, 0.28);
-  color: var(--ink);
-  background: rgba(208, 92, 47, 0.08);
 }
 
 .progress-strip {
@@ -478,8 +438,6 @@ pre,
     padding-top: 18px;
   }
 
-  .hero,
-  .guide-strip,
   .form-grid,
   .upload-row,
   .results {
@@ -491,12 +449,10 @@ pre,
   }
 
   .chat-shell,
-  .guide-card,
   .panel,
   .card,
   .progress-strip,
-  .hero-copy,
-  .proof-card {
+  .app-header {
     padding: 18px;
     border-radius: 22px;
   }

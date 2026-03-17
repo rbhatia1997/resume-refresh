@@ -20,9 +20,6 @@ const chatFormEl = document.querySelector("#chat-form");
 const chatInputEl = document.querySelector("#chat-input");
 const chatPromptLabelEl = document.querySelector("#chat-prompt-label");
 const chatSkipEl = document.querySelector("#chat-skip");
-const guideTitleEl = document.querySelector("#guide-title");
-const guideCopyEl = document.querySelector("#guide-copy");
-const checklistEl = document.querySelector("#source-checklist");
 const progressLabelEl = document.querySelector("#progress-label");
 const progressBarEl = document.querySelector("#progress-bar");
 const wizardQuestionTitleEl = document.querySelector("#wizard-question-title");
@@ -138,7 +135,7 @@ function seedChat() {
   chatFeedEl.replaceChildren();
   addChatMessage({
     title: "Start here",
-    body: "Connect LinkedIn if you want me to prefill your name and email. Then answer the prompts here or use the form below."
+    body: "Connect LinkedIn if you want basic identity prefilled. Then answer each prompt one by one."
   });
 }
 
@@ -206,29 +203,7 @@ function renderCollectedSummary() {
 }
 
 function updateGuide(step) {
-  const guideByStep = {
-    1: {
-      title: sessionProfile ? "LinkedIn is connected. Continue to sources." : "Connect LinkedIn or skip to manual entry.",
-      copy: sessionProfile
-        ? "Your name and email can be prefilled from LinkedIn. Add your resume next."
-        : "Connecting LinkedIn prefills basic identity only. You can still do everything manually."
-    },
-    2: {
-      title: "Add source material, then run analysis.",
-      copy: "Fastest path: paste your resume or upload a PDF. Add LinkedIn text if you want stronger keyword matching."
-    },
-    3: {
-      title: "Review the draft and close the biggest gaps.",
-      copy: "Check the snapshot first. If the draft looks usable, download it or move to AI rewrite."
-    },
-    4: {
-      title: "Review the AI rewrite and export the final version.",
-      copy: "Use the AI version when you want a cleaner tone, then export DOCX or PDF."
-    }
-  };
-  const guide = guideByStep[step] || guideByStep[1];
-  guideTitleEl.textContent = guide.title;
-  guideCopyEl.textContent = guide.copy;
+  return step;
 }
 
 function getChecklistItems() {
@@ -254,13 +229,6 @@ function getChecklistItems() {
 }
 
 function renderChecklist() {
-  checklistEl.replaceChildren();
-  for (const item of getChecklistItems()) {
-    const row = document.createElement("div");
-    row.className = `check-item ${item.done ? "is-done" : ""}`;
-    row.textContent = `${item.done ? "Done" : "Need"}  ${item.label}`;
-    checklistEl.appendChild(row);
-  }
   renderWizardStep();
 }
 
@@ -275,7 +243,7 @@ function setStep(step) {
 
   const stepMessages = {
     1: "Connect LinkedIn first, or skip if you want to paste everything manually.",
-    2: "Paste LinkedIn text, paste your resume, or upload a resume PDF. Then run analysis.",
+    2: "Answer the current prompt, or skip it and move to the next one.",
     3: "Review the snapshot, fix gaps, and download the generated draft if it looks good.",
     4: "Run AI rewrite when you want a more polished version, then export it."
   };

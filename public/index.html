@@ -8,51 +8,10 @@
   </head>
   <body>
     <main class="shell">
-      <section class="hero">
-        <div class="hero-copy">
-          <p class="eyebrow">Resume Refresh</p>
-          <h1>Tell me about your resume. I’ll guide the rest.</h1>
-          <p class="lede">Chat-first. Step-by-step. Export-ready.</p>
-        </div>
-        <div class="proof-card">
-          <p class="proof-label">Outputs</p>
-          <ul class="proof-list">
-            <li>Gap analysis</li>
-            <li>Bullet fixes</li>
-            <li>Resume draft</li>
-            <li>AI rewrite</li>
-          </ul>
-        </div>
-      </section>
-
-      <section class="chat-shell">
-        <div id="chat-feed" class="chat-feed" aria-live="polite"></div>
-        <form id="chat-form" class="chat-composer">
-          <label class="chat-input-wrap">
-            <span id="chat-prompt-label" class="sr-only">Chat input</span>
-            <textarea
-              id="chat-input"
-              rows="3"
-              placeholder="Type here. I can capture your target role, LinkedIn URL, LinkedIn text, or resume text."
-            ></textarea>
-          </label>
-          <div class="chat-composer-actions">
-            <button id="chat-skip" class="button-secondary" type="button">Skip</button>
-            <button id="chat-send" type="submit">Send</button>
-          </div>
-        </form>
-      </section>
-
-      <section class="guide-strip" aria-label="Next actions">
-        <div class="guide-card">
-          <p class="section-kicker">Next</p>
-          <h2 id="guide-title">Connect LinkedIn or skip to manual entry.</h2>
-          <p id="guide-copy" class="panel-copy">If LinkedIn is connected, we prefill basic identity. Then add your resume or paste your LinkedIn text.</p>
-        </div>
-        <div class="guide-card compact">
-          <p class="section-kicker">Need</p>
-          <div id="source-checklist" class="checklist"></div>
-        </div>
+      <section class="app-header">
+        <p class="eyebrow">Resume Refresh</p>
+        <h1>Build a stronger resume one step at a time.</h1>
+        <p class="lede">Connect, answer prompts, review the draft, then export.</p>
       </section>
 
       <section class="progress-strip" aria-label="Progress">
@@ -97,6 +56,24 @@
             </div>
             <button class="button-secondary" data-next-step="3" type="button" id="skip-to-review">Skip to review</button>
           </div>
+
+          <section class="chat-shell embedded">
+            <div id="chat-feed" class="chat-feed" aria-live="polite"></div>
+            <form id="chat-form" class="chat-composer">
+              <label class="chat-input-wrap">
+                <span id="chat-prompt-label" class="sr-only">Chat input</span>
+                <textarea
+                  id="chat-input"
+                  rows="3"
+                  placeholder="Type your answer here."
+                ></textarea>
+              </label>
+              <div class="chat-composer-actions">
+                <button id="chat-skip" class="button-secondary" type="button">Skip</button>
+                <button id="chat-send" type="submit">Save answer</button>
+              </div>
+            </form>
+          </section>
 
           <form id="analyze-form">
             <section class="wizard-card">
