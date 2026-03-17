@@ -130,18 +130,18 @@ const defaultPersistedState: PersistedState = {
 
 const featureCards = [
   ["Section-by-section editing", "Fix one section at a time instead of wrestling with a full page of inputs."],
-  ["Stronger bullet coaching", "Weak bullets get pushed toward ownership, execution, and outcomes."],
-  ["Live resume preview", "You can see the draft improve before you export anything."]
+  ["Stronger bullet coaching", "Push vague bullets toward ownership, metrics, and outcomes."],
+  ["Live resume preview", "See the draft sharpen before you export anything."]
 ];
 
 const beforeAfter = [
   {
-    before: "Worked on onboarding improvements for new users.",
-    after: "Owned onboarding across signup and activation, partnering with design and engineering to launch experiments that improved new-user activation."
+    before: "Worked on onboarding improvements.",
+    after: "Led onboarding tests that lifted activation 18%."
   },
   {
-    before: "Helped with reporting for sales and leadership.",
-    after: "Built weekly revenue and pipeline reporting for sales leadership, giving teams clearer visibility into forecast risk and next actions."
+    before: "Helped with sales reporting.",
+    after: "Built weekly pipeline reporting, cutting forecast prep by 6 hours."
   }
 ];
 
@@ -164,6 +164,12 @@ const trustPoints = [
   "You see imported content before it becomes your draft.",
   "Nothing is posted to LinkedIn or changed on your behalf.",
   "AI polish stays editable and can be applied or ignored section by section."
+];
+
+const landingStats = [
+  ["Resume or LinkedIn", "Start from existing material, not a blank page."],
+  ["Metric-led bullets", "Examples stay short, concrete, and recruiter-readable."],
+  ["PDF or DOCX", "Leave with a cleaned-up draft ready to send."]
 ];
 
 const sampleResumeSeed = {
@@ -503,7 +509,7 @@ function ResumePreview({
 
 function SampleResumeCard() {
   return (
-    <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm">
+    <div className="rounded-[28px] border border-neutral-200 bg-white p-6 shadow-sm">
       <div className="flex items-center justify-between gap-3 border-b border-neutral-200 pb-4">
         <div>
           <p className="text-sm font-semibold text-neutral-950">Resume preview</p>
@@ -523,7 +529,7 @@ function SampleResumeCard() {
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-neutral-400">Summary</p>
           <p className="mt-2 text-sm leading-6 text-neutral-700">
-            Product leader focused on growth, onboarding, and monetization strategy across B2B SaaS products.
+            Product leader driving growth, onboarding, and monetization across B2B SaaS.
           </p>
         </div>
         <div>
@@ -532,11 +538,11 @@ function SampleResumeCard() {
             <p className="font-medium text-neutral-900">Senior Product Manager, Northstar</p>
             <div className="flex gap-2">
               <span className="mt-[2px] text-neutral-400">•</span>
-              <span>Owned onboarding experiments across web and lifecycle email, lifting activation for new accounts.</span>
+              <span>Ran onboarding experiments that lifted activation 18%.</span>
             </div>
             <div className="flex gap-2">
               <span className="mt-[2px] text-neutral-400">•</span>
-              <span>Led pricing and packaging tests with finance and sales, improving expansion readiness for mid-market customers.</span>
+              <span>Led pricing tests that increased expansion revenue 11%.</span>
             </div>
           </div>
         </div>
@@ -563,68 +569,79 @@ function Landing({
   return (
     <div>
       <section className="py-14 sm:py-20">
-        <div className="grid gap-8 lg:grid-cols-[1.02fr_0.98fr] lg:items-center">
-          <div className="space-y-8">
-          <div className="inline-flex items-center gap-2 rounded-full border border-neutral-200 bg-white px-4 py-2 text-xs font-medium uppercase tracking-[0.16em] text-neutral-500 shadow-sm">
-            <span className="h-2 w-2 rounded-full bg-emerald-500" />
-            Resume Refresh
-          </div>
-          <div>
-            <h1 className="max-w-[10ch] text-4xl font-semibold leading-[0.95] tracking-[-0.05em] text-neutral-950 sm:text-5xl">
-              Import your resume. Leave with a stronger one.
-            </h1>
-            <p className="mt-4 max-w-2xl text-base leading-7 text-neutral-600 sm:text-lg">
-              Bring in a resume or LinkedIn details, tighten weak bullets, and leave with a cleaner recruiter-ready draft.
-            </p>
-          </div>
-          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-            <button
-              onClick={onStart}
-              className="w-full rounded-full bg-neutral-950 px-5 py-3 text-sm font-medium text-white transition hover:bg-neutral-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-950 sm:w-auto"
-            >
-              Start Resume Refresh
-            </button>
-            <button
-              onClick={onViewSample}
-              className="w-full rounded-full border border-neutral-200 bg-white px-5 py-3 text-sm font-medium text-neutral-800 transition hover:bg-neutral-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-950 sm:w-auto"
-            >
-              View sample
-            </button>
-          </div>
-          <div className="grid gap-6 sm:grid-cols-3">
-            {[
-              ["Import what you have", "Resume or LinkedIn"],
-              ["Strengthen weak bullets", "Ownership + action + result"],
-              ["Export a cleaner draft", "PDF or DOCX"]
-            ].map(([label, copy]) => (
-              <div key={label} className="border-l border-neutral-300 pl-4">
-                <p className="text-sm font-semibold text-neutral-950">{label}</p>
-                <p className="mt-1 text-sm leading-6 text-neutral-500">{copy}</p>
-              </div>
-            ))}
-          </div>
-          </div>
-
-          <div className="space-y-6">
-            <div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm sm:p-6">
-              <div className="grid gap-6 lg:grid-cols-[0.44fr_0.56fr]">
-                <div className="rounded-2xl bg-neutral-100 p-5">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-700">Before</p>
-                <div className="mt-4 space-y-4 text-sm leading-6 text-neutral-600">
-                  <p>Worked on onboarding improvements for new users.</p>
-                  <p>Helped with reporting for sales and leadership.</p>
+        <div className="overflow-hidden rounded-[36px] border border-neutral-200 bg-[linear-gradient(135deg,rgba(255,255,255,0.96),rgba(246,239,230,0.92))] shadow-[0_24px_70px_rgba(24,24,24,0.08)]">
+          <div className="grid gap-10 px-6 py-8 sm:px-8 sm:py-10 lg:grid-cols-[0.96fr_1.04fr] lg:items-stretch lg:px-10 lg:py-12">
+            <div className="flex flex-col justify-between gap-8">
+              <div className="space-y-6">
+                <div className="inline-flex items-center gap-2 rounded-full border border-neutral-200 bg-white/90 px-4 py-2 text-xs font-medium uppercase tracking-[0.16em] text-neutral-500 shadow-sm">
+                  <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                  Resume Refresh
+                </div>
+                <div>
+                  <h1 className="max-w-[10ch] text-4xl font-semibold leading-[0.95] tracking-[-0.05em] text-neutral-950 sm:text-5xl lg:text-[3.6rem]">
+                    Import your resume. Leave with stronger proof.
+                  </h1>
+                  <p className="mt-4 max-w-xl text-base leading-7 text-neutral-600 sm:text-lg">
+                    Bring in a resume or LinkedIn profile, tighten weak bullets, and leave with a cleaner draft built around sharper outcomes.
+                  </p>
+                </div>
+                <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+                  <button
+                    onClick={onStart}
+                    className="w-full rounded-full bg-neutral-950 px-5 py-3 text-sm font-medium text-white transition hover:bg-neutral-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-950 sm:w-auto"
+                  >
+                    Start Resume Refresh
+                  </button>
+                  <button
+                    onClick={onViewSample}
+                    className="w-full rounded-full border border-neutral-200 bg-white px-5 py-3 text-sm font-medium text-neutral-800 transition hover:bg-neutral-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-950 sm:w-auto"
+                  >
+                    View sample
+                  </button>
                 </div>
               </div>
-                <div className="relative rounded-2xl bg-[#f2f6f3] p-5 before:absolute before:bottom-5 before:left-0 before:top-5 before:w-px before:bg-neutral-200 before:content-[''] lg:before:-left-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-700">After</p>
-                  <div className="mt-4 space-y-4 text-sm leading-6 text-neutral-800">
-                    <p>Owned the onboarding experience, launching experiments that improved activation for new accounts.</p>
-                    <p>Built weekly revenue and pipeline reporting for sales leadership, giving teams clearer visibility into forecast risk and next actions.</p>
+
+              <div className="grid gap-3 sm:grid-cols-3">
+                {landingStats.map(([label, copy]) => (
+                  <div key={label} className="rounded-2xl border border-white/70 bg-white/75 p-4 shadow-sm backdrop-blur">
+                    <p className="text-sm font-semibold text-neutral-950">{label}</p>
+                    <p className="mt-2 text-sm leading-6 text-neutral-500">{copy}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid gap-5 lg:grid-rows-[auto_1fr]">
+              <div className="rounded-[28px] border border-neutral-200 bg-white/90 p-5 shadow-sm">
+                <div className="flex items-center justify-between gap-3 border-b border-neutral-200 pb-4">
+                  <div>
+                    <p className="text-sm font-semibold text-neutral-950">Bullet rewrite preview</p>
+                    <p className="text-xs uppercase tracking-[0.16em] text-neutral-400">Shorter and metric-led</p>
+                  </div>
+                  <div className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
+                    Before → After
+                  </div>
+                </div>
+                <div className="mt-5 grid gap-4 md:grid-cols-2">
+                  <div className="rounded-2xl bg-neutral-100 p-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-neutral-500">Before</p>
+                    <div className="mt-3 space-y-3 text-sm leading-6 text-neutral-600">
+                      <p>Worked on onboarding improvements.</p>
+                      <p>Helped with sales reporting.</p>
+                    </div>
+                  </div>
+                  <div className="rounded-2xl bg-[#eef6f0] p-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-700">After</p>
+                    <div className="mt-3 space-y-3 text-sm leading-6 text-neutral-800">
+                      <p>Led onboarding tests that lifted activation 18%.</p>
+                      <p>Built weekly pipeline reporting, cutting forecast prep by 6 hours.</p>
+                    </div>
                   </div>
                 </div>
               </div>
+
+              <SampleResumeCard />
             </div>
-            <SampleResumeCard />
           </div>
         </div>
       </section>
@@ -644,15 +661,15 @@ function Landing({
             Try this sample
           </button>
         </div>
-        <div className="mt-8 space-y-6">
+        <div className="mt-8 grid gap-4 lg:grid-cols-2">
           {beforeAfter.map((item) => (
-            <div key={item.before} className="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm">
-              <div className="grid md:grid-cols-2">
+            <div key={item.before} className="overflow-hidden rounded-[28px] border border-neutral-200 bg-white shadow-sm">
+              <div className="grid h-full md:grid-cols-2">
                 <div className="bg-neutral-100 p-6">
                   <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-neutral-500">Before</p>
                   <p className="mt-3 text-base leading-7 text-neutral-600">{item.before}</p>
                 </div>
-                <div className="border-t border-neutral-200 bg-[#f2f6f3] p-6 md:border-l md:border-t-0">
+                <div className="border-t border-neutral-200 bg-[#eef6f0] p-6 md:border-l md:border-t-0">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-700">After</p>
                   <p className="mt-3 text-base leading-7 text-neutral-900">{item.after}</p>
                 </div>
@@ -664,48 +681,48 @@ function Landing({
 
       <section className="py-14 sm:py-20">
         <div className="grid gap-8 lg:grid-cols-[0.8fr_1.2fr] lg:items-start">
-        <div>
-          <SectionEyebrow>How it works</SectionEyebrow>
-          <h2 className="mt-3 max-w-[12ch] text-4xl font-semibold tracking-[-0.05em] text-neutral-950 sm:text-5xl">
-            Three clear steps. No blank-page spiral.
-          </h2>
-        </div>
-        <div className="grid gap-6 md:grid-cols-3">
-          {workflowSteps.map((item, index) => (
-            <Panel key={item.title} className="p-6">
-              <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-neutral-950 text-sm font-semibold text-white">
-                  {index + 1}
+          <div>
+            <SectionEyebrow>How it works</SectionEyebrow>
+            <h2 className="mt-3 max-w-[12ch] text-4xl font-semibold tracking-[-0.05em] text-neutral-950 sm:text-5xl">
+              Three clear steps. No blank-page spiral.
+            </h2>
+          </div>
+          <div className="grid gap-4 md:grid-cols-3">
+            {workflowSteps.map((item, index) => (
+              <Panel key={item.title} className="rounded-[28px] p-6">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-neutral-950 text-sm font-semibold text-white">
+                    {index + 1}
+                  </div>
+                  <p className="text-base font-semibold text-neutral-950">{item.title}</p>
                 </div>
-                <p className="text-base font-semibold text-neutral-950">{item.title}</p>
-              </div>
-              <p className="mt-4 text-base leading-7 text-neutral-600">{item.copy}</p>
-            </Panel>
-          ))}
-        </div>
+                <p className="mt-4 text-base leading-7 text-neutral-600">{item.copy}</p>
+              </Panel>
+            ))}
+          </div>
         </div>
       </section>
 
       <section className="py-14 sm:py-20">
         <div className="grid gap-8 lg:grid-cols-[0.95fr_1.05fr] lg:items-start">
           <div className="space-y-8">
-          <div>
-            <SectionEyebrow>Product preview</SectionEyebrow>
-            <h2 className="mt-3 max-w-[12ch] text-4xl font-semibold tracking-[-0.05em] text-neutral-950 sm:text-5xl">
-              You stay in control of every edit.
-            </h2>
-          </div>
-          <div className="space-y-6">
-            {featureCards.map(([title, copy]) => (
-              <div key={title}>
-                <p className="text-base font-semibold text-neutral-950">{title}</p>
-                <p className="mt-2 text-base leading-7 text-neutral-600">{copy}</p>
-              </div>
-            ))}
-          </div>
+            <div>
+              <SectionEyebrow>Product preview</SectionEyebrow>
+              <h2 className="mt-3 max-w-[12ch] text-4xl font-semibold tracking-[-0.05em] text-neutral-950 sm:text-5xl">
+                You stay in control of every edit.
+              </h2>
+            </div>
+            <div className="grid gap-4">
+              {featureCards.map(([title, copy]) => (
+                <Panel key={title} className="rounded-[24px] p-5">
+                  <p className="text-base font-semibold text-neutral-950">{title}</p>
+                  <p className="mt-2 text-base leading-7 text-neutral-600">{copy}</p>
+                </Panel>
+              ))}
+            </div>
           </div>
 
-          <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm">
+          <div className="rounded-[28px] border border-neutral-200 bg-white p-6 shadow-sm">
             <p className="text-sm font-semibold text-neutral-950">Product preview</p>
             <p className="mt-1 text-base leading-7 text-neutral-600">
               Edit one section at a time, review stronger wording, and watch the draft update in place.
@@ -713,14 +730,14 @@ function Landing({
             <div className="mt-6 space-y-6 text-sm leading-6 text-neutral-700">
               <div>
                 <p className="font-medium text-neutral-900">Experience</p>
-                <p className="mt-3">Owned onboarding experiments across web and lifecycle email, lifting activation for new accounts.</p>
-                <p className="mt-2">Led pricing tests with finance and sales, improving expansion readiness for mid-market customers.</p>
+                <p className="mt-3">Led onboarding tests that lifted activation 18%.</p>
+                <p className="mt-2">Ran pricing experiments that increased expansion revenue 11%.</p>
               </div>
               <div className="border-t border-neutral-200 pt-6">
                 <p className="font-semibold text-neutral-950">Maya Patel</p>
                 <p className="mt-1 text-neutral-500">San Francisco, CA  |  maya@resumerefresh.app</p>
                 <p className="mt-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-neutral-400">Summary</p>
-                <p className="mt-2">Product leader focused on growth, onboarding, and monetization strategy.</p>
+                <p className="mt-2">Product leader focused on growth, onboarding, and monetization.</p>
               </div>
             </div>
           </div>
@@ -747,22 +764,24 @@ function Landing({
       </section>
 
       <section className="py-14 sm:py-20">
-        <Panel className="flex flex-col justify-between gap-8 bg-neutral-950 p-8 text-white sm:p-10">
-          <div>
+        <Panel className="rounded-[28px] bg-neutral-950 p-6 text-white sm:p-8">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+            <div className="max-w-xl">
             <SectionEyebrow>Start now</SectionEyebrow>
             <h2 className="mt-4 text-3xl font-semibold tracking-[-0.04em] text-white">
               Start with what you have. Finish with something stronger.
             </h2>
-            <p className="mt-4 max-w-md text-base leading-7 text-white/72">
+            <p className="mt-4 text-base leading-7 text-white/72">
               Resume Refresh helps you turn rough inputs into a cleaner resume you can actually send.
             </p>
           </div>
-          <button
-            onClick={onStart}
-            className="mt-8 w-full rounded-full bg-white px-5 py-3 text-sm font-medium text-neutral-950 transition hover:bg-white/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:w-auto"
-          >
-            Start now
-          </button>
+            <button
+              onClick={onStart}
+              className="w-full rounded-full bg-white px-5 py-3 text-sm font-medium text-neutral-950 transition hover:bg-white/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:w-auto"
+            >
+              Start now
+            </button>
+          </div>
         </Panel>
       </section>
     </div>
