@@ -21863,16 +21863,17 @@ function SourceChoice({
 function ImportPermissions({
   onContinue,
   onManual,
-  isLinkedInReady
+  isLinkedInReady,
+  isConfigReady
 }) {
   return /* @__PURE__ */ React.createElement(Panel, { className: "p-8 sm:p-10" }, /* @__PURE__ */ React.createElement(SectionEyebrow, null, "Review what will be used"), /* @__PURE__ */ React.createElement("h2", { className: "mt-4 text-3xl font-semibold tracking-[-0.04em] text-neutral-950" }, "Import is visible and reversible."), /* @__PURE__ */ React.createElement("p", { className: "mt-4 max-w-2xl text-sm leading-7 text-neutral-600" }, "We only use the information you approve. Nothing is posted, changed, or shared."), /* @__PURE__ */ React.createElement("div", { className: "mt-8 grid gap-4 md:grid-cols-2" }, /* @__PURE__ */ React.createElement(Panel, { className: "p-5" }, /* @__PURE__ */ React.createElement("p", { className: "text-sm font-semibold text-neutral-900" }, "Will import"), /* @__PURE__ */ React.createElement("ul", { className: "mt-3 space-y-2 text-sm leading-6 text-neutral-600" }, /* @__PURE__ */ React.createElement("li", null, "Basic profile identity"), /* @__PURE__ */ React.createElement("li", null, "Pasted or exported profile text"), /* @__PURE__ */ React.createElement("li", null, "Uploaded resume text"))), /* @__PURE__ */ React.createElement(Panel, { className: "p-5" }, /* @__PURE__ */ React.createElement("p", { className: "text-sm font-semibold text-neutral-900" }, "Will not do"), /* @__PURE__ */ React.createElement("ul", { className: "mt-3 space-y-2 text-sm leading-6 text-neutral-600" }, /* @__PURE__ */ React.createElement("li", null, "Post to LinkedIn"), /* @__PURE__ */ React.createElement("li", null, "Change your LinkedIn account"), /* @__PURE__ */ React.createElement("li", null, "Publish anything without review")))), /* @__PURE__ */ React.createElement("div", { className: "mt-8 flex flex-wrap gap-3" }, /* @__PURE__ */ React.createElement(
     "button",
     {
       onClick: onContinue,
-      disabled: !isLinkedInReady,
+      disabled: !isConfigReady,
       className: "rounded-full bg-neutral-950 px-5 py-3 text-sm font-medium text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-300"
     },
-    "Continue import"
+    !isConfigReady ? "Checking import options..." : isLinkedInReady ? "Continue import" : "Continue without LinkedIn"
   ), /* @__PURE__ */ React.createElement(
     "button",
     {
@@ -21880,7 +21881,7 @@ function ImportPermissions({
       className: "rounded-full border border-neutral-200 bg-white px-5 py-3 text-sm font-medium text-neutral-800 transition hover:bg-neutral-50"
     },
     "Start manually instead"
-  )), !isLinkedInReady && /* @__PURE__ */ React.createElement("p", { className: "mt-4 text-sm text-amber-700" }, "LinkedIn auth is not currently configured, so import is unavailable in this environment."));
+  )), !isConfigReady && /* @__PURE__ */ React.createElement("p", { className: "mt-4 text-sm text-neutral-500" }, "Checking whether LinkedIn import is available in this environment."), isConfigReady && !isLinkedInReady && /* @__PURE__ */ React.createElement("p", { className: "mt-4 text-sm text-amber-700" }, "LinkedIn auth is not currently configured, but you can still continue with a pasted profile summary or an uploaded resume."));
 }
 function ImportReview({
   sections,
@@ -22314,12 +22315,20 @@ function ResumeRefreshPrototype() {
     setStatus("Sample resume loaded. You can edit it or generate a draft immediately.");
   }
   function continueImport() {
-    if (profile) {
-      setSections(deriveSections(profile, linkedinText, serializeSections(sections)));
-      setStage("review");
+    if (!config) {
+      setStatus("Checking import options...");
       return;
     }
-    window.location.href = "/api/auth/linkedin?return_to=/v2.html";
+    if (config?.linkedInAuthEnabled && !profile) {
+      window.location.href = "/api/auth/linkedin?return_to=/v2.html";
+      return;
+    }
+    if (profile) {
+      setSections(deriveSections(profile, linkedinText, serializeSections(sections)));
+    } else if (!sections.some((section) => normalizeText(section.content))) {
+      setSections(deriveSections(null, linkedinText, ""));
+    }
+    setStage("review");
   }
   const currentDraft = normalizedRewriteDraft || serializeSections(sections);
   return /* @__PURE__ */ React.createElement("div", { className: "min-h-screen overflow-x-hidden bg-[radial-gradient(circle_at_top_left,rgba(179,120,67,0.12),transparent_28%),linear-gradient(180deg,#fcfaf6_0%,#f4efe8_100%)] px-4 py-6 text-neutral-950 sm:px-6 sm:py-8" }, /* @__PURE__ */ React.createElement("div", { className: "mx-auto max-w-6xl" }, stage === "landing" ? /* @__PURE__ */ React.createElement(
@@ -22343,7 +22352,8 @@ function ResumeRefreshPrototype() {
     {
       onContinue: continueImport,
       onManual: beginManual,
-      isLinkedInReady: Boolean(config?.linkedInAuthEnabled)
+      isLinkedInReady: Boolean(config?.linkedInAuthEnabled),
+      isConfigReady: Boolean(config)
     }
   ), stage === "review" && /* @__PURE__ */ React.createElement(
     ImportReview,

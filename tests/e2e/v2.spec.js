@@ -119,17 +119,98 @@ test("import path presents the permissions screen and LinkedIn redirect remains 
   await expect(page.getByRole("heading", { name: "Import is visible and reversible." })).toBeVisible();
   await expect(page.getByText("Will import")).toBeVisible();
 
+  const configResponse = await request.get(`${baseURL}/api/config`);
+  const config = await configResponse.json();
   const response = await request.get(`${baseURL}/api/auth/linkedin?return_to=/v2.html`, {
     maxRedirects: 0
   });
-  expect(response.status()).toBe(302);
-  const redirectUrl = new URL(response.headers().location);
-  expect(redirectUrl.toString()).toContain("linkedin.com/oauth/v2/authorization");
-  const stateToken = redirectUrl.searchParams.get("state");
-  expect(stateToken).toBeTruthy();
-  const [encodedState] = stateToken.split(".");
-  const decodedState = JSON.parse(Buffer.from(encodedState, "base64url").toString("utf8"));
-  expect(decodedState.returnTo).toBe("/v2.html");
+
+  if (config.linkedInAuthEnabled) {
+    expect(response.status()).toBe(302);
+    const redirectUrl = new URL(response.headers().location);
+    expect(redirectUrl.toString()).toContain("linkedin.com/oauth/v2/authorization");
+    const stateToken = redirectUrl.searchParams.get("state");
+    expect(stateToken).toBeTruthy();
+    const [encodedState] = stateToken.split(".");
+    const decodedState = JSON.parse(Buffer.from(encodedState, "base64url").toString("utf8"));
+    expect(decodedState.returnTo).toBe("/v2.html");
+    return;
+  }
+
+  expect(response.status()).toBe(400);
+  await expect(page.getByText("Continue without LinkedIn")).toBeVisible();
+});
+
+test("import path can continue to review without LinkedIn when auth is unavailable", async ({ page }) => {
+  await page.route("**/api/config", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        linkedInAuthEnabled: false,
+        requiresAppSecret: false,
+        openAiRewriteEnabled: true
+      })
+    });
+  });
+
+  await page.route("**/api/session", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        authenticated: false,
+        profile: null
+      })
+    });
+  });
+
+  await page.goto("/v2.html");
+  await page.getByRole("button", { name: "Start Resume Refresh" }).click();
+  await page.getByRole("button", { name: "Bring in what you already have" }).click();
+
+  await expect(page.getByRole("button", { name: "Continue without LinkedIn" })).toBeVisible();
+  await expect(page.getByText("you can still continue with a pasted profile summary or an uploaded resume")).toBeVisible();
+
+  await page.getByRole("button", { name: "Continue without LinkedIn" }).click();
+  await expect(page.getByRole("heading", { name: "Confirm what came in." })).toBeVisible();
+});
+
+test("import path stays blocked until config finishes loading", async ({ page }) => {
+  await page.route("**/api/config", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        linkedInAuthEnabled: false,
+        requiresAppSecret: false,
+        openAiRewriteEnabled: true
+      })
+    });
+  });
+
+  await page.route("**/api/session", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        authenticated: false,
+        profile: null
+      })
+    });
+  });
+
+  await page.goto("/v2.html");
+  await page.getByRole("button", { name: "Start Resume Refresh" }).click();
+  await page.getByRole("button", { name: "Bring in what you already have" }).click();
+
+  const loadingButton = page.getByRole("button", { name: "Checking import options..." });
+  await expect(loadingButton).toBeDisabled();
+  await expect(page.getByText("Checking whether LinkedIn import is available in this environment.")).toBeVisible();
+
+  await expect(page.getByRole("button", { name: "Continue without LinkedIn" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Continue without LinkedIn" })).toBeEnabled();
 });
 
 test("landing CTA and layout stay intact across target breakpoints", async ({ page }) => {
