@@ -31,6 +31,17 @@ const ACTION_VERBS = [
   "Automated", "Streamlined", "Reduced", "Increased", "Implemented", "Created"
 ];
 
+const SECTION_ALIASES = {
+  summary: ["summary", "professional summary", "profile", "about"],
+  experience: ["experience", "work experience", "employment", "experience highlights"],
+  education: ["education"],
+  skills: ["skills", "technical skills", "core competencies", "core skills"],
+  projects: ["projects"],
+  certifications: ["certifications"],
+  awards: ["awards"],
+  volunteer: ["volunteer"]
+};
+
 function normalizeWhitespace(text = "") {
   return text.replace(/\r/g, "").replace(/\t/g, " ").replace(/[ ]{2,}/g, " ").trim();
 }
@@ -44,6 +55,16 @@ function isHeading(line) {
   return SECTION_HEADERS.includes(value);
 }
 
+function canonicalHeading(line) {
+  const value = line.toLowerCase().replace(/[^a-z ]/g, "").trim();
+  for (const [canonical, aliases] of Object.entries(SECTION_ALIASES)) {
+    if (aliases.includes(value)) {
+      return canonical;
+    }
+  }
+  return value;
+}
+
 function parseSections(text = "") {
   const lines = splitLines(text);
   const sections = {};
@@ -52,7 +73,7 @@ function parseSections(text = "") {
 
   for (const line of lines) {
     if (isHeading(line)) {
-      current = line.toLowerCase().replace(/[^a-z ]/g, "").trim();
+      current = canonicalHeading(line);
       if (!sections[current]) {
         sections[current] = [];
       }
@@ -91,16 +112,19 @@ function extractCandidateSkills(text = "") {
       .trim();
     const lowered = token.toLowerCase();
     const wordCount = token.split(/\s+/).length;
-    if (token.length < 2 || token.length > 30 || wordCount > 3) {
+    if (token.length < 2 || token.length > 30 || wordCount > 2) {
       continue;
     }
-    if (STOPWORDS.has(lowered) || /^\d+$/.test(token)) {
+    if (STOPWORDS.has(lowered) || /^\d+$/.test(token) || /^[A-Z]{2}$/.test(token)) {
       continue;
     }
-    if (/^[A-Z][a-z]+\s[A-Z][a-z]+$/.test(token)) {
+    if (SECTION_HEADERS.includes(lowered) || Object.keys(SECTION_ALIASES).includes(lowered)) {
       continue;
     }
     if (/^[a-z]+$/.test(token) && token.length < 4) {
+      continue;
+    }
+    if (/\b(led|built|worked|managed|partnered|owned|created|designed|delivered|improved)\b/i.test(token)) {
       continue;
     }
     const score = scored.get(token) || 0;
@@ -120,26 +144,30 @@ function topMissingKeywords(linkedinText = "", resumeText = "") {
   return linkedInTokens.filter((token) => !resumeLower.includes(token.toLowerCase())).slice(0, 8);
 }
 
-function summarizeProfile({ linkedinText, resumeText, targetRole }) {
-  const source = normalizeWhitespace(`${linkedinText}\n${resumeText}`);
-  const roleSignals = [
-    ...(sectionsFromText(linkedinText).experience || []),
-    ...(sectionsFromText(resumeText).experience || []),
-    ...extractBullets(linkedinText),
-    ...extractBullets(resumeText)
-  ].join(" ");
-  const skills = extractCandidateSkills(`${linkedinText}\n${roleSignals}`).slice(0, 8);
-  const role = targetRole?.trim() || "your target role";
-  const firstSentence = source
-    .split(/(?<=[.!?])\s+/)
-    .map((line) => line.trim())
-    .find((line) => line.length > 50);
-
-  if (firstSentence) {
-    return `${firstSentence} Focused on ${role}, with emphasis on ${skills.slice(0, 4).join(", ")}.`;
+function inferProfessionalLabel(linkedinText = "", targetRole = "") {
+  const firstLine = splitLines(linkedinText)[0] || "";
+  const beforeWith = firstLine.split(/\bwith\b/i)[0].trim();
+  if (beforeWith && beforeWith.length <= 40) {
+    return beforeWith.replace(/[.]+$/, "");
   }
 
-  return `Results-oriented candidate targeting ${role}, with strengths in ${skills.slice(0, 5).join(", ")}.`;
+  const role = String(targetRole || "").trim();
+  if (role) {
+    return role;
+  }
+
+  return "Candidate";
+}
+
+function summarizeProfile({ linkedinText, skillText, targetRole }) {
+  const skills = extractCandidateSkills(`${linkedinText}\n${skillText}`).slice(0, 5);
+  const role = targetRole?.trim() || "your target role";
+  const label = inferProfessionalLabel(linkedinText, targetRole);
+  if (skills.length) {
+    return `${label} targeting ${role} roles with strengths in ${skills.join(", ")}.`;
+  }
+
+  return `${label} targeting ${role} roles with experience across execution, collaboration, and delivery.`;
 }
 
 function sectionsFromText(text = "") {
@@ -152,12 +180,35 @@ function strengthenBullet(bullet, index) {
     return null;
   }
 
-  const startsWithVerb = /^[A-Z][a-z]+ed\b|^[A-Z][a-z]+ing\b/.test(cleaned);
-  const hasMetric = /\b\d+[%xX]?|\$\d|percent|million|billion|kpi|roi|sla|okr/i.test(cleaned);
+  const startsWithVerb = /^(led|built|launched|improved|designed|delivered|scaled|automated|streamlined|reduced|increased|implemented|created|owned|managed|partnered|developed|drove|grew)\b/i.test(cleaned);
   const verb = ACTION_VERBS[index % ACTION_VERBS.length];
   const prefix = startsWithVerb ? "" : `${verb} `;
-  const suffix = hasMetric ? "" : " Add a measurable outcome if you have one.";
-  return `${prefix}${cleaned}${suffix}`;
+  return `${prefix}${cleaned.charAt(0).toUpperCase()}${cleaned.slice(1)}`;
+}
+
+function formatExperienceLines(lines = []) {
+  const cleanedLines = lines.map((line) => line.trim()).filter(Boolean);
+  if (!cleanedLines.length) {
+    return [];
+  }
+
+  const entries = [];
+  let bulletIndex = 0;
+
+  for (const line of cleanedLines) {
+    if (/^[-*•]/.test(line)) {
+      const normalized = strengthenBullet(line.replace(/^[-*•]\s*/, ""), bulletIndex);
+      bulletIndex += 1;
+      if (normalized) {
+        entries.push(`- ${normalized}`);
+      }
+      continue;
+    }
+
+    entries.push(line);
+  }
+
+  return entries;
 }
 
 function buildSuggestions({ sections, bullets, resumeText, linkedinText, targetRole }) {
@@ -238,17 +289,21 @@ function buildSuggestions({ sections, bullets, resumeText, linkedinText, targetR
 
 function buildDraft({ sections, bullets, linkedinText, resumeText, targetRole }) {
   const header = (sections.header || []).slice(0, 4);
-  const summary = summarizeProfile({ linkedinText, resumeText, targetRole });
+  const skillSectionText = [
+    ...(sections.skills || []),
+    ...(sections["technical skills"] || []),
+    ...(sections["core competencies"] || [])
+  ].join("\n");
+  const summary = summarizeProfile({ linkedinText, skillText: skillSectionText, targetRole });
   const skills = [...new Set([
     ...extractCandidateSkills(linkedinText),
-    ...extractCandidateSkills((sections.skills || sections["technical skills"] || []).join("\n")),
-    ...extractCandidateSkills((sections.experience || sections["work experience"] || []).join("\n"))
+    ...extractCandidateSkills(skillSectionText)
   ])].slice(0, 12);
-
-  const improvedBullets = (bullets.length ? bullets : splitLines(sections.experience?.join("\n") || ""))
-    .slice(0, 8)
-    .map((bullet, index) => strengthenBullet(bullet, index))
-    .filter(Boolean);
+  const experienceLines = formatExperienceLines(
+    (sections.experience || sections["work experience"] || []).length
+      ? (sections.experience || sections["work experience"] || [])
+      : splitLines(resumeText).filter((line) => /^[-*•]/.test(line))
+  ).slice(0, 10);
 
   const education = sections.education || [];
   const projects = sections.projects || [];
@@ -257,18 +312,18 @@ function buildDraft({ sections, bullets, linkedinText, resumeText, targetRole })
   if (header.length) {
     output.push(...header, "");
   }
-  output.push("PROFESSIONAL SUMMARY");
+  output.push("SUMMARY");
   output.push(summary, "");
 
   if (skills.length) {
-    output.push("CORE SKILLS");
+    output.push("SKILLS");
     output.push(skills.join(" | "), "");
   }
 
-  if (improvedBullets.length) {
-    output.push("EXPERIENCE HIGHLIGHTS");
-    for (const bullet of improvedBullets) {
-      output.push(`- ${bullet}`);
+  if (experienceLines.length) {
+    output.push("EXPERIENCE");
+    for (const line of experienceLines) {
+      output.push(line);
     }
     output.push("");
   }

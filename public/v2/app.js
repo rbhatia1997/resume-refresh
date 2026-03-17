@@ -21540,9 +21540,6 @@ var faqs = [
 function cn(...classes) {
   return classes.filter(Boolean).join(" ");
 }
-function escapeRegExp(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
 function buildDefaultSections(seed) {
   return sectionBlueprints.map((item) => ({
     ...item,
@@ -21552,22 +21549,42 @@ function buildDefaultSections(seed) {
 function normalizeText(value) {
   return value.replace(/\r/g, "").trim();
 }
-function extractSectionBlock(text, headings) {
-  const normalized = normalizeText(text);
-  if (!normalized) {
-    return "";
-  }
-  for (const heading of headings) {
-    const pattern = new RegExp(
-      `(?:^|\\n)${escapeRegExp(heading)}\\s*\\n([\\s\\S]*?)(?=\\n(?:SUMMARY|PROFESSIONAL SUMMARY|PROFILE|ABOUT|EXPERIENCE|WORK EXPERIENCE|SKILLS|CORE SKILLS|EDUCATION)\\s*\\n|$)`,
-      "i"
-    );
-    const match = normalized.match(pattern);
-    if (match?.[1]?.trim()) {
-      return match[1].trim();
+var headingAliases = {
+  header: [],
+  summary: ["SUMMARY", "PROFESSIONAL SUMMARY", "PROFILE", "ABOUT"],
+  experience: ["EXPERIENCE", "WORK EXPERIENCE", "EMPLOYMENT", "EXPERIENCE HIGHLIGHTS"],
+  skills: ["SKILLS", "CORE SKILLS", "TECHNICAL SKILLS", "CORE COMPETENCIES"],
+  education: ["EDUCATION"]
+};
+function parseStructuredSections(text) {
+  const lines = normalizeText(text).split("\n");
+  const sections = {
+    header: [],
+    summary: [],
+    experience: [],
+    skills: [],
+    education: []
+  };
+  let current = "header";
+  for (const rawLine of lines) {
+    const line = rawLine.trimEnd();
+    const trimmed = line.trim();
+    if (!trimmed) {
+      if (current !== "header" && sections[current][sections[current].length - 1] !== "") {
+        sections[current].push("");
+      }
+      continue;
     }
+    const nextSection = Object.keys(headingAliases).find(
+      (sectionId) => headingAliases[sectionId].includes(trimmed.toUpperCase())
+    );
+    if (nextSection) {
+      current = nextSection;
+      continue;
+    }
+    sections[current].push(trimmed);
   }
-  return "";
+  return sections;
 }
 function extractHeaderBlock(text) {
   const normalized = normalizeText(text);
@@ -21591,12 +21608,14 @@ function extractHeaderBlock(text) {
 function deriveSections(profile, linkedinText, resumeText) {
   const normalizedLinkedIn = normalizeText(linkedinText);
   const normalizedResume = normalizeText(resumeText);
+  const parsedResume = parseStructuredSections(normalizedResume);
   const headerFromProfile = [profile?.name, profile?.email].filter(Boolean).join("\n");
-  const header = headerFromProfile || extractHeaderBlock(normalizedResume);
-  const summary = extractSectionBlock(normalizedResume, ["SUMMARY", "PROFESSIONAL SUMMARY", "PROFILE", "ABOUT"]) || normalizedLinkedIn.split(/\n{2,}/)[0] || "";
-  const experience = extractSectionBlock(normalizedResume, ["EXPERIENCE", "WORK EXPERIENCE"]) || normalizedLinkedIn || "";
-  const skills = extractSectionBlock(normalizedResume, ["SKILLS", "CORE SKILLS"]) || "";
-  const education = extractSectionBlock(normalizedResume, ["EDUCATION"]);
+  const parsedHeader = parsedResume.header.filter(Boolean).slice(0, 3).join("\n");
+  const header = headerFromProfile || parsedHeader || extractHeaderBlock(normalizedResume);
+  const summary = parsedResume.summary.filter(Boolean).join("\n") || normalizedLinkedIn.split(/\n{2,}/)[0] || "";
+  const experience = parsedResume.experience.join("\n") || normalizedLinkedIn || "";
+  const skills = parsedResume.skills.filter(Boolean).join("\n");
+  const education = parsedResume.education.filter(Boolean).join("\n");
   return buildDefaultSections({
     header,
     summary,
@@ -21727,13 +21746,16 @@ function ResumePreview({
   missingKeywords
 }) {
   const sectionMap = Object.fromEntries(sections.map((section) => [section.id, normalizeText(section.content)]));
-  return /* @__PURE__ */ React.createElement("div", { className: "mt-4 rounded-[24px] border border-neutral-200 bg-neutral-50 p-6" }, sectionMap.header ? /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { className: "whitespace-pre-wrap break-words text-lg font-semibold leading-7 text-neutral-950" }, sectionMap.header)) : /* @__PURE__ */ React.createElement("p", { className: "text-sm text-neutral-500" }, "Your live preview will appear here as sections fill in."), missingKeywords.length > 0 && /* @__PURE__ */ React.createElement("div", { className: "mt-4 rounded-[18px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800" }, "Missing keywords: ", missingKeywords.join(", ")), [
+  const headerLines = sectionMap.header.split("\n").filter(Boolean);
+  return /* @__PURE__ */ React.createElement("div", { className: "mt-4 rounded-[24px] border border-neutral-200 bg-neutral-50 p-6" }, sectionMap.header ? /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { className: "whitespace-pre-wrap break-words text-xl font-semibold leading-8 text-neutral-950" }, headerLines[0]), headerLines.slice(1).length > 0 && /* @__PURE__ */ React.createElement("div", { className: "mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-neutral-500" }, headerLines.slice(1).join("  |  "))) : /* @__PURE__ */ React.createElement("p", { className: "text-sm text-neutral-500" }, "Your live preview will appear here as sections fill in."), missingKeywords.length > 0 && /* @__PURE__ */ React.createElement("div", { className: "mt-4 rounded-[18px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800" }, "Missing keywords: ", missingKeywords.join(", ")), [
     ["summary", "Summary"],
     ["experience", "Experience"],
     ["skills", "Skills"],
     ["education", "Education"]
   ].map(
-    ([id, label]) => sectionMap[id] ? /* @__PURE__ */ React.createElement("section", { key: id, className: "mt-6" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.16em] text-neutral-400" }, label), /* @__PURE__ */ React.createElement("div", { className: "mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-neutral-700" }, sectionMap[id])) : null
+    ([id, label]) => sectionMap[id] ? /* @__PURE__ */ React.createElement("section", { key: id, className: "mt-6" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.16em] text-neutral-400" }, label), /* @__PURE__ */ React.createElement("div", { className: "mt-2 space-y-2 text-sm leading-6 text-neutral-700" }, sectionMap[id].split("\n").filter(Boolean).map(
+      (line) => /^[-*•]/.test(line) ? /* @__PURE__ */ React.createElement("div", { key: `${id}-${line}`, className: "flex gap-2" }, /* @__PURE__ */ React.createElement("span", { className: "mt-[2px] text-neutral-400" }, "\u2022"), /* @__PURE__ */ React.createElement("span", null, line.replace(/^[-*•]\s*/, ""))) : /* @__PURE__ */ React.createElement("p", { key: `${id}-${line}`, className: "whitespace-pre-wrap break-words" }, line)
+    ))) : null
   ));
 }
 function Landing({ onStart }) {
@@ -21885,6 +21907,7 @@ function Builder({
   );
   const currentSectionText = normalizeText(selectedSection.content);
   const rewrittenSectionText = rewrittenSectionMap[selectedSection.id] || "";
+  const selectedSectionLineCount = currentSectionText ? currentSectionText.split("\n").filter(Boolean).length : 0;
   return /* @__PURE__ */ React.createElement("div", { className: "grid gap-6 xl:grid-cols-[1.05fr_0.95fr]" }, /* @__PURE__ */ React.createElement("div", { className: "space-y-5" }, /* @__PURE__ */ React.createElement(Panel, { className: "p-6" }, /* @__PURE__ */ React.createElement(SectionEyebrow, null, "Builder"), /* @__PURE__ */ React.createElement("div", { className: "mt-4 flex flex-wrap items-center justify-between gap-4" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("h2", { className: "text-3xl font-semibold tracking-[-0.04em] text-neutral-950" }, "Make each section stronger."), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-600" }, "Edit sections directly, generate a draft, then polish wording only if it helps.")), /* @__PURE__ */ React.createElement("div", { className: "grid min-w-[210px] gap-2 rounded-[20px] border border-neutral-200 bg-neutral-50 px-4 py-3 text-xs text-neutral-600" }, /* @__PURE__ */ React.createElement("div", { className: "flex items-center justify-between gap-3" }, /* @__PURE__ */ React.createElement("span", null, "Sections ready"), /* @__PURE__ */ React.createElement("span", { className: "font-semibold text-neutral-900" }, sectionSummary.ready, "/", sections.length)), /* @__PURE__ */ React.createElement("div", { className: "flex items-center justify-between gap-3" }, /* @__PURE__ */ React.createElement("span", null, "Need attention"), /* @__PURE__ */ React.createElement("span", { className: "font-semibold text-neutral-900" }, sectionSummary.needsDetail + sectionSummary.missing))))), /* @__PURE__ */ React.createElement(Panel, { className: "grid gap-5 p-6" }, /* @__PURE__ */ React.createElement("div", { className: "grid gap-4 md:grid-cols-2" }, /* @__PURE__ */ React.createElement("label", { className: "grid gap-2 text-sm font-medium text-neutral-900" }, "Target role", /* @__PURE__ */ React.createElement(
     "input",
     {
@@ -21947,7 +21970,7 @@ function Builder({
       /* @__PURE__ */ React.createElement("p", { className: "text-sm font-medium" }, section.title),
       /* @__PURE__ */ React.createElement("p", { className: cn("mt-1 text-xs", activeSection === section.id ? "text-white/70" : "text-neutral-500") }, status)
     );
-  })), /* @__PURE__ */ React.createElement("div", { className: "rounded-[24px] border border-neutral-200 bg-neutral-50 p-4" }, /* @__PURE__ */ React.createElement("p", { className: "text-sm font-semibold text-neutral-900" }, selectedSection.title), /* @__PURE__ */ React.createElement("p", { className: "mt-1 text-sm leading-6 text-neutral-600" }, selectedSection.prompt), /* @__PURE__ */ React.createElement(
+  })), /* @__PURE__ */ React.createElement("div", { className: "rounded-[24px] border border-neutral-200 bg-neutral-50 p-4" }, /* @__PURE__ */ React.createElement("div", { className: "flex items-start justify-between gap-4" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("p", { className: "text-sm font-semibold text-neutral-900" }, selectedSection.title), /* @__PURE__ */ React.createElement("p", { className: "mt-1 text-sm leading-6 text-neutral-600" }, selectedSection.prompt)), /* @__PURE__ */ React.createElement("div", { className: "rounded-full border border-neutral-200 bg-white px-3 py-1 text-xs text-neutral-500" }, selectedSectionLineCount, " line", selectedSectionLineCount === 1 ? "" : "s")), /* @__PURE__ */ React.createElement(
     "textarea",
     {
       value: selectedSection.content,
@@ -21955,7 +21978,7 @@ function Builder({
       placeholder: selectedSection.placeholder,
       className: "mt-4 min-h-[220px] w-full rounded-[20px] border border-neutral-200 bg-white px-4 py-3 text-sm leading-6 text-neutral-900 outline-none"
     }
-  ), /* @__PURE__ */ React.createElement("div", { className: "mt-3 grid gap-3 md:grid-cols-2" }, /* @__PURE__ */ React.createElement("div", { className: "rounded-[18px] border border-neutral-200 bg-white px-4 py-3" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400" }, "Section guidance"), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-600" }, sectionToneTips(selectedSection.id))), /* @__PURE__ */ React.createElement("div", { className: "rounded-[18px] border border-neutral-200 bg-white px-4 py-3" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400" }, "Editing goal"), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-600" }, selectedSection.helper))))), /* @__PURE__ */ React.createElement("div", { className: "flex flex-wrap gap-3" }, /* @__PURE__ */ React.createElement(
+  ), /* @__PURE__ */ React.createElement("p", { className: "mt-3 text-xs text-neutral-500" }, "Changes are saved in this browser session while you work."), /* @__PURE__ */ React.createElement("div", { className: "mt-3 grid gap-3 md:grid-cols-2" }, /* @__PURE__ */ React.createElement("div", { className: "rounded-[18px] border border-neutral-200 bg-white px-4 py-3" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400" }, "Section guidance"), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-600" }, sectionToneTips(selectedSection.id))), /* @__PURE__ */ React.createElement("div", { className: "rounded-[18px] border border-neutral-200 bg-white px-4 py-3" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400" }, "Editing goal"), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-600" }, selectedSection.helper))))), /* @__PURE__ */ React.createElement("div", { className: "flex flex-wrap gap-3" }, /* @__PURE__ */ React.createElement(
     "button",
     {
       onClick: onAnalyze,
@@ -22049,6 +22072,10 @@ function ResumeRefreshPrototype() {
   const [error, setError] = (0, import_react.useState)("");
   const [isAnalyzing, setIsAnalyzing] = (0, import_react.useState)(false);
   const [isRewriting, setIsRewriting] = (0, import_react.useState)(false);
+  const normalizedRewriteDraft = (0, import_react.useMemo)(
+    () => rewrite?.rewrittenResume ? serializeSections(deriveSections(profile, linkedinText, rewrite.rewrittenResume)) : "",
+    [linkedinText, profile, rewrite]
+  );
   (0, import_react.useEffect)(() => {
     window.sessionStorage.setItem(
       storageKey,
@@ -22187,7 +22214,7 @@ function ResumeRefreshPrototype() {
     setError("");
     setStatus(`Preparing ${format.toUpperCase()}...`);
     try {
-      const finalText = rewrite?.rewrittenResume || serializeSections(sections);
+      const finalText = normalizedRewriteDraft || serializeSections(sections);
       const response = await fetch("/api/export", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -22232,7 +22259,7 @@ function ResumeRefreshPrototype() {
     }
     window.location.href = "/api/auth/linkedin?return_to=/v2.html";
   }
-  const currentDraft = rewrite?.rewrittenResume || serializeSections(sections);
+  const currentDraft = normalizedRewriteDraft || serializeSections(sections);
   return /* @__PURE__ */ React.createElement("div", { className: "min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(179,120,67,0.12),transparent_28%),linear-gradient(180deg,#fcfaf6_0%,#f4efe8_100%)] px-5 py-8 text-neutral-950 sm:px-8" }, /* @__PURE__ */ React.createElement("div", { className: "mx-auto max-w-7xl" }, stage === "landing" ? /* @__PURE__ */ React.createElement(Landing, { onStart: () => setStage("source") }) : /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(WorkflowHeader, { stage, onBackToLanding: () => setStage("landing") }), (status || error) && /* @__PURE__ */ React.createElement(
     "div",
     {

@@ -626,20 +626,108 @@ function sanitizeFileStem(fileName) {
   return fileName.toLowerCase().replace(/[^a-z0-9-_]+/g, "-").replace(/^-+|-+$/g, "") || "resume-refresh";
 }
 
+function parseResumeForExport(text) {
+  const lines = String(text || "")
+    .replace(/\r/g, "")
+    .split("\n")
+    .map((line) => line.trimEnd());
+  const headingMap = new Map([
+    ["summary", "summary"],
+    ["professional summary", "summary"],
+    ["profile", "summary"],
+    ["about", "summary"],
+    ["experience", "experience"],
+    ["work experience", "experience"],
+    ["experience highlights", "experience"],
+    ["skills", "skills"],
+    ["core skills", "skills"],
+    ["technical skills", "skills"],
+    ["education", "education"]
+  ]);
+
+  const sections = {
+    header: [],
+    summary: [],
+    experience: [],
+    skills: [],
+    education: []
+  };
+  let current = "header";
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      if (current !== "header" && sections[current].length && sections[current][sections[current].length - 1] !== "") {
+        sections[current].push("");
+      }
+      continue;
+    }
+
+    const canonical = headingMap.get(trimmed.toLowerCase().replace(/[^a-z ]/g, "").trim());
+    if (canonical) {
+      current = canonical;
+      continue;
+    }
+
+    sections[current].push(trimmed);
+  }
+
+  for (const key of Object.keys(sections)) {
+    sections[key] = sections[key].filter((line, index, list) => !(line === "" && list[index - 1] === ""));
+  }
+
+  return sections;
+}
+
 async function buildDocx(text) {
-  const paragraphs = text.split(/\n{2,}/).map((block) => {
-    const lines = block.split("\n").filter(Boolean);
-    return new Paragraph({
-      children: lines.flatMap((line, index) => {
-        const runs = [new TextRun(line)];
-        if (index < lines.length - 1) {
-          runs.push(new TextRun({ text: "", break: 1 }));
-        }
-        return runs;
-      }),
-      spacing: { after: 220 }
-    });
-  });
+  const sections = parseResumeForExport(text);
+  const paragraphs = [];
+
+  if (sections.header[0]) {
+    paragraphs.push(new Paragraph({
+      children: [new TextRun({ text: sections.header[0], bold: true, size: 30 })],
+      spacing: { after: 120 }
+    }));
+  }
+
+  const headerMeta = sections.header.slice(1).join("  |  ");
+  if (headerMeta) {
+    paragraphs.push(new Paragraph({
+      children: [new TextRun({ text: headerMeta, color: "555555", size: 20 })],
+      spacing: { after: 240 }
+    }));
+  }
+
+  for (const [title, key] of [
+    ["Summary", "summary"],
+    ["Experience", "experience"],
+    ["Skills", "skills"],
+    ["Education", "education"]
+  ]) {
+    const lines = sections[key].filter((line) => line !== "");
+    if (!lines.length) {
+      continue;
+    }
+
+    paragraphs.push(new Paragraph({
+      children: [new TextRun({ text: title.toUpperCase(), bold: true, size: 18, color: "6B5B4D" })],
+      spacing: { before: 180, after: 120 }
+    }));
+
+    for (const line of sections[key]) {
+      if (!line) {
+        paragraphs.push(new Paragraph({ spacing: { after: 120 } }));
+        continue;
+      }
+
+      const isBullet = /^[-*•]/.test(line);
+      paragraphs.push(new Paragraph({
+        text: isBullet ? line.replace(/^[-*•]\s*/, "") : line,
+        bullet: isBullet ? { level: 0 } : undefined,
+        spacing: { after: isBullet ? 80 : 120 }
+      }));
+    }
+  }
 
   const doc = new Document({
     sections: [
@@ -654,32 +742,104 @@ async function buildDocx(text) {
 }
 
 async function buildPdf(text) {
+  const sections = parseResumeForExport(text);
   const pdf = await PDFDocument.create();
   let page = pdf.addPage([612, 792]);
   const font = await pdf.embedFont(StandardFonts.Helvetica);
+  const boldFont = await pdf.embedFont(StandardFonts.HelveticaBold);
   const fontSize = 11;
   const lineHeight = 16;
   const margin = 54;
   const maxWidth = page.getWidth() - margin * 2;
   let y = page.getHeight() - margin;
 
-  for (const block of text.split(/\n{2,}/)) {
-    const lines = wrapText(block.replace(/\n/g, " "), font, fontSize, maxWidth);
+  const ensureSpace = (required = lineHeight) => {
+    if (y < margin + required) {
+      page = pdf.addPage([612, 792]);
+      y = page.getHeight() - margin;
+    }
+  };
+
+  const drawWrapped = (textValue, options = {}) => {
+    const {
+      x = margin,
+      size = fontSize,
+      currentFont = font,
+      color = rgb(0.07, 0.11, 0.13),
+      indent = 0
+    } = options;
+    const lines = wrapText(textValue, currentFont, size, maxWidth - indent);
     for (const line of lines) {
-      if (y < margin) {
-        page = pdf.addPage([612, 792]);
-        y = page.getHeight() - margin;
-      }
+      ensureSpace(lineHeight);
       page.drawText(line, {
-        x: margin,
+        x: x + indent,
         y,
-        size: fontSize,
-        font,
-        color: rgb(0.07, 0.11, 0.13)
+        size,
+        font: currentFont,
+        color
       });
       y -= lineHeight;
     }
-    y -= lineHeight * 0.6;
+  };
+
+  if (sections.header[0]) {
+    drawWrapped(sections.header[0], {
+      size: 18,
+      currentFont: boldFont
+    });
+    y -= 4;
+  }
+
+  const headerMeta = sections.header.slice(1).join("  |  ");
+  if (headerMeta) {
+    drawWrapped(headerMeta, {
+      size: 10,
+      color: rgb(0.33, 0.33, 0.33)
+    });
+    y -= 10;
+  }
+
+  for (const [title, key] of [
+    ["SUMMARY", "summary"],
+    ["EXPERIENCE", "experience"],
+    ["SKILLS", "skills"],
+    ["EDUCATION", "education"]
+  ]) {
+    const lines = sections[key].filter((line) => line !== "");
+    if (!lines.length) {
+      continue;
+    }
+
+    ensureSpace(lineHeight * 2);
+    page.drawText(title, {
+      x: margin,
+      y,
+      size: 9,
+      font: boldFont,
+      color: rgb(0.42, 0.35, 0.28)
+    });
+    y -= lineHeight;
+
+    for (const line of sections[key]) {
+      if (!line) {
+        y -= 6;
+        continue;
+      }
+      if (/^[-*•]/.test(line)) {
+        ensureSpace(lineHeight);
+        page.drawText("•", {
+          x: margin + 2,
+          y,
+          size: fontSize,
+          font: boldFont,
+          color: rgb(0.07, 0.11, 0.13)
+        });
+        drawWrapped(line.replace(/^[-*•]\s*/, ""), { indent: 14 });
+      } else {
+        drawWrapped(line);
+      }
+    }
+    y -= 8;
   }
 
   return Buffer.from(await pdf.save());

@@ -177,6 +177,49 @@ function normalizeText(value: string) {
   return value.replace(/\r/g, "").trim();
 }
 
+const headingAliases: Record<SectionId, string[]> = {
+  header: [],
+  summary: ["SUMMARY", "PROFESSIONAL SUMMARY", "PROFILE", "ABOUT"],
+  experience: ["EXPERIENCE", "WORK EXPERIENCE", "EMPLOYMENT", "EXPERIENCE HIGHLIGHTS"],
+  skills: ["SKILLS", "CORE SKILLS", "TECHNICAL SKILLS", "CORE COMPETENCIES"],
+  education: ["EDUCATION"]
+};
+
+function parseStructuredSections(text: string) {
+  const lines = normalizeText(text).split("\n");
+  const sections: Record<SectionId, string[]> = {
+    header: [],
+    summary: [],
+    experience: [],
+    skills: [],
+    education: []
+  };
+  let current: SectionId = "header";
+
+  for (const rawLine of lines) {
+    const line = rawLine.trimEnd();
+    const trimmed = line.trim();
+    if (!trimmed) {
+      if (current !== "header" && sections[current][sections[current].length - 1] !== "") {
+        sections[current].push("");
+      }
+      continue;
+    }
+
+    const nextSection = (Object.keys(headingAliases) as SectionId[]).find((sectionId) =>
+      headingAliases[sectionId].includes(trimmed.toUpperCase())
+    );
+    if (nextSection) {
+      current = nextSection;
+      continue;
+    }
+
+    sections[current].push(trimmed);
+  }
+
+  return sections;
+}
+
 function extractSectionBlock(text: string, headings: string[]) {
   const normalized = normalizeText(text);
   if (!normalized) {
@@ -222,21 +265,15 @@ function extractHeaderBlock(text: string) {
 function deriveSections(profile: SessionProfile | null, linkedinText: string, resumeText: string) {
   const normalizedLinkedIn = normalizeText(linkedinText);
   const normalizedResume = normalizeText(resumeText);
+  const parsedResume = parseStructuredSections(normalizedResume);
 
   const headerFromProfile = [profile?.name, profile?.email].filter(Boolean).join("\n");
-  const header = headerFromProfile || extractHeaderBlock(normalizedResume);
-  const summary =
-    extractSectionBlock(normalizedResume, ["SUMMARY", "PROFESSIONAL SUMMARY", "PROFILE", "ABOUT"]) ||
-    normalizedLinkedIn.split(/\n{2,}/)[0] ||
-    "";
-  const experience =
-    extractSectionBlock(normalizedResume, ["EXPERIENCE", "WORK EXPERIENCE"]) ||
-    normalizedLinkedIn ||
-    "";
-  const skills =
-    extractSectionBlock(normalizedResume, ["SKILLS", "CORE SKILLS"]) ||
-    "";
-  const education = extractSectionBlock(normalizedResume, ["EDUCATION"]);
+  const parsedHeader = parsedResume.header.filter(Boolean).slice(0, 3).join("\n");
+  const header = headerFromProfile || parsedHeader || extractHeaderBlock(normalizedResume);
+  const summary = parsedResume.summary.filter(Boolean).join("\n") || normalizedLinkedIn.split(/\n{2,}/)[0] || "";
+  const experience = parsedResume.experience.join("\n") || normalizedLinkedIn || "";
+  const skills = parsedResume.skills.filter(Boolean).join("\n");
+  const education = parsedResume.education.filter(Boolean).join("\n");
 
   return buildDefaultSections({
     header,
@@ -391,14 +428,20 @@ function ResumePreview({
   missingKeywords: string[];
 }) {
   const sectionMap = Object.fromEntries(sections.map((section) => [section.id, normalizeText(section.content)])) as Record<SectionId, string>;
+  const headerLines = sectionMap.header.split("\n").filter(Boolean);
 
   return (
     <div className="mt-4 rounded-[24px] border border-neutral-200 bg-neutral-50 p-6">
       {sectionMap.header ? (
         <div>
-          <div className="whitespace-pre-wrap break-words text-lg font-semibold leading-7 text-neutral-950">
-            {sectionMap.header}
+          <div className="whitespace-pre-wrap break-words text-xl font-semibold leading-8 text-neutral-950">
+            {headerLines[0]}
           </div>
+          {headerLines.slice(1).length > 0 && (
+            <div className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-neutral-500">
+              {headerLines.slice(1).join("  |  ")}
+            </div>
+          )}
         </div>
       ) : (
         <p className="text-sm text-neutral-500">Your live preview will appear here as sections fill in.</p>
@@ -419,8 +462,17 @@ function ResumePreview({
         sectionMap[id] ? (
           <section key={id} className="mt-6">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-neutral-400">{label}</p>
-            <div className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-neutral-700">
-              {sectionMap[id]}
+            <div className="mt-2 space-y-2 text-sm leading-6 text-neutral-700">
+              {sectionMap[id].split("\n").filter(Boolean).map((line) =>
+                /^[-*•]/.test(line) ? (
+                  <div key={`${id}-${line}`} className="flex gap-2">
+                    <span className="mt-[2px] text-neutral-400">•</span>
+                    <span>{line.replace(/^[-*•]\s*/, "")}</span>
+                  </div>
+                ) : (
+                  <p key={`${id}-${line}`} className="whitespace-pre-wrap break-words">{line}</p>
+                )
+              )}
             </div>
           </section>
         ) : null
@@ -830,6 +882,7 @@ function Builder({
   ) as Partial<Record<SectionId, string>>;
   const currentSectionText = normalizeText(selectedSection.content);
   const rewrittenSectionText = rewrittenSectionMap[selectedSection.id] || "";
+  const selectedSectionLineCount = currentSectionText ? currentSectionText.split("\n").filter(Boolean).length : 0;
 
   return (
     <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
@@ -950,14 +1003,22 @@ function Builder({
             </div>
 
             <div className="rounded-[24px] border border-neutral-200 bg-neutral-50 p-4">
-              <p className="text-sm font-semibold text-neutral-900">{selectedSection.title}</p>
-              <p className="mt-1 text-sm leading-6 text-neutral-600">{selectedSection.prompt}</p>
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-sm font-semibold text-neutral-900">{selectedSection.title}</p>
+                  <p className="mt-1 text-sm leading-6 text-neutral-600">{selectedSection.prompt}</p>
+                </div>
+                <div className="rounded-full border border-neutral-200 bg-white px-3 py-1 text-xs text-neutral-500">
+                  {selectedSectionLineCount} line{selectedSectionLineCount === 1 ? "" : "s"}
+                </div>
+              </div>
               <textarea
                 value={selectedSection.content}
                 onChange={(event) => onSectionChange(selectedSection.id, event.target.value)}
                 placeholder={selectedSection.placeholder}
                 className="mt-4 min-h-[220px] w-full rounded-[20px] border border-neutral-200 bg-white px-4 py-3 text-sm leading-6 text-neutral-900 outline-none"
               />
+              <p className="mt-3 text-xs text-neutral-500">Changes are saved in this browser session while you work.</p>
               <div className="mt-3 grid gap-3 md:grid-cols-2">
                 <div className="rounded-[18px] border border-neutral-200 bg-white px-4 py-3">
                   <p className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400">Section guidance</p>
@@ -1168,6 +1229,10 @@ export default function ResumeRefreshPrototype() {
   const [error, setError] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isRewriting, setIsRewriting] = useState(false);
+  const normalizedRewriteDraft = useMemo(
+    () => (rewrite?.rewrittenResume ? serializeSections(deriveSections(profile, linkedinText, rewrite.rewrittenResume)) : ""),
+    [linkedinText, profile, rewrite]
+  );
 
   useEffect(() => {
     window.sessionStorage.setItem(
@@ -1319,7 +1384,7 @@ export default function ResumeRefreshPrototype() {
     setError("");
     setStatus(`Preparing ${format.toUpperCase()}...`);
     try {
-      const finalText = rewrite?.rewrittenResume || serializeSections(sections);
+      const finalText = normalizedRewriteDraft || serializeSections(sections);
       const response = await fetch("/api/export", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -1368,7 +1433,7 @@ export default function ResumeRefreshPrototype() {
     window.location.href = "/api/auth/linkedin?return_to=/v2.html";
   }
 
-  const currentDraft = rewrite?.rewrittenResume || serializeSections(sections);
+  const currentDraft = normalizedRewriteDraft || serializeSections(sections);
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(179,120,67,0.12),transparent_28%),linear-gradient(180deg,#fcfaf6_0%,#f4efe8_100%)] px-5 py-8 text-neutral-950 sm:px-8">
