@@ -60,7 +60,7 @@ const reviewSeedState = {
 test("manual v2 flow runs end-to-end through draft, AI rewrite, and export", async ({ page }) => {
   await page.goto("/v2.html");
 
-  await expect(page.getByText("Turn your experience into a stronger resume.")).toBeVisible();
+  await expect(page.getByText("Import your resume. Leave with a stronger one.")).toBeVisible();
   await page.getByRole("button", { name: "View sample" }).click();
   await expect(page.getByRole("button", { name: "Try this sample" })).toBeVisible();
   await page.getByRole("button", { name: "Refresh my resume" }).click();

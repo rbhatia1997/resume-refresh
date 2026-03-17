@@ -527,7 +527,7 @@ function ResumePreview({
 
 function SampleResumeCard() {
   return (
-    <div className="rounded-[30px] border border-neutral-200 bg-white p-5 shadow-[0_20px_70px_rgba(19,33,38,0.10)] sm:p-6">
+    <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm">
       <div className="flex items-center justify-between gap-3 border-b border-neutral-200 pb-4">
         <div>
           <p className="text-sm font-semibold text-neutral-950">Resume preview</p>
@@ -585,18 +585,19 @@ function Landing({
   onUseSample: () => void;
 }) {
   return (
-    <div className="space-y-10 sm:space-y-14">
-      <section className="grid gap-8 lg:grid-cols-[1.02fr_0.98fr] lg:items-center">
-        <div className="space-y-6">
+    <div>
+      <section className="py-14 sm:py-20">
+        <div className="grid gap-8 lg:grid-cols-[1.02fr_0.98fr] lg:items-center">
+          <div className="space-y-8">
           <div className="inline-flex items-center gap-2 rounded-full border border-neutral-200 bg-white/80 px-4 py-2 text-xs font-medium uppercase tracking-[0.16em] text-neutral-500 shadow-[0_10px_24px_rgba(19,33,38,0.05)]">
             <span className="h-2 w-2 rounded-full bg-emerald-500" />
             Resume Refresh
           </div>
           <div>
-            <h1 className="max-w-[10ch] text-[clamp(3rem,9vw,5.6rem)] font-semibold leading-[0.94] tracking-[-0.065em] text-neutral-950">
+            <h1 className="max-w-[10ch] text-4xl font-semibold leading-[0.95] tracking-[-0.05em] text-neutral-950 sm:text-5xl">
               Import your resume. Leave with a stronger one.
             </h1>
-            <p className="mt-5 max-w-2xl text-base leading-7 text-neutral-600 sm:text-lg">
+            <p className="mt-4 max-w-2xl text-base leading-7 text-neutral-600 sm:text-lg">
               Bring in an existing resume or LinkedIn details, improve weak bullets, and walk away with a cleaner recruiter-ready draft.
             </p>
           </div>
@@ -614,48 +615,49 @@ function Landing({
               View sample
             </button>
           </div>
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-6 sm:grid-cols-3">
             {[
               ["Import what you have", "Resume or LinkedIn"],
               ["Strengthen weak bullets", "Ownership + action + result"],
               ["Export a cleaner draft", "PDF or DOCX"]
             ].map(([label, copy]) => (
-              <div key={label} className="rounded-[22px] border border-neutral-200 bg-white/80 px-4 py-4 shadow-[0_10px_24px_rgba(19,33,38,0.04)]">
+              <div key={label} className="border-l border-neutral-300 pl-4">
                 <p className="text-sm font-semibold text-neutral-950">{label}</p>
                 <p className="mt-1 text-sm leading-6 text-neutral-500">{copy}</p>
               </div>
             ))}
           </div>
-        </div>
+          </div>
 
-        <div className="space-y-4">
-          <div className="rounded-[30px] border border-neutral-200 bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(246,239,228,0.88))] p-4 shadow-[0_30px_80px_rgba(19,33,38,0.10)] sm:p-5">
-            <div className="grid gap-4 lg:grid-cols-[0.44fr_0.56fr]">
-              <div className="rounded-[24px] border border-amber-200 bg-amber-50 p-4">
+          <div className="space-y-6">
+            <div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm sm:p-6">
+              <div className="grid gap-6 lg:grid-cols-[0.44fr_0.56fr]">
+                <div className="rounded-2xl bg-neutral-100 p-5">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-700">Before</p>
                 <div className="mt-4 space-y-4 text-sm leading-6 text-neutral-600">
                   <p>Worked on onboarding improvements for new users.</p>
                   <p>Helped with reporting for sales and leadership.</p>
                 </div>
               </div>
-              <div className="rounded-[24px] border border-emerald-200 bg-emerald-50 p-4">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-700">After</p>
-                <div className="mt-4 space-y-4 text-sm leading-6 text-emerald-950">
-                  <p>Owned the onboarding experience, launching experiments that improved activation for new accounts.</p>
-                  <p>Built weekly revenue and pipeline reporting for sales leadership, giving teams clearer visibility into forecast risk and next actions.</p>
+                <div className="relative rounded-2xl bg-[#f2f6f3] p-5 before:absolute before:bottom-5 before:left-0 before:top-5 before:w-px before:bg-neutral-200 before:content-[''] lg:before:-left-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-700">After</p>
+                  <div className="mt-4 space-y-4 text-sm leading-6 text-neutral-800">
+                    <p>Owned the onboarding experience, launching experiments that improved activation for new accounts.</p>
+                    <p>Built weekly revenue and pipeline reporting for sales leadership, giving teams clearer visibility into forecast risk and next actions.</p>
+                  </div>
                 </div>
               </div>
             </div>
+            <SampleResumeCard />
           </div>
-          <SampleResumeCard />
         </div>
       </section>
 
-      <section id="sample-preview" className="scroll-mt-24">
-        <div className="flex flex-col items-start justify-between gap-5 lg:flex-row lg:items-end">
+      <section id="sample-preview" className="scroll-mt-24 py-14 sm:py-20">
+        <div className="flex flex-col items-start justify-between gap-6 lg:flex-row lg:items-end">
           <div>
             <SectionEyebrow>Immediate proof</SectionEyebrow>
-            <h2 className="mt-3 max-w-[12ch] text-3xl font-semibold tracking-[-0.05em] text-neutral-950 sm:text-4xl">
+            <h2 className="mt-3 max-w-[12ch] text-4xl font-semibold tracking-[-0.05em] text-neutral-950 sm:text-5xl">
               Better bullets should feel obviously better.
             </h2>
           </div>
@@ -666,28 +668,29 @@ function Landing({
             Try this sample
           </button>
         </div>
-        <div className="mt-6 grid gap-4 lg:grid-cols-2">
+        <div className="mt-8 space-y-6">
           {beforeAfter.map((item) => (
-            <Panel key={item.before} className="overflow-hidden p-0">
-              <div className="grid divide-y divide-neutral-200">
-                <div className="p-6">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-neutral-400">Before</p>
-                  <p className="mt-3 text-base leading-7 text-neutral-500">{item.before}</p>
+            <div key={item.before} className="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm">
+              <div className="grid md:grid-cols-2">
+                <div className="bg-neutral-100 p-6">
+                  <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-neutral-500">Before</p>
+                  <p className="mt-3 text-base leading-7 text-neutral-600">{item.before}</p>
                 </div>
-                <div className="bg-emerald-50 p-6">
+                <div className="border-t border-neutral-200 bg-[#f2f6f3] p-6 md:border-l md:border-t-0">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-700">After</p>
-                  <p className="mt-3 text-base leading-7 text-emerald-950">{item.after}</p>
+                  <p className="mt-3 text-base leading-7 text-neutral-900">{item.after}</p>
                 </div>
               </div>
-            </Panel>
+            </div>
           ))}
         </div>
       </section>
 
-      <section className="grid gap-8 lg:grid-cols-[0.8fr_1.2fr] lg:items-start">
+      <section className="py-14 sm:py-20">
+        <div className="grid gap-8 lg:grid-cols-[0.8fr_1.2fr] lg:items-start">
         <div>
           <SectionEyebrow>How it works</SectionEyebrow>
-          <h2 className="mt-3 max-w-[12ch] text-3xl font-semibold tracking-[-0.05em] text-neutral-950 sm:text-4xl">
+          <h2 className="mt-3 max-w-[12ch] text-4xl font-semibold tracking-[-0.05em] text-neutral-950 sm:text-5xl">
             Tight, guided, and built to get you moving.
           </h2>
         </div>
@@ -704,39 +707,41 @@ function Landing({
             </Panel>
           ))}
         </div>
+        </div>
       </section>
 
-      <section className="grid gap-8 lg:grid-cols-[1.08fr_0.92fr]">
-        <div className="space-y-8">
+      <section className="py-14 sm:py-20">
+        <div className="grid gap-8 lg:grid-cols-[1.08fr_0.92fr]">
+          <div className="space-y-8">
           <div>
             <SectionEyebrow>Product preview</SectionEyebrow>
-            <h2 className="mt-3 max-w-[12ch] text-3xl font-semibold tracking-[-0.05em] text-neutral-950 sm:text-4xl">
+            <h2 className="mt-3 max-w-[12ch] text-4xl font-semibold tracking-[-0.05em] text-neutral-950 sm:text-5xl">
               It shows the work, not just the answer.
             </h2>
           </div>
-          <Panel className="overflow-hidden p-0">
-            <div className="grid gap-0 divide-y divide-neutral-200">
-              <div className="grid gap-4 p-6 sm:grid-cols-[0.45fr_0.55fr]">
-                <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-neutral-400">Section editor</p>
-                  <p className="mt-2 text-sm leading-6 text-neutral-600">
-                    Edit summary, experience, skills, and education one section at a time.
-                  </p>
+          <div className="grid gap-8 lg:grid-cols-[0.42fr_0.58fr] lg:items-start">
+            <div className="space-y-6">
+              {featureCards.map(([title, copy]) => (
+                <div key={title}>
+                  <p className="text-base font-semibold text-neutral-950">{title}</p>
+                  <p className="mt-2 text-base leading-7 text-neutral-600">{copy}</p>
                 </div>
-                <div className="rounded-[22px] border border-neutral-200 bg-neutral-50 p-4 text-sm leading-6 text-neutral-700">
+              ))}
+            </div>
+            <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm">
+              <div className="border-b border-neutral-200 pb-4">
+                <p className="text-sm font-semibold text-neutral-950">Product preview</p>
+                <p className="mt-1 text-base leading-7 text-neutral-600">
+                  Edit one section at a time, review stronger wording, and watch the draft update in place.
+                </p>
+              </div>
+              <div className="grid gap-6 pt-6">
+                <div className="text-sm leading-6 text-neutral-700">
                   <p className="font-medium text-neutral-900">Experience</p>
-                  <p className="mt-2">Owned onboarding experiments across web and lifecycle email, lifting activation for new accounts.</p>
+                  <p className="mt-3">Owned onboarding experiments across web and lifecycle email, lifting activation for new accounts.</p>
                   <p className="mt-2">Led pricing tests with finance and sales, improving expansion readiness for mid-market customers.</p>
                 </div>
-              </div>
-              <div className="grid gap-4 p-6 sm:grid-cols-[0.45fr_0.55fr]">
-                <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-neutral-400">Live preview</p>
-                  <p className="mt-2 text-sm leading-6 text-neutral-600">
-                    See the resume take shape while you edit instead of guessing what the final version looks like.
-                  </p>
-                </div>
-                <div className="rounded-[22px] border border-neutral-200 bg-white p-4 text-sm leading-6 text-neutral-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
+                <div className="border-t border-neutral-200 pt-6 text-sm leading-6 text-neutral-700">
                   <p className="font-semibold text-neutral-950">Maya Patel</p>
                   <p className="mt-1 text-neutral-500">San Francisco, CA  |  maya@resumerefresh.app</p>
                   <p className="mt-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-neutral-400">Summary</p>
@@ -744,40 +749,38 @@ function Landing({
                 </div>
               </div>
             </div>
-          </Panel>
-        </div>
+          </div>
+          </div>
 
-        <div className="space-y-6">
-          <Panel className="p-6 sm:p-8">
-            <SectionEyebrow>Trust</SectionEyebrow>
-            <h2 className="mt-3 text-2xl font-semibold tracking-[-0.04em] text-neutral-950">
-              Import is a shortcut, not a black box.
-            </h2>
-            <div className="mt-5 space-y-3">
-              {trustPoints.map((point) => (
-                <div key={point} className="flex gap-3 text-sm leading-6 text-neutral-600">
-                  <span className="mt-[6px] h-2 w-2 rounded-full bg-emerald-500" />
-                  <span>{point}</span>
-                </div>
-              ))}
+          <div className="space-y-6">
+            <div>
+              <SectionEyebrow>Trust and benefits</SectionEyebrow>
+              <h2 className="mt-3 text-4xl font-semibold tracking-[-0.05em] text-neutral-950 sm:text-5xl">
+                Clear inputs. Better outputs. Full control.
+              </h2>
             </div>
-          </Panel>
-
-          <Panel className="p-6 sm:p-8">
-            <SectionEyebrow>Benefits</SectionEyebrow>
-            <div className="mt-4 space-y-4">
-              {benefitRows.map(([title, copy]) => (
-                <div key={title} className="border-b border-neutral-200 pb-4 last:border-b-0 last:pb-0">
-                  <p className="text-sm font-semibold text-neutral-950">{title}</p>
-                  <p className="mt-2 text-sm leading-6 text-neutral-600">{copy}</p>
-                </div>
-              ))}
+            <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm">
+              <div className="space-y-6">
+                {[
+                  ...trustPoints.map((point) => ["Trust", point] as const),
+                  ...benefitRows
+                ].map(([title, copy]) => (
+                  <div key={`${title}-${copy}`} className="flex gap-4 border-b border-neutral-200 pb-6 last:border-b-0 last:pb-0">
+                    <span className="mt-2 h-2 w-2 rounded-full bg-emerald-500" />
+                    <div>
+                      <p className="text-base font-semibold text-neutral-950">{title}</p>
+                      <p className="mt-2 text-base leading-7 text-neutral-600">{copy}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
-          </Panel>
+          </div>
         </div>
       </section>
 
-      <section className="grid gap-8 lg:grid-cols-[1fr_0.9fr]">
+      <section className="py-14 sm:py-20">
+        <div className="grid gap-8 lg:grid-cols-[1fr_0.9fr]">
         <Panel className="p-6 sm:p-8">
           <SectionEyebrow>FAQ</SectionEyebrow>
           <div className="mt-5 divide-y divide-neutral-200">
@@ -807,6 +810,7 @@ function Landing({
             Start Resume Refresh
           </button>
         </Panel>
+        </div>
       </section>
     </div>
   );
@@ -1349,7 +1353,7 @@ function Builder({
         )}
       </div>
 
-      <Panel className="h-fit p-6 xl:sticky xl:top-8">
+      <Panel className="h-fit rounded-2xl p-6 xl:sticky xl:top-8">
         <SectionEyebrow>Live preview</SectionEyebrow>
         <p className="mt-3 text-sm text-neutral-500">
           {rewrite?.rewrittenResume
