@@ -1,5 +1,4 @@
 import { Buffer } from "node:buffer";
-import crypto from "node:crypto";
 import { createRequire } from "node:module";
 import { promises as fs, readFileSync } from "node:fs";
 import path from "node:path";
@@ -12,7 +11,6 @@ import { analyzeResume } from "./resume-analyzer.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, "..");
 const publicDir = path.resolve(projectRoot, "public");
-const sessionCookieName = "resume_refresh_session";
 const maxBodyBytes = 6 * 1024 * 1024;
 const maxRewriteChars = 18000;
 const rateLimits = new Map();
@@ -20,13 +18,14 @@ const require = createRequire(import.meta.url);
 
 loadDotEnv();
 
-const linkedInClientId = process.env.LINKEDIN_CLIENT_ID || process.env.LI_CLIENT_ID || "";
-const linkedInClientSecret = process.env.LINKEDIN_CLIENT_SECRET || process.env.LI_CLIENT_SECRET || "";
-const linkedInScopes = (process.env.LINKEDIN_SCOPES || "openid profile email").trim();
-const appSecret = process.env.APP_SECRET || process.env.SESSION_SECRET || "dev-only-secret-change-me";
 const openAiApiKey = process.env.OPENAI_API_KEY || "";
-const hasSecureAppSecret = process.env.NODE_ENV !== "production" || appSecret !== "dev-only-secret-change-me";
 const openai = openAiApiKey ? new OpenAI({ apiKey: openAiApiKey }) : null;
+const modelPricing = {
+  "gpt-4.1-mini": {
+    inputPerMillionUsd: 0.4,
+    outputPerMillionUsd: 1.6
+  }
+};
 
 const mimeTypes = {
   ".html": "text/html; charset=utf-8",
@@ -36,6 +35,15 @@ const mimeTypes = {
   ".txt": "text/plain; charset=utf-8",
   ".svg": "image/svg+xml"
 };
+
+class AppError extends Error {
+  constructor(message, { status = 400, expose = true } = {}) {
+    super(message);
+    this.name = "AppError";
+    this.status = status;
+    this.expose = expose;
+  }
+}
 
 export function getListenConfig() {
   return {
@@ -50,80 +58,7 @@ export async function handleRequest(request, { serveStatic = true } = {}) {
 
     if (request.method === "GET" && url.pathname === "/api/config") {
       return jsonResponse({
-        linkedInAuthEnabled: Boolean(linkedInClientId && linkedInClientSecret && hasSecureAppSecret),
-        requiresAppSecret: !hasSecureAppSecret,
         openAiRewriteEnabled: Boolean(openai)
-      });
-    }
-
-    if (request.method === "GET" && url.pathname === "/api/session") {
-      const session = getSession(request);
-      return jsonResponse({
-        authenticated: Boolean(session),
-        profile: session?.profile || null
-      });
-    }
-
-    if (request.method === "GET" && url.pathname === "/api/auth/linkedin") {
-      assertSecureAppSecret();
-      if (!linkedInClientId || !linkedInClientSecret) {
-        return jsonResponse({
-          error: "LinkedIn auth is not configured. Set LINKEDIN_CLIENT_ID and LINKEDIN_CLIENT_SECRET."
-        }, { status: 400 });
-      }
-
-      const redirectUri = `${getBaseUrl(request)}/api/auth/linkedin/callback`;
-      const returnTo = sanitizeReturnTo(url.searchParams.get("return_to"));
-      const state = signToken({
-        exp: Date.now() + 10 * 60 * 1000,
-        redirectUri,
-        returnTo
-      });
-      const authUrl = new URL("https://www.linkedin.com/oauth/v2/authorization");
-      authUrl.search = new URLSearchParams({
-        response_type: "code",
-        client_id: linkedInClientId,
-        redirect_uri: redirectUri,
-        scope: linkedInScopes,
-        state
-      }).toString();
-      return redirectResponse(authUrl.toString());
-    }
-
-    if (request.method === "GET" && url.pathname === "/api/auth/linkedin/callback") {
-      assertSecureAppSecret();
-      const state = url.searchParams.get("state") || "";
-      const code = url.searchParams.get("code") || "";
-      const error = url.searchParams.get("error") || "";
-      const parsedState = verifyToken(state);
-
-      if (error) {
-        return redirectResponse(buildAuthRedirect(parsedState?.returnTo, "denied"));
-      }
-
-      if (!parsedState || parsedState.exp < Date.now() || !code) {
-        return redirectResponse(buildAuthRedirect(parsedState?.returnTo, "invalid"));
-      }
-
-      try {
-        const tokenPayload = await exchangeLinkedInCode({
-          code,
-          redirectUri: parsedState.redirectUri
-        });
-        const profile = await fetchLinkedInUser(tokenPayload.access_token);
-        return redirectResponse(buildAuthRedirect(parsedState.returnTo, "connected"), {
-          cookies: [buildSessionCookie(profile)]
-        });
-      } catch {
-        return redirectResponse(buildAuthRedirect(parsedState.returnTo, "failed"));
-      }
-    }
-
-    if (request.method === "POST" && url.pathname === "/api/auth/logout") {
-      assertSecureAppSecret();
-      enforceSameOrigin(request);
-      return jsonResponse({ ok: true }, {
-        cookies: [clearSessionCookie()]
       });
     }
 
@@ -132,20 +67,16 @@ export async function handleRequest(request, { serveStatic = true } = {}) {
       enforceRateLimit(request, "analyze", { limit: 20, windowMs: 60_000 });
       const body = await readJsonBody(request);
       const resolvedResumeText = await extractResumeText(body);
-      const session = getSession(request);
-      const linkedInProfileText = profileToText(session?.profile);
-      const linkedInText = [linkedInProfileText, body.linkedinText || ""].filter(Boolean).join("\n");
       const result = analyzeResume({
-        linkedinText: linkedInText,
-        linkedinUrl: body.linkedinUrl || "",
-        resumeText: resolvedResumeText,
-        targetRole: body.targetRole || ""
+        linkedinText: sanitizeUserText(body.linkedinText || "", 20_000),
+        linkedinUrl: sanitizeLinkedInUrl(body.linkedinUrl || ""),
+        resumeText: sanitizeUserText(resolvedResumeText, 30_000),
+        targetRole: sanitizeUserText(body.targetRole || "", 120)
       });
 
       return jsonResponse({
         ...result,
-        extractedResumeText: resolvedResumeText,
-        linkedInProfile: session?.profile || null
+        extractedResumeText: sanitizeUserText(resolvedResumeText, 30_000)
       });
     }
 
@@ -155,6 +86,12 @@ export async function handleRequest(request, { serveStatic = true } = {}) {
       assertOpenAiConfigured();
       const body = await readJsonBody(request);
       const rewritten = await rewriteWithOpenAI(body);
+      logOpenAiUsage(rewritten.usage, {
+        endpoint: "/api/rewrite",
+        style: body.style || "",
+        targetRole: body.targetRole || ""
+      });
+      delete rewritten.usage;
       return jsonResponse(rewritten);
     }
 
@@ -171,9 +108,12 @@ export async function handleRequest(request, { serveStatic = true } = {}) {
 
     return textResponse("Not found", { status: 404 });
   } catch (error) {
+    if (!(error instanceof AppError)) {
+      console.error("[request_error]", error);
+    }
     return jsonResponse({
-      error: error instanceof Error ? error.message : "Unknown error"
-    }, { status: 400 });
+      error: publicErrorMessage(error)
+    }, { status: publicErrorStatus(error) });
   }
 }
 
@@ -201,15 +141,9 @@ function loadDotEnv() {
   }
 }
 
-function assertSecureAppSecret() {
-  if (!hasSecureAppSecret) {
-    throw new Error("APP_SECRET must be set in production.");
-  }
-}
-
 function assertOpenAiConfigured() {
   if (!openai) {
-    throw new Error("OPENAI_API_KEY is not configured.");
+    throw new AppError("AI rewrite is not available right now.", { status: 503 });
   }
 }
 
@@ -249,28 +183,43 @@ function enforceRateLimit(request, action, { limit, windowMs }) {
   }
 }
 
-function parseCookies(request) {
-  const header = request.headers.get("cookie") || "";
-  return Object.fromEntries(
-    header
-      .split(";")
-      .map((part) => part.trim())
-      .filter(Boolean)
-      .map((part) => {
-        const index = part.indexOf("=");
-        if (index === -1) {
-          return [part, ""];
-        }
-        return [part.slice(0, index), decodeURIComponent(part.slice(index + 1))];
-      })
-  );
-}
-
 function getBaseUrl(request) {
   if (process.env.PUBLIC_BASE_URL) {
     return process.env.PUBLIC_BASE_URL.replace(/\/$/, "");
   }
   return new URL(request.url).origin;
+}
+
+function sanitizeUserText(value = "", maxLength = 20_000) {
+  return String(value).replace(/\0/g, "").slice(0, maxLength).trim();
+}
+
+function sanitizeLinkedInUrl(value = "") {
+  const trimmed = String(value).trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  try {
+    const parsed = new URL(trimmed);
+    if (!["http:", "https:"].includes(parsed.protocol)) {
+      return "";
+    }
+    return parsed.toString();
+  } catch {
+    return "";
+  }
+}
+
+function publicErrorMessage(error) {
+  if (error instanceof AppError && error.expose) {
+    return error.message;
+  }
+  return "Something went wrong. Please try again.";
+}
+
+function publicErrorStatus(error) {
+  return error instanceof AppError ? error.status : 500;
 }
 
 function getSecurityHeaders(contentType = "text/plain; charset=utf-8") {
@@ -285,148 +234,30 @@ function getSecurityHeaders(contentType = "text/plain; charset=utf-8") {
   };
 }
 
-function isSecureCookie() {
-  return process.env.NODE_ENV === "production" || /^https:/i.test(process.env.PUBLIC_BASE_URL || "");
-}
-
-function signValue(value) {
-  return crypto.createHmac("sha256", appSecret).update(value).digest("base64url");
-}
-
-function signToken(payload) {
-  const encoded = Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
-  return `${encoded}.${signValue(encoded)}`;
-}
-
-function verifyToken(token) {
-  const [encoded, signature] = token.split(".");
-  if (!encoded || !signature) {
-    return null;
-  }
-  const expected = signValue(encoded);
-  const actualBuffer = Buffer.from(signature);
-  const expectedBuffer = Buffer.from(expected);
-  if (actualBuffer.length !== expectedBuffer.length) {
-    return null;
-  }
-  const valid = crypto.timingSafeEqual(actualBuffer, expectedBuffer);
-  if (!valid) {
-    return null;
-  }
-  try {
-    return JSON.parse(Buffer.from(encoded, "base64url").toString("utf8"));
-  } catch {
-    return null;
-  }
-}
-
-function normalizeLinkedInProfile(profile = {}) {
-  const name = profile.name || [profile.given_name, profile.family_name].filter(Boolean).join(" ").trim();
-  return {
-    id: profile.sub || "",
-    name,
-    email: profile.email || "",
-    picture: profile.picture || ""
-  };
-}
-
-function buildSessionCookie(profile) {
-  const token = signToken({
-    exp: Date.now() + 7 * 24 * 60 * 60 * 1000,
-    v: 1,
-    profile: {
-      id: profile.id || "",
-      name: profile.name || "",
-      email: profile.email || "",
-      picture: profile.picture || ""
-    }
-  });
-  return `${sessionCookieName}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${7 * 24 * 60 * 60}${isSecureCookie() ? "; Secure" : ""}`;
-}
-
-function clearSessionCookie() {
-  return `${sessionCookieName}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${isSecureCookie() ? "; Secure" : ""}`;
-}
-
-function getSession(request) {
-  const cookies = parseCookies(request);
-  const token = cookies[sessionCookieName];
-  if (!token) {
-    return null;
-  }
-  const session = verifyToken(token);
-  if (!session || session.exp < Date.now()) {
-    return null;
-  }
-  return session;
-}
-
-function profileToText(profile) {
-  if (!profile) {
-    return "";
-  }
-  const lines = [];
-  if (profile.name) {
-    lines.push(`Name: ${profile.name}`);
-  }
-  if (profile.email) {
-    lines.push(`Email: ${profile.email}`);
-  }
-  return lines.join("\n");
-}
-
-async function exchangeLinkedInCode({ code, redirectUri }) {
-  const tokenResponse = await fetch("https://www.linkedin.com/oauth/v2/accessToken", {
-    method: "POST",
-    headers: {
-      "content-type": "application/x-www-form-urlencoded"
-    },
-    body: new URLSearchParams({
-      grant_type: "authorization_code",
-      code,
-      client_id: linkedInClientId,
-      client_secret: linkedInClientSecret,
-      redirect_uri: redirectUri
-    })
-  });
-
-  if (!tokenResponse.ok) {
-    throw new Error(`LinkedIn token exchange failed with ${tokenResponse.status}`);
-  }
-
-  return tokenResponse.json();
-}
-
-async function fetchLinkedInUser(accessToken) {
-  const userResponse = await fetch("https://api.linkedin.com/v2/userinfo", {
-    headers: {
-      authorization: `Bearer ${accessToken}`
-    }
-  });
-
-  if (!userResponse.ok) {
-    throw new Error(`LinkedIn userinfo failed with ${userResponse.status}`);
-  }
-
-  return normalizeLinkedInProfile(await userResponse.json());
-}
-
 async function readJsonBody(request) {
   const contentLength = Number(request.headers.get("content-length") || 0);
   if (contentLength > maxBodyBytes) {
-    throw new Error("Payload too large. Keep uploads under 6 MB.");
+    throw new AppError("Payload too large. Keep uploads under 6 MB.", { status: 413 });
   }
 
   const raw = await request.text();
-  if (raw.length > maxBodyBytes) {
-    throw new Error("Payload too large. Keep uploads under 6 MB.");
+  if (Buffer.byteLength(raw, "utf8") > maxBodyBytes) {
+    throw new AppError("Payload too large. Keep uploads under 6 MB.", { status: 413 });
   }
-  return raw ? JSON.parse(raw) : {};
+  if (!raw) {
+    return {};
+  }
+  try {
+    return JSON.parse(raw);
+  } catch {
+    throw new AppError("Invalid request body.", { status: 400 });
+  }
 }
 
 async function extractResumeText({ resumeText = "", resumeFileName = "", resumeFileBase64 = "" }) {
-  if (resumeText.trim()) {
-    return resumeText;
+  const directText = sanitizeUserText(resumeText, 30_000);
+  if (directText) {
+    return directText;
   }
 
   if (!resumeFileBase64) {
@@ -435,92 +266,247 @@ async function extractResumeText({ resumeText = "", resumeFileName = "", resumeF
 
   const buffer = Buffer.from(resumeFileBase64, "base64");
   if (buffer.byteLength > 4.5 * 1024 * 1024) {
-    throw new Error("Resume file is too large. Keep files under 4.5 MB.");
+    throw new AppError("Resume file is too large. Keep files under 4.5 MB.", { status: 413 });
   }
 
   const extension = path.extname(resumeFileName).toLowerCase();
   if (extension === ".pdf") {
     const pdfParse = require("pdf-parse");
-    const parsed = await pdfParse(buffer);
-    return parsed.text.trim();
+    try {
+      const parsed = await pdfParse(buffer);
+      return sanitizeUserText(parsed.text, 30_000);
+    } catch {
+      throw new AppError("We could not read that PDF. Try a text-based PDF, TXT, or MD file.", { status: 400 });
+    }
   }
 
   if ([".txt", ".md"].includes(extension)) {
-    return buffer.toString("utf8");
+    return sanitizeUserText(buffer.toString("utf8"), 30_000);
   }
 
-  throw new Error("Unsupported file type. Use PDF, TXT, or MD.");
+  throw new AppError("Unsupported file type. Use PDF, TXT, or MD.", { status: 400 });
 }
 
 async function rewriteWithOpenAI(body) {
-  const resumeText = String(body.resumeText || "").trim();
-  const linkedinText = String(body.linkedinText || "").trim();
-  const targetRole = String(body.targetRole || "").trim();
-  const style = String(body.style || "concise").trim();
+  const resumeText = sanitizeUserText(body.resumeText || "", 30_000);
+  const linkedinText = sanitizeUserText(body.linkedinText || "", 20_000);
+  const targetRole = sanitizeUserText(body.targetRole || "", 120);
+  const style = sanitizeUserText(body.style || "concise", 40);
+  const sectionId = sanitizeUserText(body.sectionId || "", 40);
+  const actionId = sanitizeUserText(body.actionId || "", 60);
 
   if (!resumeText && !linkedinText) {
-    throw new Error("Provide resume or LinkedIn text first.");
+    throw new AppError("Provide resume or LinkedIn text first.", { status: 400 });
   }
 
   const sourceText = [resumeText, linkedinText].filter(Boolean).join("\n\n");
   if (sourceText.length > maxRewriteChars) {
-    throw new Error("Input is too long for AI rewrite. Trim it below 18,000 characters.");
+    throw new AppError("Input is too long for AI rewrite. Trim it below 18,000 characters.", { status: 400 });
   }
 
-  const response = await openai.responses.create({
-    model: "gpt-4.1-mini",
-    input: [
-      {
-        role: "system",
-        content: [
-          {
-            type: "input_text",
-            text: "You are an expert resume writer following strict career-center guidance. Every experience bullet must aim for: strong action verb -> activity or scope -> result. Use present tense for current work and past tense for past work when the source makes that clear. Avoid filler phrasing like 'helped with', 'worked on', 'responsible for', or 'assisted with'. Never invent facts, titles, dates, or metrics. If the source does not support a result, keep the bullet truthful and concise, then note the missing impact separately."
-          }
-        ]
-      },
-      {
-        role: "user",
-        content: [
-          {
-            type: "input_text",
-            text: `Target role: ${targetRole || "Not provided"}\nPreferred style: ${style}\n\nSource material:\n${sourceText}\n\nReturn JSON with keys: summary, rewritten_resume, bullet_improvements, notes.\n- summary: 1 short sentence.\n- rewritten_resume: plain text resume with sections in this order when present: SUMMARY, EXPERIENCE, SKILLS, EDUCATION.\n- Only include a section if the source actually supports it. Do not output placeholders like \"Not provided\", \"N/A\", or empty section shells.\n- EXPERIENCE bullets must be recruiter-friendly and compact. Each bullet should answer, in one line if possible: what the person owned or did, how they did it, and what changed.\n- Prefer credible wording over inflated wording.\n- Keep bullets scannable and avoid first person.\n- bullet_improvements: an array of short before/after style guidance focused on ownership, action, and impact.\n- notes: caveats where facts, metrics, dates, or scope are missing.\nDo not use fake metrics. Do not use fluff or generic buzzwords.`
-          }
-        ]
-      }
-    ],
-    text: {
-      format: {
-        type: "json_schema",
-        name: "resume_rewrite",
-        schema: {
-          type: "object",
-          additionalProperties: false,
-          properties: {
-            summary: { type: "string" },
-            rewritten_resume: { type: "string" },
-            bullet_improvements: {
-              type: "array",
-              items: { type: "string" }
-            },
-            notes: {
-              type: "array",
-              items: { type: "string" }
+  let response;
+  try {
+    response = await openai.responses.create({
+      model: "gpt-4.1-mini",
+      input: [
+        {
+          role: "system",
+          content: [
+            {
+              type: "input_text",
+              text: "You are an expert resume writer following strict career-center guidance. The resume must stay ATS-safe: plain text structure, standard section titles, no tables, no columns, no text boxes, no graphics, no decorative symbols as layout, and no first-person phrasing. Every experience bullet must aim for C.A.R.: context -> action -> result. Quantify the result wherever the source supports it. Use present tense for current work and past tense for past work when the source makes that clear. Avoid filler phrasing like 'helped with', 'worked on', 'responsible for', or 'assisted with'. Never invent facts, titles, dates, or metrics. If the source does not support a result, keep the bullet truthful and concise, then note the missing impact separately."
             }
-          },
-          required: ["summary", "rewritten_resume", "bullet_improvements", "notes"]
+          ]
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "input_text",
+              text: `Target role: ${targetRole || "Not provided"}\nPreferred style: ${style}\nFocus section: ${sectionId || "resume-wide cleanup"}\nRequested action: ${actionId || "general cleanup"}\n\nSource material:\n${sourceText}\n\nReturn JSON with keys: summary, rewritten_resume, bullet_improvements, trust_entries, notes.\n- summary: 1 short sentence.\n- rewritten_resume: plain text resume with sections in this order when present: SUMMARY, EXPERIENCE, SKILLS, EDUCATION.\n- Only include a section if the source actually supports it. Do not output placeholders like "Not provided", "N/A", or empty section shells.\n- Keep sections outside the focus section materially unchanged unless a minimal cleanup is required for consistency.\n- Apply the requested action only to the focus section.\n- If the action is about alignment, change emphasis and ordering for that section without inventing new facts.\n- If the action is about stronger bullets, only revise bullets inside EXPERIENCE.\n- If the action is about concise education or header cleanup, only rewrite that section.\n- Use standard section titles like SUMMARY, EXPERIENCE, SKILLS, and EDUCATION.\n- EXPERIENCE bullets must be recruiter-friendly, ATS-safe, and compact. Each bullet should answer, in one line if possible: context, what the person did, and what changed.\n- Prefer credible wording over inflated wording.\n- Keep bullets scannable, avoid first person, and use quantified results only when the source supports them.\n- bullet_improvements: an array of short before/after style guidance focused on the focus section only.\n- trust_entries: an array of 1 to 3 objects with keys original, rewrite, what_changed, why_stronger, evidence_level, confidence_note.\n- trust_entries must refer only to changes in the focus section.\n- evidence_level must be one of: grounded, structured, inferred.\n- Use grounded when the rewrite only clarifies supported source facts.\n- Use structured when the rewrite improves framing or emphasis without adding unsupported facts.\n- Use inferred only when the rewrite strengthens specificity beyond the source. If you use inferred, confidence_note must explain the missing evidence.\n- Never silently introduce a metric or concrete result unless the source supports it.\n- notes: caveats where facts, metrics, dates, or scope are missing.\nDo not use fake metrics. Do not use fluff or generic buzzwords.`
+            }
+          ]
+        }
+      ],
+      text: {
+        format: {
+          type: "json_schema",
+          name: "resume_rewrite",
+          schema: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              summary: { type: "string" },
+              rewritten_resume: { type: "string" },
+              bullet_improvements: {
+                type: "array",
+                items: { type: "string" }
+              },
+              trust_entries: {
+                type: "array",
+                items: {
+                  type: "object",
+                  additionalProperties: false,
+                  properties: {
+                    original: { type: "string" },
+                    rewrite: { type: "string" },
+                    what_changed: { type: "string" },
+                    why_stronger: { type: "string" },
+                    evidence_level: {
+                      type: "string",
+                      enum: ["grounded", "structured", "inferred"]
+                    },
+                    confidence_note: { type: "string" }
+                  },
+                  required: ["original", "rewrite", "what_changed", "why_stronger", "evidence_level", "confidence_note"]
+                }
+              },
+              notes: {
+                type: "array",
+                items: { type: "string" }
+              }
+            },
+            required: ["summary", "rewritten_resume", "bullet_improvements", "trust_entries", "notes"]
+          }
         }
       }
-    }
-  });
+    });
+  } catch {
+    throw new AppError("AI rewrite is unavailable right now. Please try again.", { status: 502 });
+  }
 
-  const payload = JSON.parse(response.output_text || "{}");
+  let payload;
+  try {
+    payload = JSON.parse(response.output_text || "{}");
+  } catch {
+    throw new AppError("AI rewrite returned an invalid response. Please try again.", { status: 502 });
+  }
+  const sanitized = sanitizeRewritePayloadForSection(payload, sectionId);
   return {
-    summary: payload.summary || "",
-    rewrittenResume: payload.rewritten_resume || "",
-    bulletImprovements: Array.isArray(payload.bullet_improvements) ? payload.bullet_improvements : [],
-    notes: Array.isArray(payload.notes) ? payload.notes : []
+    ...sanitized,
+    usage: buildUsageSummary(response)
   };
+}
+
+function buildUsageSummary(response) {
+  const usage = response?.usage || {};
+  const inputTokens = normalizeTokenCount(
+    usage.input_tokens ?? usage.prompt_tokens ?? usage.inputTokens
+  );
+  const outputTokens = normalizeTokenCount(
+    usage.output_tokens ?? usage.completion_tokens ?? usage.outputTokens
+  );
+  const totalTokens = normalizeTokenCount(
+    usage.total_tokens ?? usage.totalTokens ?? addIfNumbers(inputTokens, outputTokens)
+  );
+  const model = typeof response?.model === "string" ? response.model : null;
+  const estimatedCostUsd = estimateModelCostUsd(model, inputTokens, outputTokens);
+
+  return {
+    model,
+    inputTokens,
+    outputTokens,
+    totalTokens,
+    estimatedCostUsd
+  };
+}
+
+function normalizeTokenCount(value) {
+  return Number.isFinite(value) ? Number(value) : null;
+}
+
+function addIfNumbers(a, b) {
+  return Number.isFinite(a) && Number.isFinite(b) ? Number(a) + Number(b) : null;
+}
+
+function estimateModelCostUsd(model, inputTokens, outputTokens) {
+  const pricing = lookupModelPricing(model);
+  if (!pricing || !Number.isFinite(inputTokens) || !Number.isFinite(outputTokens)) {
+    return null;
+  }
+
+  const cost =
+    (Number(inputTokens) / 1_000_000) * pricing.inputPerMillionUsd +
+    (Number(outputTokens) / 1_000_000) * pricing.outputPerMillionUsd;
+
+  return Number(cost.toFixed(6));
+}
+
+function lookupModelPricing(model) {
+  if (!model) {
+    return null;
+  }
+
+  if (modelPricing[model]) {
+    return modelPricing[model];
+  }
+
+  const baseModel = Object.keys(modelPricing).find((key) => model === key || model.startsWith(`${key}-`));
+  return baseModel ? modelPricing[baseModel] : null;
+}
+
+function logOpenAiUsage(usage, context = {}) {
+  if (!usage) {
+    console.log(`[openai] ${new Date().toISOString()} usage unavailable`);
+    return;
+  }
+
+  const parts = [
+    `[openai] ${new Date().toISOString()}`,
+    context.endpoint || "endpoint=unknown",
+    usage.model ? `model=${usage.model}` : "model=unknown",
+    usage.inputTokens != null ? `input_tokens=${usage.inputTokens}` : "input_tokens=unknown",
+    usage.outputTokens != null ? `output_tokens=${usage.outputTokens}` : "output_tokens=unknown",
+    usage.totalTokens != null ? `total_tokens=${usage.totalTokens}` : "total_tokens=unknown",
+    usage.estimatedCostUsd != null ? `estimated_cost_usd=${usage.estimatedCostUsd}` : "estimated_cost_usd=unknown"
+  ];
+
+  if (context.style) {
+    parts.push(`style=${String(context.style).trim() || "unknown"}`);
+  }
+  if (context.targetRole) {
+    parts.push(`target_role=${sanitizeUsageField(context.targetRole)}`);
+  }
+
+  console.log(parts.join(" "));
+}
+
+function sanitizeUsageField(value) {
+  return String(value).replace(/\s+/g, "_").replace(/[^a-zA-Z0-9/_-]/g, "").slice(0, 80) || "unknown";
+}
+
+function normalizeTrustEntries(entries) {
+  if (!Array.isArray(entries)) {
+    return [];
+  }
+
+  return entries
+    .map((entry) => ({
+      original: String(entry?.original || "").trim(),
+      rewrite: String(entry?.rewrite || "").trim(),
+      whatChanged: String(entry?.what_changed || "").trim(),
+      whyStronger: String(entry?.why_stronger || "").trim(),
+      evidenceLevel: normalizeEvidenceLevel(entry?.evidence_level),
+      confidenceNote: String(entry?.confidence_note || "").trim()
+    }))
+    .filter((entry) => entry.original && entry.rewrite && entry.whatChanged && entry.whyStronger);
+}
+
+export function sanitizeRewritePayloadForSection(payload, sectionId = "") {
+  const normalizedSection = String(sectionId || "").trim().toLowerCase();
+  const isExperience = normalizedSection === "experience";
+
+  return {
+    summary: payload?.summary || "",
+    rewrittenResume: payload?.rewritten_resume || "",
+    bulletImprovements: isExperience && Array.isArray(payload?.bullet_improvements) ? payload.bullet_improvements : [],
+    trustEntries: isExperience ? normalizeTrustEntries(payload?.trust_entries) : [],
+    notes: Array.isArray(payload?.notes) ? payload.notes : []
+  };
+}
+
+function normalizeEvidenceLevel(value) {
+  return ["grounded", "structured", "inferred"].includes(value) ? value : "structured";
 }
 
 async function serveStaticAsset(pathname) {
@@ -577,22 +563,6 @@ function redirectResponse(location, { cookies = [] } = {}) {
   }), cookies);
 }
 
-function sanitizeReturnTo(value) {
-  if (!value || typeof value !== "string") {
-    return "/";
-  }
-  if (!value.startsWith("/") || value.startsWith("//")) {
-    return "/";
-  }
-  return value;
-}
-
-function buildAuthRedirect(returnTo = "/", status) {
-  const target = sanitizeReturnTo(returnTo);
-  const separator = target.includes("?") ? "&" : "?";
-  return `${target}${separator}linkedin=${encodeURIComponent(status)}`;
-}
-
 function withCookies(response, cookies) {
   for (const cookie of cookies) {
     response.headers.append("set-cookie", cookie);
@@ -601,12 +571,12 @@ function withCookies(response, cookies) {
 }
 
 async function exportResume(body) {
-  const text = String(body.text || "").trim();
+  const text = sanitizeUserText(body.text || "", 40_000);
   const format = String(body.format || "").trim().toLowerCase();
-  const fileStem = sanitizeFileStem(String(body.fileName || "resume-refresh"));
+  const fileStem = sanitizeFileStem(sanitizeUserText(body.fileName || "resume-refresh", 120));
 
   if (!text) {
-    throw new Error("Nothing to export yet.");
+    throw new AppError("Nothing to export yet.", { status: 400 });
   }
 
   if (format === "docx") {
@@ -619,7 +589,7 @@ async function exportResume(body) {
     return binaryResponse(buffer, "application/pdf", `${fileStem}.pdf`);
   }
 
-  throw new Error("Unsupported export format.");
+  throw new AppError("Unsupported export format.", { status: 400 });
 }
 
 function sanitizeFileStem(fileName) {
