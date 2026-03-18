@@ -59,6 +59,8 @@ const SECTION_ALIASES = {
   volunteer: ["volunteer"]
 };
 
+const STANDARD_SECTION_TITLES = ["Work Experience", "Skills", "Education"];
+
 function normalizeWhitespace(text = "") {
   return text.replace(/\r/g, "").replace(/\t/g, " ").replace(/[ ]{2,}/g, " ").trim();
 }
@@ -458,6 +460,120 @@ function buildSuggestions({ sections, bullets, resumeText, linkedinText, targetR
   return suggestions;
 }
 
+function buildAtsSafety({ sections, bullets, resumeText, targetRole }) {
+  const atsSafety = [];
+  const normalizedSections = new Set(Object.keys(sections).map((key) => key.toLowerCase()));
+  const hasExperienceSection = normalizedSections.has("experience") || normalizedSections.has("work experience") || normalizedSections.has("employment");
+  const hasSkillsSection = normalizedSections.has("skills") || normalizedSections.has("technical skills") || normalizedSections.has("core competencies") || normalizedSections.has("core skills");
+  const hasEducationSection = normalizedSections.has("education");
+  const missingStandardTitles = STANDARD_SECTION_TITLES.filter((title) => {
+    if (title === "Work Experience") {
+      return !hasExperienceSection;
+    }
+    if (title === "Skills") {
+      return !hasSkillsSection;
+    }
+    if (title === "Education") {
+      return !hasEducationSection;
+    }
+    return false;
+  });
+
+  if (missingStandardTitles.length) {
+    atsSafety.push({
+      status: "needs-attention",
+      title: "Use standard section titles",
+      detail: `ATS parsers work best with familiar headers like ${STANDARD_SECTION_TITLES.join(", ")}. Add or rename these sections if they matter for ${targetRole || "this resume"}.`
+    });
+  } else {
+    atsSafety.push({
+      status: "looks-safe",
+      title: "Standard section titles are in place",
+      detail: "The draft uses common resume section names that ATS parsers usually recognize."
+    });
+  }
+
+  if (/\bI\b|\bmy\b|\bme\b|\bwe\b|\bour\b|\bus\b/.test(resumeText)) {
+    atsSafety.push({
+      status: "needs-attention",
+      title: "Remove first-person language",
+      detail: "ATS-safe resume bullets should avoid I, we, my, or our. Keep the bullet focused on action and result instead."
+    });
+  }
+
+  const bulletsMissingCar = bullets.filter((bullet) => {
+    const score = scoreBullet(bullet);
+    return score.score < 6 || !hasResultSignal(bullet);
+  });
+
+  if (bullets.length && bulletsMissingCar.length) {
+    atsSafety.push({
+      status: "needs-attention",
+      title: "Rewrite bullets to follow C.A.R.",
+      detail: `${bulletsMissingCar.length} bullet(s) still miss clear context, action, or result. Rewrite them so each line follows C.A.R. and shows a quantified result wherever the source supports it.`
+    });
+  } else if (bullets.length) {
+    atsSafety.push({
+      status: "looks-safe",
+      title: "Bullets mostly follow C.A.R.",
+      detail: "The current bullets read like action-result lines and should be easier for recruiters and ATS reviewers to scan."
+    });
+  }
+
+  atsSafety.push({
+    status: "info",
+    title: "Keep the final file ATS-safe",
+    detail: "Use a single-column layout, standard fonts like Arial or Calibri, a text-based PDF or DOCX, and avoid tables, graphics, headers, footers, or text boxes."
+  });
+
+  return atsSafety;
+}
+
+function hasExperienceDateSignal(lines = []) {
+  return lines.some((line) => /\b(?:19|20)\d{2}\b|\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\s+(?:19|20)\d{2}\b/i.test(line));
+}
+
+export function reviewResumeQuality({ resumeText = "" }) {
+  const normalizedResume = normalizeWhitespace(resumeText);
+  const sections = parseSections(normalizedResume);
+  const checks = [];
+  const required = ["summary", "experience", "skills", "education"];
+  const missingRequired = required.filter((sectionId) => !(sections[sectionId] || []).length);
+
+  if (missingRequired.length) {
+    checks.push({
+      status: "needs-attention",
+      title: "Required sections are incomplete",
+      detail: `Add or finish ${missingRequired.join(", ")} before exporting.`
+    });
+  } else {
+    checks.push({
+      status: "looks-safe",
+      title: "Required sections are present",
+      detail: "Summary, experience, skills, and education are all present."
+    });
+  }
+
+  if ((sections.experience || []).length && !hasExperienceDateSignal(sections.experience || [])) {
+    checks.push({
+      status: "needs-attention",
+      title: "Experience dates need review",
+      detail: "Add date ranges to experience entries so recruiters can understand your timeline."
+    });
+  }
+
+  const optional = ["projects", "certifications", "awards", "volunteer"].filter((sectionId) => (sections[sectionId] || []).length);
+  if (optional.length) {
+    checks.push({
+      status: "info",
+      title: "Optional sections detected",
+      detail: `This resume also includes ${optional.join(", ")}.`
+    });
+  }
+
+  return checks;
+}
+
 function buildDraft({ sections, bullets, linkedinText, resumeText, targetRole }) {
   const header = (sections.header || []).slice(0, 4);
   const skillSectionText = [
@@ -528,6 +644,12 @@ export function analyzeResume({ linkedinText = "", linkedinUrl = "", resumeText 
     linkedinText: normalizedLinkedIn,
     targetRole
   });
+  const atsSafety = buildAtsSafety({
+    sections,
+    bullets,
+    resumeText: normalizedResume,
+    targetRole
+  });
   const missingKeywords = topMissingKeywords(normalizedLinkedIn, normalizedResume);
 
   return {
@@ -545,6 +667,8 @@ export function analyzeResume({ linkedinText = "", linkedinUrl = "", resumeText 
       weakBulletCount: bulletLint.failingBullets.length
     },
     lint: bulletLint,
+    atsSafety,
+    finalReadiness: reviewResumeQuality({ resumeText: normalizedResume }),
     suggestions,
     rewrittenResume: buildDraft({
       sections,

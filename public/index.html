@@ -6,173 +6,22 @@
     <title>Resume Refresh</title>
     <meta
       name="description"
-      content="Import your resume or LinkedIn details, strengthen every bullet, and export a cleaner recruiter-ready resume."
+      content="Resume Refresh guides users from import to section-by-section edits and final export."
     />
-    <meta name="theme-color" content="#132126" />
+    <meta http-equiv="refresh" content="0; url=/v2.html" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="manifest" href="/site.webmanifest" />
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
-    <main class="shell">
+    <main class="shell" style="max-width: 720px; padding-top: 96px;">
       <section class="app-header">
         <p class="eyebrow">Resume Refresh</p>
-        <h1>Build a stronger resume one step at a time.</h1>
-        <p class="lede">Connect, answer prompts, review the draft, then export.</p>
-      </section>
-
-      <section class="progress-strip" aria-label="Progress">
-        <p id="progress-label" class="progress-label">Step 1 of 4 · Connect</p>
-        <div class="progress-track" aria-hidden="true">
-          <div id="progress-bar" class="progress-bar"></div>
-        </div>
-      </section>
-
-      <section id="status" class="status" aria-live="polite"></section>
-
-      <section class="step-pane" data-step="1">
-        <div class="panel auth-panel">
-          <div>
-            <p class="section-kicker">Step 1</p>
-            <h2>Connect LinkedIn</h2>
-            <p class="panel-copy">We pull basic identity and use it to prefill what we can.</p>
-          </div>
-
-          <div class="auth-actions">
-            <div id="auth-state" class="auth-state">Checking LinkedIn configuration...</div>
-            <div class="auth-buttons">
-              <a id="linkedin-login" class="button-link" href="/api/auth/linkedin">Connect LinkedIn</a>
-              <button id="linkedin-logout" type="button" class="button-secondary hidden">Disconnect</button>
-              <button class="button-secondary" data-next-step="2" type="button">Continue</button>
-            </div>
-          </div>
-        </div>
-
-        <section id="linkedin-profile-card" class="panel hidden">
-          <p class="section-kicker">Connected account</p>
-          <div id="linkedin-profile"></div>
-        </section>
-      </section>
-
-      <section class="step-pane hidden" data-step="2">
-        <section class="panel">
-          <div class="panel-head">
-            <div>
-              <p class="section-kicker">Step 2</p>
-              <h2>Answer one thing at a time</h2>
-            </div>
-            <button class="button-secondary" data-next-step="3" type="button" id="skip-to-review">Skip to review</button>
-          </div>
-
-          <section class="chat-shell embedded">
-            <div id="chat-feed" class="chat-feed" aria-live="polite"></div>
-            <form id="chat-form" class="chat-composer">
-              <label class="chat-input-wrap">
-                <span id="chat-prompt-label" class="sr-only">Chat input</span>
-                <textarea
-                  id="chat-input"
-                  rows="3"
-                  placeholder="Type your answer here."
-                ></textarea>
-              </label>
-              <div class="chat-composer-actions">
-                <button id="chat-skip" class="button-secondary" type="button">Skip</button>
-                <button id="chat-send" type="submit">Save answer</button>
-              </div>
-            </form>
-          </section>
-
-          <form id="analyze-form">
-            <section class="wizard-card">
-              <p class="section-kicker">Current prompt</p>
-              <h3 id="wizard-question-title">Target role</h3>
-              <p id="wizard-question-copy" class="panel-copy">Tell me the role you want this resume tailored for.</p>
-              <div id="wizard-answer" class="wizard-answer">Nothing saved yet.</div>
-            </section>
-
-            <section id="resume-upload-card" class="wizard-card hidden">
-              <p class="section-kicker">Resume file</p>
-              <label class="file-picker">
-                <span>Upload PDF, TXT, or MD</span>
-                <input id="resume-file" name="resumeFile" type="file" accept=".pdf,.txt,.md" />
-              </label>
-              <p id="resume-file-state" class="panel-copy">No file selected.</p>
-            </section>
-
-            <section class="wizard-card wizard-summary">
-              <p class="section-kicker">Collected</p>
-              <div id="collected-summary" class="collected-summary"></div>
-            </section>
-
-            <div class="wizard-hidden-fields">
-              <input id="target-role" name="targetRole" />
-              <input id="linkedin-url" name="linkedinUrl" />
-              <textarea id="linkedin-text" name="linkedinText" rows="10"></textarea>
-              <textarea id="resume-text" name="resumeText" rows="10"></textarea>
-              <label>
-                AI rewrite tone
-                <select id="rewrite-style" name="rewriteStyle">
-                  <option value="concise">Concise</option>
-                  <option value="executive">Executive</option>
-                  <option value="technical">Technical</option>
-                </select>
-              </label>
-            </div>
-
-            <div class="action-row">
-              <button id="generate-draft-button" type="submit">Generate draft</button>
-              <button class="button-secondary" data-go-step="1" type="button">Back</button>
-            </div>
-          </form>
-        </section>
-      </section>
-
-      <section class="step-pane hidden" data-step="3">
-        <div class="results flow-stack">
-          <div class="card">
-            <h2>Snapshot</h2>
-            <div id="snapshot" class="snapshot-list"></div>
-          </div>
-
-          <div class="card">
-            <h2>Top fixes</h2>
-            <div id="suggestions"></div>
-          </div>
-
-          <div class="card">
-            <h2>Draft</h2>
-            <pre id="draft">Run analysis to generate a draft.</pre>
-          </div>
-        </div>
-        <div class="action-row action-bar">
-          <button class="button-secondary" data-go-step="2" type="button">Back</button>
-          <button id="rewrite-button" type="button">AI Rewrite</button>
-          <button id="download-draft-docx" class="button-secondary" type="button">Download DOCX</button>
-          <button id="download-draft-pdf" class="button-secondary" type="button">Download PDF</button>
-        </div>
-      </section>
-
-      <section class="step-pane hidden" data-step="4">
-        <div class="results flow-stack">
-          <div class="card">
-            <h2>AI Rewrite</h2>
-            <pre id="ai-rewrite">Run AI rewrite to see the polished version.</pre>
-          </div>
-
-          <div class="card">
-            <h2>AI Notes</h2>
-            <div id="ai-notes" class="notes-list"></div>
-          </div>
-        </div>
-        <div class="action-row action-bar">
-          <button class="button-secondary" data-go-step="3" type="button">Back</button>
-          <button class="button-secondary" data-go-step="2" type="button">Edit inputs</button>
-          <button id="download-rewrite-docx" class="button-secondary" type="button">Download DOCX</button>
-          <button id="download-rewrite-pdf" class="button-secondary" type="button">Download PDF</button>
-        </div>
+        <h1>Redirecting to the current guided app…</h1>
+        <p class="lede">
+          The actively maintained product flow lives at <a href="/v2.html">/v2.html</a>.
+        </p>
       </section>
     </main>
-
-    <script src="/app.js" type="module"></script>
   </body>
 </html>

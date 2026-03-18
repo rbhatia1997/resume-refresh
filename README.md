@@ -1,25 +1,25 @@
 # Resume Refresh
 
-Local resume improvement tool that:
+Resume Refresh is a guided resume improvement app that:
 
 - runs as a browser-based web app
-- supports LinkedIn sign-in with official OpenID Connect
-- accepts pasted LinkedIn content
-- accepts a resume in `PDF`, `TXT`, or `MD`
-- extracts text from PDFs in Node, so it can run on hosted Linux platforms
-- returns improvement suggestions and an updated resume draft
-- optionally generates an OpenAI-powered rewrite
+- supports resume upload and pasted profile/resume text
+- cleans noisy pasted input before structuring it into resume sections
+- guides users through header, summary, experience, skills, education, final review, and export
+- provides deterministic resume analysis plus optional OpenAI-powered rewrite previews
 
 ## Run
 
 ```bash
-cd "/Users/isacarius/Documents/1. GITHUB/resume-refresh"
+git clone <your-fork-or-this-repo-url>
+cd resume-refresh
+npm install
 npm start
 ```
 
-Open `http://localhost:3210`.
+Open `http://127.0.0.1:3210`.
 
-The current guided rollout surface is `http://localhost:3210/v2.html`.
+The current guided product surface is `http://127.0.0.1:3210/v2.html`.
 
 ## Test
 
@@ -30,37 +30,40 @@ npm run test:e2e
 
 ## Security
 
-- OAuth state and session data are signed with `APP_SECRET`
-- cookies are `HttpOnly` and `SameSite=Lax`
 - request bodies and uploads are size-limited
 - write-heavy endpoints are same-origin checked and rate-limited
 - the client UI avoids rendering suggestion/profile data with `innerHTML`
 - security headers are set on app responses
+- local draft state is stored in browser `sessionStorage`, not a remote database
 
-Set a strong random `APP_SECRET` in production.
+## Public Repo Safety
+
+This repo is intended to be safe for public GitHub as long as secrets stay in local or hosted environment configuration.
+
+- `.env` is ignored and should never be committed
+- internal planning docs under `docs/superpowers/` are ignored
+- no LinkedIn scraping is implemented
+- AI rewrite is optional and server-side only
 
 ## OpenAI Rewrite
 
 Set `OPENAI_API_KEY` to enable AI-powered resume rewrites.
 
-Without it, the app still works for parsing and suggestions, but the `AI Rewrite` button stays disabled.
+Without it, the app still works for parsing, structuring, and deterministic suggestions, but AI preview actions stay disabled.
 
-## LinkedIn Auth Setup
+## Import Flow
 
-1. Create a LinkedIn app and enable `Sign In with LinkedIn using OpenID Connect`.
-2. Copy `.env.example` to `.env`.
-3. Fill in `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET`, `APP_SECRET`, and `PUBLIC_BASE_URL`.
-4. In the LinkedIn app, add this redirect URL:
+The app does not scrape LinkedIn or require LinkedIn OAuth.
 
-```text
-https://your-domain.com/api/auth/linkedin/callback
-```
+Instead, the app asks the user to paste:
 
-For local development, use:
+- a profile URL, if helpful
+- pasted profile/about text
+- pasted experience text
+- skills text, if helpful
+- or an uploaded resume file in `PDF`, `TXT`, or `MD`
 
-```text
-http://127.0.0.1:3210/api/auth/linkedin/callback
-```
+This is intentional. Pulling richer LinkedIn profile data by scraping would violate LinkedIn's rules, so the app only works with content the user provides directly.
 
 ## Deploy
 
@@ -75,16 +78,7 @@ vercel
 Set these environment variables in Vercel:
 
 - `PUBLIC_BASE_URL`
-- `APP_SECRET`
-- `LINKEDIN_CLIENT_ID`
-- `LINKEDIN_CLIENT_SECRET`
 - `OPENAI_API_KEY` if you want AI rewrite enabled
-
-Then update the LinkedIn redirect URL to:
-
-```text
-https://your-vercel-domain.vercel.app/api/auth/linkedin/callback
-```
 
 ### Other Node hosts
 
@@ -98,14 +92,11 @@ This app can also be deployed to any host that can run `node src/server.js`, inc
 Required environment variables:
 
 - `PUBLIC_BASE_URL`
-- `APP_SECRET`
-- `LINKEDIN_CLIENT_ID`
-- `LINKEDIN_CLIENT_SECRET`
 - `OPENAI_API_KEY` if you want AI rewrite enabled
 
 ## Notes
 
-- LinkedIn login is implemented with the official OpenID Connect flow. That gets basic identity fields such as name, photo, and email.
 - Direct LinkedIn scraping is intentionally not built in.
-- Rich LinkedIn profile data like full experience/history is not reliably available to standard apps, so the safest workflow is still to paste your LinkedIn headline/about/experience/skills into the LinkedIn field.
-- The suggestion engine is deterministic, so it works offline and without API keys.
+- The guided import flow is based on user-provided pasted text or uploaded files.
+- Rich LinkedIn profile data like full experience history is not reliably available to standard apps, so the safest workflow is still to paste your own content into the app.
+- The deterministic suggestion engine works without API keys.

@@ -21456,6 +21456,535 @@ var import_client = __toESM(require_client(), 1);
 // prototype/ResumeRefreshPrototype.tsx
 var React = __toESM(require_react(), 1);
 var import_react = __toESM(require_react(), 1);
+
+// src/import-parser.js
+var SECTION_IDS = ["header", "summary", "experience", "skills", "education", "projects", "certifications", "community", "interests"];
+var HEADING_ALIASES = {
+  summary: ["summary", "professional summary", "profile", "about", "about me"],
+  experience: ["experience", "work experience", "employment", "professional experience"],
+  skills: ["skills", "core skills", "technical skills", "core competencies"],
+  education: ["education", "academic background"],
+  projects: ["projects", "selected projects"],
+  certifications: ["certifications", "licenses"],
+  community: ["community", "volunteering", "volunteer"],
+  interests: ["interests"]
+};
+var DEGREE_PATTERN = /\b(B\.?A\.?|B\.?S\.?|M\.?A\.?|M\.?S\.?|MBA|Ph\.?D\.?|Bachelor|Master|Associate)\b/i;
+var SCHOOL_PATTERN = /\b(university|college|school|academy|institute)\b/i;
+var DATE_PATTERN = /\b(?:19|20)\d{2}\b|\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\s+\d{4}\b/i;
+var BULLET_PATTERN = /^[-*•]\s+/;
+var EMAIL_PATTERN = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i;
+var URL_PATTERN = /\b(?:https?:\/\/|www\.)\S+\b/i;
+var PHONE_PATTERN = /(?:\+?1[\s.-]?)?(?:\(\d{3}\)|\d{3})[\s.-]?\d{3}[\s.-]?\d{4}/;
+var NAME_PATTERN = /^[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3}$/;
+var LOCATION_PATTERN = /^(?:[A-Z][A-Za-z.'-]+(?:\s+[A-Z][A-Za-z.'-]+)*,\s*)?(?:AL|AK|AZ|AR|CA|CO|CT|DC|DE|FL|GA|HI|IA|ID|IL|IN|KS|KY|LA|MA|MD|ME|MI|MN|MO|MS|MT|NC|ND|NE|NH|NJ|NM|NV|NY|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VA|VT|WA|WI|WV|WY)(?:\s+\d{5})?$/i;
+var JUNK_PATTERNS = [
+  /^see more$/i,
+  /^see less$/i,
+  /^connect$/i,
+  /^message$/i,
+  /^follow$/i,
+  /^followers?$/i,
+  /^\d+\+?\s+followers?$/i,
+  /^open to work$/i,
+  /^job alert$/i,
+  /^easy apply$/i,
+  /^apply now$/i,
+  /^recommended for you$/i,
+  /^shared by .+$/i,
+  /^like$/i,
+  /^comment$/i,
+  /^send profile in a message$/i,
+  /^show credential$/i,
+  /^more profiles for you$/i,
+  / logo$/i
+];
+var WEAK_SKILL_PATTERNS = [
+  /^communication$/i,
+  /^teamwork$/i,
+  /^leadership$/i,
+  /^problem solving$/i,
+  /^microsoft office$/i,
+  /^detail oriented$/i
+];
+var CANONICAL_SKILLS = /* @__PURE__ */ new Map([
+  ["product strategy", { canonical: "Product Strategy", roles: ["product manager", "senior product manager"] }],
+  ["roadmapping", { canonical: "Roadmapping", roles: ["product manager", "senior product manager"] }],
+  ["prioritization", { canonical: "Prioritization", roles: ["product manager", "senior product manager"] }],
+  ["stakeholder management", { canonical: "Stakeholder Management", roles: ["product manager", "senior product manager", "customer success manager"] }],
+  ["experimentation", { canonical: "Experimentation", roles: ["product manager", "growth product manager", "senior product manager", "data"] }],
+  ["a/b testing", { canonical: "A/B Testing", roles: ["product manager", "growth product manager", "marketing"] }],
+  ["user research", { canonical: "User Research", roles: ["product manager", "designer"] }],
+  ["sql", { canonical: "SQL", roles: ["product manager", "senior product manager", "data", "analyst"] }],
+  ["analytics", { canonical: "Analytics", roles: ["product manager", "data", "analyst"] }],
+  ["data analysis", { canonical: "Data Analysis", roles: ["data", "analyst", "product manager"] }],
+  ["lifecycle marketing", { canonical: "Lifecycle Marketing", roles: ["growth product manager", "marketing"] }],
+  ["pricing & packaging", { canonical: "Pricing & Packaging", roles: ["product manager", "senior product manager"] }],
+  ["go-to-market", { canonical: "Go-to-Market Strategy", roles: ["product manager", "marketing"] }],
+  ["agile", { canonical: "Agile", roles: ["product manager", "engineer"] }],
+  ["scrum", { canonical: "Scrum", roles: ["product manager", "engineer"] }],
+  ["jira", { canonical: "Jira", roles: ["product manager", "engineer"] }],
+  ["figma", { canonical: "Figma", roles: ["designer", "product manager"] }],
+  ["user-centered design", { canonical: "User-Centered Design", roles: ["designer", "product manager"] }],
+  ["product management", { canonical: "Product Management", roles: ["product manager", "senior product manager"] }],
+  ["customer discovery", { canonical: "Customer Discovery", roles: ["product manager", "founder"] }],
+  ["wireframing", { canonical: "Wireframing", roles: ["designer", "product manager"] }],
+  ["tableau", { canonical: "Tableau", roles: ["data", "analyst"] }],
+  ["python", { canonical: "Python", roles: ["data", "engineer"] }],
+  ["react", { canonical: "React", roles: ["engineer"] }],
+  ["node.js", { canonical: "Node.js", roles: ["engineer"] }]
+]);
+var SKILL_ALIASES = /* @__PURE__ */ new Map([
+  ["product management", "product management"],
+  ["product manager", "product management"],
+  ["sql", "sql"],
+  ["structured query language", "sql"],
+  ["ab testing", "a/b testing"],
+  ["a/b testing", "a/b testing"],
+  ["user centered design", "user-centered design"],
+  ["go to market", "go-to-market"],
+  ["gtm", "go-to-market"],
+  ["roadmap", "roadmapping"],
+  ["roadmapping", "roadmapping"],
+  ["prioritization", "prioritization"],
+  ["prioritisation", "prioritization"],
+  ["stakeholder mgmt", "stakeholder management"],
+  ["stakeholder management", "stakeholder management"],
+  ["stakeholder alignment", "stakeholder management"],
+  ["exp", "experimentation"],
+  ["experimentation", "experimentation"],
+  ["analytics", "analytics"],
+  ["data analytics", "analytics"],
+  ["pricing and packaging", "pricing & packaging"],
+  ["pricing & packaging", "pricing & packaging"],
+  ["lifecycle", "lifecycle marketing"],
+  ["user research", "user research"],
+  ["customer research", "user research"],
+  ["sql", "sql"],
+  ["jira", "jira"]
+]);
+var ROLE_SKILL_PREFERENCES = [
+  ["senior product manager", ["Product Strategy", "Roadmapping", "Prioritization", "Stakeholder Management", "Experimentation", "A/B Testing", "Analytics", "SQL", "User Research", "Pricing & Packaging", "Go-to-Market Strategy", "Jira"]],
+  ["product manager", ["Product Strategy", "Roadmapping", "Prioritization", "Stakeholder Management", "Experimentation", "Analytics", "SQL", "User Research", "Jira"]],
+  ["designer", ["User-Centered Design", "Figma", "User Research", "Wireframing"]],
+  ["engineer", ["React", "Node.js", "Python", "SQL", "Agile", "Scrum"]],
+  ["data", ["SQL", "Python", "Analytics", "Data Analysis", "Tableau", "Experimentation"]]
+];
+var IMPLICIT_SKILL_EXCLUSIONS = /* @__PURE__ */ new Set(["product management"]);
+function normalizeText(value = "") {
+  return value.replace(/\r/g, "\n").replace(/\u00a0/g, " ").replace(/[‐‑‒–—]/g, "-").replace(/[•▪◦]/g, "\u2022").replace(/\t/g, " ").replace(/[ ]{2,}/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+}
+function cleanSkillChipText(line) {
+  return line.replace(/\s+and\s+\+\d+\s+skills?/gi, "").replace(/\s+\+\d+\s+skills?/gi, "").trim();
+}
+function isContactLine(line) {
+  return EMAIL_PATTERN.test(line) || URL_PATTERN.test(line) || PHONE_PATTERN.test(line) || /\blinkedin\.com\//i.test(line);
+}
+function isLocationLine(line) {
+  return LOCATION_PATTERN.test(line.trim());
+}
+function isLikelyNameLine(line) {
+  const normalized = line.trim();
+  if (!normalized || /[,|@/]/.test(normalized) || isLocationLine(normalized) || isContactLine(normalized)) {
+    return false;
+  }
+  return NAME_PATTERN.test(normalized);
+}
+function isJunkLine(line) {
+  if (!line) return true;
+  const normalized = line.trim();
+  if (!normalized) return true;
+  return JUNK_PATTERNS.some((pattern) => pattern.test(normalized));
+}
+function normalizedHeading(line) {
+  const cleaned = line.trim().replace(/:$/, "").toLowerCase();
+  for (const [sectionId, aliases] of Object.entries(HEADING_ALIASES)) {
+    if (aliases.includes(cleaned)) {
+      return sectionId;
+    }
+  }
+  return "";
+}
+function splitAndCleanLines(text) {
+  const deduped = [];
+  const seenShort = /* @__PURE__ */ new Set();
+  const pushLogicalLine = (value = "") => {
+    let line = cleanSkillChipText(value.trim());
+    if (!line) return;
+    if (isJunkLine(line)) return;
+    line = line.replace(/\s*[|·]\s*/g, " | ");
+    line = line.replace(/^\s*[-*]\s*/, "- ");
+    line = line.replace(/^•\s*/, "- ");
+    const shortKey = line.toLowerCase();
+    if (line.length <= 40) {
+      if (seenShort.has(shortKey)) return;
+      seenShort.add(shortKey);
+    }
+    if (deduped[deduped.length - 1]?.toLowerCase() === shortKey) return;
+    deduped.push(line);
+  };
+  const rawLines = normalizeText(text).split("\n");
+  let currentBullet = "";
+  let currentParagraph = "";
+  let previousWasBlank = true;
+  const flushBullet = () => {
+    if (!currentBullet) return;
+    pushLogicalLine(currentBullet);
+    currentBullet = "";
+  };
+  const flushParagraph = () => {
+    if (!currentParagraph) return;
+    pushLogicalLine(currentParagraph);
+    currentParagraph = "";
+  };
+  for (const rawLine of rawLines) {
+    const trimmed = cleanSkillChipText(rawLine.trim());
+    if (!trimmed) {
+      flushBullet();
+      flushParagraph();
+      previousWasBlank = true;
+      continue;
+    }
+    if (isJunkLine(trimmed)) continue;
+    const line = trimmed.replace(/\s*[|·]\s*/g, " | ").replace(/^\s*[-*]\s*/, "- ").replace(/^•\s*/, "- ");
+    if (normalizedHeading(line)) {
+      flushBullet();
+      flushParagraph();
+      pushLogicalLine(line);
+      previousWasBlank = true;
+      continue;
+    }
+    if (BULLET_PATTERN.test(line)) {
+      flushBullet();
+      flushParagraph();
+      currentBullet = line;
+      previousWasBlank = false;
+      continue;
+    }
+    if (currentBullet) {
+      currentBullet = `${currentBullet} ${line.replace(/^[-*•]\s*/, "")}`.trim();
+      previousWasBlank = false;
+      continue;
+    }
+    const currentIsStandalone = isLikelyNameLine(line) || isLocationLine(line) || isContactLine(line);
+    const paragraphIsStandalone = isLikelyNameLine(currentParagraph) || isLocationLine(currentParagraph) || isContactLine(currentParagraph);
+    const looksLikeContinuation = !previousWasBlank && currentParagraph && !currentIsStandalone && !paragraphIsStandalone && (/^[a-z(]/.test(line) || /[,:-]$/.test(currentParagraph));
+    if (looksLikeContinuation) {
+      currentParagraph = `${currentParagraph} ${line}`.trim();
+    } else {
+      flushParagraph();
+      currentParagraph = line;
+    }
+    previousWasBlank = false;
+  }
+  flushBullet();
+  flushParagraph();
+  return deduped;
+}
+function baseSectionMap() {
+  return {
+    header: [],
+    summary: [],
+    experience: [],
+    skills: [],
+    education: [],
+    projects: [],
+    certifications: [],
+    community: [],
+    interests: []
+  };
+}
+function looksLikeHeaderLine(line) {
+  return isLikelyNameLine(line) || isContactLine(line) || isLocationLine(line);
+}
+function looksLikeEducationLine(line) {
+  return DEGREE_PATTERN.test(line) || SCHOOL_PATTERN.test(line);
+}
+function looksLikeExperienceLine(line) {
+  return BULLET_PATTERN.test(line) || DATE_PATTERN.test(line) || /\b(at|manager|lead|director|engineer|analyst|product|marketing|sales)\b/i.test(line);
+}
+function tokenizeSkills(line) {
+  return line.split(/[|,]/).map((item) => item.trim()).filter(Boolean).filter((item) => !WEAK_SKILL_PATTERNS.some((pattern) => pattern.test(item)));
+}
+function skillMatchesLine(line, alias) {
+  const escaped = alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
+  return new RegExp(`(^|[^a-z])${escaped}([^a-z]|$)`, "i").test(line);
+}
+function canonicalizeSkill(skill) {
+  const normalized = skill.toLowerCase().replace(/[.]/g, "").replace(/\s+/g, " ").trim();
+  const alias = SKILL_ALIASES.get(normalized) || normalized;
+  return CANONICAL_SKILLS.get(alias)?.canonical || "";
+}
+function scoreSkillForRole(skill, targetRole = "") {
+  const normalizedRole = targetRole.toLowerCase();
+  const meta = [...CANONICAL_SKILLS.values()].find((item) => item.canonical === skill);
+  if (!meta) return 1;
+  let score = 1;
+  const preferredOrder = ROLE_SKILL_PREFERENCES.find(([role]) => normalizedRole.includes(role))?.[1] || [];
+  const preferredIndex = preferredOrder.indexOf(skill);
+  if (preferredIndex >= 0) {
+    score += 10 - Math.min(preferredIndex, 9);
+  }
+  if (meta.roles.some((role) => normalizedRole.includes(role))) score += 4;
+  if (normalizedRole.includes(skill.toLowerCase())) score += 2;
+  return score;
+}
+function normalizeSkillEntries(input = "") {
+  const entries = tokenizeSkills(input).flatMap((item) => item.split(/\n/)).map((item) => item.trim()).filter(Boolean);
+  const deduped = /* @__PURE__ */ new Set();
+  const normalized = [];
+  for (const entry of entries) {
+    const canonical = canonicalizeSkill(entry);
+    if (!canonical) continue;
+    const key = canonical.toLowerCase();
+    if (deduped.has(key)) continue;
+    deduped.add(key);
+    normalized.push(canonical);
+  }
+  return normalized;
+}
+function trimWeakSkillsList(input = "") {
+  return normalizeSkillEntries(input);
+}
+function alignSkillsToRoleList(input = "", targetRole = "") {
+  const normalized = normalizeSkillEntries(input);
+  const normalizedRole = targetRole.toLowerCase();
+  const preferredOrder = ROLE_SKILL_PREFERENCES.find(([role]) => normalizedRole.includes(role))?.[1] || [];
+  const prioritizedAnchors = preferredOrder.slice(0, 5);
+  const result = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const skill of prioritizedAnchors) {
+    if (!seen.has(skill.toLowerCase())) {
+      seen.add(skill.toLowerCase());
+      result.push(skill);
+    }
+  }
+  for (const skill of [...normalized].sort((left, right) => {
+    return scoreSkillForRole(right, targetRole) - scoreSkillForRole(left, targetRole) || left.localeCompare(right);
+  })) {
+    if (seen.has(skill.toLowerCase())) continue;
+    seen.add(skill.toLowerCase());
+    result.push(skill);
+  }
+  return result;
+}
+function pushUnique(target, value) {
+  const normalized = value.trim();
+  if (!normalized) return;
+  if (target.some((item) => item.toLowerCase() === normalized.toLowerCase())) return;
+  target.push(normalized);
+}
+function classifyLooseBlock(lines, sections) {
+  const joined = lines.join("\n");
+  if (!joined.trim()) return;
+  if (lines.every((line) => line.includes("|") || line.includes(",") || WEAK_SKILL_PATTERNS.some((pattern) => pattern.test(line)))) {
+    for (const line of lines) {
+      for (const skill of tokenizeSkills(line)) {
+        pushUnique(sections.skills, skill);
+      }
+    }
+    return;
+  }
+  if (lines.some((line) => looksLikeEducationLine(line))) {
+    for (const line of lines) {
+      pushUnique(sections.education, line);
+    }
+    return;
+  }
+  if (lines.some((line) => /\b(project|case study|portfolio)\b/i.test(line))) {
+    for (const line of lines) {
+      pushUnique(sections.projects, line);
+    }
+    return;
+  }
+  if (lines.some((line) => /\b(certified|certification|license)\b/i.test(line))) {
+    for (const line of lines) {
+      pushUnique(sections.certifications, line);
+    }
+    return;
+  }
+  if (lines.some((line) => looksLikeExperienceLine(line))) {
+    for (const line of lines) {
+      pushUnique(sections.experience, line);
+    }
+    return;
+  }
+  if (!sections.summary.length) {
+    pushUnique(sections.summary, lines.join(" "));
+  }
+}
+function enrichSkillsFromSignals(sections) {
+  const inferred = [];
+  const signalSources = [
+    ...sections.summary,
+    ...sections.experience,
+    ...sections.projects,
+    ...sections.certifications
+  ];
+  for (const line of signalSources) {
+    const normalizedLine = line.toLowerCase();
+    for (const [alias, canonicalKey] of SKILL_ALIASES.entries()) {
+      if (skillMatchesLine(normalizedLine, alias)) {
+        if (IMPLICIT_SKILL_EXCLUSIONS.has(canonicalKey)) continue;
+        const canonical = CANONICAL_SKILLS.get(canonicalKey)?.canonical;
+        if (canonical) {
+          pushUnique(inferred, canonical);
+        }
+      }
+    }
+    for (const [canonicalKey, meta] of CANONICAL_SKILLS.entries()) {
+      if (IMPLICIT_SKILL_EXCLUSIONS.has(canonicalKey)) continue;
+      if (skillMatchesLine(normalizedLine, canonicalKey)) {
+        pushUnique(inferred, meta.canonical);
+      }
+    }
+  }
+  for (const skill of inferred) {
+    pushUnique(sections.skills, skill);
+  }
+}
+function organizeHeaderLines(lines) {
+  const names = [];
+  const contacts = [];
+  const locations = [];
+  const others = [];
+  for (const line of lines) {
+    if (isLikelyNameLine(line)) {
+      pushUnique(names, line);
+    } else if (isContactLine(line)) {
+      pushUnique(contacts, line);
+    } else if (isLocationLine(line)) {
+      pushUnique(locations, line);
+    } else {
+      pushUnique(others, line);
+    }
+  }
+  return [...names, ...contacts, ...locations, ...others];
+}
+function parseLinesIntoSections(lines, linkedinUrl = "") {
+  const sections = baseSectionMap();
+  let currentSection = "header";
+  let looseBlock = [];
+  const flushLooseBlock = () => {
+    if (!looseBlock.length) return;
+    classifyLooseBlock(looseBlock, sections);
+    looseBlock = [];
+  };
+  for (const line of lines) {
+    const heading = normalizedHeading(line);
+    if (heading) {
+      flushLooseBlock();
+      currentSection = heading;
+      continue;
+    }
+    if (currentSection === "header") {
+      if (looksLikeHeaderLine(line) || !sections.header.length && NAME_PATTERN.test(line)) {
+        pushUnique(sections.header, line);
+        continue;
+      }
+      if (!sections.summary.length && !looksLikeExperienceLine(line) && !looksLikeEducationLine(line)) {
+        pushUnique(sections.summary, line);
+        continue;
+      }
+      looseBlock.push(line);
+      continue;
+    }
+    if (currentSection === "skills") {
+      const skillTokens = normalizeSkillEntries(line);
+      if (skillTokens.length) {
+        for (const token of skillTokens) {
+          pushUnique(sections.skills, token);
+        }
+      }
+      continue;
+    }
+    if (currentSection === "summary") {
+      if (looksLikeEducationLine(line) || normalizedHeading(line)) {
+        flushLooseBlock();
+      }
+      pushUnique(sections.summary, line);
+      continue;
+    }
+    if (currentSection === "experience") {
+      if (looksLikeEducationLine(line) && !DATE_PATTERN.test(line)) {
+        currentSection = "education";
+        pushUnique(sections.education, line);
+        continue;
+      }
+      pushUnique(sections.experience, line);
+      continue;
+    }
+    if (currentSection === "education") {
+      pushUnique(sections.education, line);
+      continue;
+    }
+    if (currentSection === "projects") {
+      pushUnique(sections.projects, line);
+      continue;
+    }
+    if (currentSection === "certifications") {
+      pushUnique(sections.certifications, line);
+      continue;
+    }
+    if (currentSection === "community") {
+      pushUnique(sections.community, line);
+      continue;
+    }
+    if (currentSection === "interests") {
+      pushUnique(sections.interests, line);
+      continue;
+    }
+  }
+  flushLooseBlock();
+  if (linkedinUrl) {
+    pushUnique(sections.header, linkedinUrl);
+  }
+  if (!sections.header.length) {
+    for (const line of lines.slice(0, 5)) {
+      if (looksLikeHeaderLine(line)) {
+        pushUnique(sections.header, line);
+      }
+    }
+  }
+  if (!sections.summary.length) {
+    const summaryCandidates = lines.filter((line) => !looksLikeHeaderLine(line) && !looksLikeEducationLine(line) && !looksLikeExperienceLine(line));
+    if (summaryCandidates.length) {
+      pushUnique(sections.summary, summaryCandidates.slice(0, 2).join(" "));
+    }
+  }
+  enrichSkillsFromSignals(sections);
+  sections.header = organizeHeaderLines(sections.header);
+  return sections;
+}
+function inferConfidence(content, sectionId) {
+  if (!content.trim()) return "low";
+  if (sectionId === "header") return content.split("\n").length >= 2 ? "high" : "medium";
+  if (sectionId === "experience") return /-\s|\b\d{4}\b/.test(content) ? "high" : "medium";
+  if (sectionId === "education") return SCHOOL_PATTERN.test(content) || DEGREE_PATTERN.test(content) ? "high" : "medium";
+  if (sectionId === "skills") return content.split("\n").length >= 2 ? "high" : "medium";
+  return content.length > 40 ? "high" : "medium";
+}
+function parseImportedSections({ linkedinUrl = "", linkedinText = "", resumeText = "" } = {}) {
+  const mergedText = [resumeText, linkedinText].filter(Boolean).join("\n\n");
+  const cleanedLines = splitAndCleanLines(mergedText);
+  const parsed = parseLinesIntoSections(cleanedLines, linkedinUrl.trim());
+  const sections = Object.fromEntries(
+    SECTION_IDS.map((sectionId) => {
+      const content = parsed[sectionId].join("\n").trim();
+      return [sectionId, {
+        content,
+        confidence: inferConfidence(content, sectionId),
+        sourceHint: linkedinText.trim() ? "Parsed from pasted profile text" : "Parsed from imported resume content"
+      }];
+    })
+  );
+  return {
+    cleanedText: cleanedLines.join("\n"),
+    sections
+  };
+}
+
+// prototype/ResumeRefreshPrototype.tsx
 var storageKey = "resume_refresh_v2_state";
 var sectionBlueprints = [
   {
@@ -21497,66 +22026,76 @@ var sectionBlueprints = [
     helper: "School, degree, year. Keep it concise.",
     placeholder: "University of California, Berkeley\nB.A. Economics",
     required: false
+  },
+  {
+    id: "projects",
+    title: "Projects",
+    prompt: "Add projects only if they strengthen your case for this role.",
+    helper: "Name, scope, tools, and result. Keep it short and concrete.",
+    placeholder: "Growth Dashboard Project\n- Built a KPI dashboard in SQL and Tableau used by PM and GTM teams.",
+    required: false
+  },
+  {
+    id: "certifications",
+    title: "Certifications",
+    prompt: "List certifications or licenses that add real signal.",
+    helper: "Only keep current or relevant credentials.",
+    placeholder: "Pragmatic Certified Product Manager",
+    required: false
+  },
+  {
+    id: "community",
+    title: "Community",
+    prompt: "Use community, leadership, or volunteering if it adds useful signal.",
+    helper: "Keep this factual and impact-focused, not autobiographical.",
+    placeholder: "Mentor, Product School\n- Mentor early-career PMs on experimentation and portfolio projects.",
+    required: false
+  },
+  {
+    id: "interests",
+    title: "Interests",
+    prompt: "Add interests only if they make the resume more human without distracting.",
+    helper: "Short list only. Skip this if it adds no value.",
+    placeholder: "Distance running\nCeramics",
+    required: false
   }
 ];
 var defaultPersistedState = {
   stage: "landing",
   sourceMethod: null,
+  sampleMode: false,
   targetRole: "",
   linkedinUrl: "",
   linkedinText: "",
   rewriteStyle: "balanced",
   activeSection: "summary",
+  reviewSection: "header",
   sections: sectionBlueprints.map((item) => ({ ...item, content: "" }))
 };
-var featureCards = [
-  ["Section-by-section editing", "Fix one section at a time instead of wrestling with a full page of inputs."],
-  ["Stronger bullet coaching", "Push vague bullets toward ownership, metrics, and outcomes."],
-  ["Live resume preview", "See the draft sharpen before you export anything."]
-];
 var beforeAfter = [
   {
-    before: "Worked on onboarding improvements.",
-    after: "Led onboarding tests that lifted activation 18%."
+    before: "Worked on onboarding improvements across signup and activation.",
+    after: "Led onboarding experiments across signup and activation, lifting new-user completion 18%."
   },
   {
-    before: "Helped with sales reporting.",
-    after: "Built weekly pipeline reporting, cutting forecast prep by 6 hours."
+    before: "Helped with weekly sales reporting for leadership.",
+    after: "Built weekly pipeline reporting for leadership reviews, cutting forecast prep by 6 hours."
   }
 ];
-var workflowSteps = [
-  {
-    title: "Import what you have",
-    copy: "Start with a resume, LinkedIn details, or a blank draft."
-  },
-  {
-    title: "Tighten the draft",
-    copy: "Review each section, fix weak bullets, and clarify what you owned."
-  },
-  {
-    title: "Export with confidence",
-    copy: "Leave with a cleaner, recruiter-ready resume in PDF or DOCX."
-  }
-];
-var trustPoints = [
-  "You see imported content before it becomes your draft.",
-  "Nothing is posted to LinkedIn or changed on your behalf.",
-  "AI polish stays editable and can be applied or ignored section by section."
-];
-var landingStats = [
-  ["Resume or LinkedIn", "Start from existing material, not a blank page."],
-  ["Metric-led bullets", "Examples stay short, concrete, and recruiter-readable."],
-  ["PDF or DOCX", "Leave with a cleaned-up draft ready to send."]
+var landingProofItems = [
+  ["Import existing material", "Start from a resume or LinkedIn profile instead of a blank page."],
+  ["Strengthen weak bullets", "Turn vague responsibilities into sharper proof of ownership and results."],
+  ["Export a cleaner draft", "Leave with wording that is easier to scan and ready to send."]
 ];
 var sampleResumeSeed = {
   targetRole: "Senior Product Manager",
-  linkedinText: "Product leader with experience in growth, experimentation, roadmap execution, SQL, and stakeholder management.",
+  linkedinText: "Product leader with experience in growth, experimentation, onboarding, monetization, SQL, and stakeholder management across B2B SaaS.",
   sections: buildDefaultSections({
     header: "Maya Patel\nSan Francisco, CA\nmaya@resumerefresh.app \xB7 linkedin.com/in/mayapatel",
-    summary: "Product leader focused on growth, onboarding, and monetization strategy across B2B SaaS products.",
-    experience: "Senior Product Manager, Northstar\n- Owned the onboarding roadmap across web and lifecycle channels, partnering with design and engineering to lift activation for new accounts.\n- Led pricing and packaging experiments with finance and sales, improving expansion readiness for mid-market customers.\n- Built KPI reviews for leadership, translating funnel performance into roadmap decisions and faster cross-functional execution.",
-    skills: "Product Strategy\nExperimentation\nSQL\nStakeholder Management\nLifecycle Growth",
-    education: "University of California, Berkeley\nB.A. Economics"
+    summary: "Product leader focused on growth, onboarding, and monetization strategy across B2B SaaS products, with a track record of lifting activation and improving operating cadence.",
+    experience: "Senior Product Manager, Northstar\n- Owned onboarding experiments across web and lifecycle email, lifting new-account activation 18% within two quarters.\n- Led pricing and packaging tests with finance and sales, increasing expansion revenue 11% for mid-market accounts.\n- Built weekly KPI reporting for leadership, cutting forecast prep by 6 hours and speeding roadmap decisions.\nGrowth Product Manager, Atlas\n- Reworked trial-to-paid messaging with lifecycle and product teams, improving trial conversion 9%.\n- Standardized experiment readouts across product squads, reducing analysis turnaround from 3 days to 1.",
+    skills: "Product Strategy\nExperimentation\nSQL\nStakeholder Management\nLifecycle Growth\nPricing & Packaging",
+    education: "University of California, Berkeley\nB.A. Economics, 2017"
   })
 };
 function cn(...classes) {
@@ -21568,7 +22107,7 @@ function buildDefaultSections(seed) {
     content: seed?.[item.id]?.trim() || ""
   }));
 }
-function normalizeText(value) {
+function normalizeText2(value) {
   return value.replace(/\r/g, "").trim();
 }
 var headingAliases = {
@@ -21576,78 +22115,33 @@ var headingAliases = {
   summary: ["SUMMARY", "PROFESSIONAL SUMMARY", "PROFILE", "ABOUT"],
   experience: ["EXPERIENCE", "WORK EXPERIENCE", "EMPLOYMENT", "EXPERIENCE HIGHLIGHTS"],
   skills: ["SKILLS", "CORE SKILLS", "TECHNICAL SKILLS", "CORE COMPETENCIES"],
-  education: ["EDUCATION"]
+  education: ["EDUCATION"],
+  projects: ["PROJECTS", "SELECTED PROJECTS"],
+  certifications: ["CERTIFICATIONS", "LICENSES"],
+  community: ["COMMUNITY", "LEADERSHIP", "VOLUNTEERING", "VOLUNTEER"],
+  interests: ["INTERESTS"]
 };
-function parseStructuredSections(text) {
-  const lines = normalizeText(text).split("\n");
-  const sections = {
-    header: [],
-    summary: [],
-    experience: [],
-    skills: [],
-    education: []
-  };
-  let current = "header";
-  for (const rawLine of lines) {
-    const line = rawLine.trimEnd();
-    const trimmed = line.trim();
-    if (!trimmed) {
-      if (current !== "header" && sections[current][sections[current].length - 1] !== "") {
-        sections[current].push("");
-      }
-      continue;
-    }
-    const nextSection = Object.keys(headingAliases).find(
-      (sectionId) => headingAliases[sectionId].includes(trimmed.toUpperCase())
-    );
-    if (nextSection) {
-      current = nextSection;
-      continue;
-    }
-    sections[current].push(trimmed);
-  }
-  return sections;
-}
-function extractHeaderBlock(text) {
-  const normalized = normalizeText(text);
-  if (!normalized) {
-    return "";
-  }
-  const lines = normalized.split("\n").map((line) => line.trim()).filter(Boolean);
-  const collected = [];
-  for (const line of lines) {
-    const upper = line.toUpperCase();
-    if (["SUMMARY", "PROFESSIONAL SUMMARY", "PROFILE", "ABOUT", "EXPERIENCE", "WORK EXPERIENCE", "SKILLS", "CORE SKILLS", "EDUCATION"].includes(upper)) {
-      break;
-    }
-    collected.push(line);
-    if (collected.length >= 3) {
-      break;
-    }
-  }
-  return collected.join("\n");
-}
-function deriveSections(profile, linkedinText, resumeText) {
-  const normalizedLinkedIn = normalizeText(linkedinText);
-  const normalizedResume = normalizeText(resumeText);
-  const parsedResume = parseStructuredSections(normalizedResume);
-  const headerFromProfile = [profile?.name, profile?.email].filter(Boolean).join("\n");
-  const parsedHeader = parsedResume.header.filter(Boolean).slice(0, 3).join("\n");
-  const header = headerFromProfile || parsedHeader || extractHeaderBlock(normalizedResume);
-  const summary = parsedResume.summary.filter(Boolean).join("\n") || normalizedLinkedIn.split(/\n{2,}/)[0] || "";
-  const experience = parsedResume.experience.join("\n") || normalizedLinkedIn || "";
-  const skills = parsedResume.skills.filter(Boolean).join("\n");
-  const education = parsedResume.education.filter(Boolean).join("\n");
-  return buildDefaultSections({
-    header,
-    summary,
-    experience,
-    skills,
-    education
+function deriveSections(linkedinText, resumeText, linkedinUrl = "") {
+  const parsed = parseImportedSections({
+    linkedinUrl,
+    linkedinText,
+    resumeText
   });
+  return buildDefaultSections(
+    Object.fromEntries(
+      Object.keys(headingAliases).map((sectionId) => [
+        sectionId,
+        parsed.sections[sectionId]?.content || ""
+      ])
+    )
+  ).map((section) => ({
+    ...section,
+    confidence: parsed.sections[section.id]?.confidence,
+    sourceHint: parsed.sections[section.id]?.sourceHint
+  }));
 }
 function serializeSections(sections) {
-  const sectionMap = Object.fromEntries(sections.map((section) => [section.id, normalizeText(section.content)]));
+  const sectionMap = Object.fromEntries(sections.map((section) => [section.id, normalizeText2(section.content)]));
   const blocks = [
     sectionMap.header,
     sectionMap.summary ? `SUMMARY
@@ -21657,12 +22151,20 @@ ${sectionMap.experience}` : "",
     sectionMap.skills ? `SKILLS
 ${sectionMap.skills}` : "",
     sectionMap.education ? `EDUCATION
-${sectionMap.education}` : ""
+${sectionMap.education}` : "",
+    sectionMap.projects ? `PROJECTS
+${sectionMap.projects}` : "",
+    sectionMap.certifications ? `CERTIFICATIONS
+${sectionMap.certifications}` : "",
+    sectionMap.community ? `COMMUNITY
+${sectionMap.community}` : "",
+    sectionMap.interests ? `INTERESTS
+${sectionMap.interests}` : ""
   ].filter(Boolean);
   return blocks.join("\n\n").trim();
 }
 function getSectionStatus(section) {
-  const value = normalizeText(section.content);
+  const value = normalizeText2(section.content);
   if (!value) {
     return section.required ? "Missing" : "Optional";
   }
@@ -21671,36 +22173,19 @@ function getSectionStatus(section) {
   }
   return "Ready";
 }
-function countSectionStatuses(sections) {
-  return sections.reduce(
-    (summary, section) => {
-      const status = getSectionStatus(section);
-      if (status === "Ready") {
-        summary.ready += 1;
-      } else if (status === "Needs detail") {
-        summary.needsDetail += 1;
-      } else if (status === "Missing") {
-        summary.missing += 1;
-      } else {
-        summary.optional += 1;
-      }
-      return summary;
-    },
-    { ready: 0, needsDetail: 0, missing: 0, optional: 0 }
-  );
+var requiredGuidedOrder = ["header", "summary", "experience", "skills", "education"];
+var optionalGuidedOrder = ["projects", "certifications", "community", "interests"];
+function activeGuidedSections(sections) {
+  const optionalVisible = optionalGuidedOrder.filter((sectionId) => {
+    const section = sections.find((item) => item.id === sectionId);
+    return Boolean(section && normalizeText2(section.content));
+  });
+  return [...requiredGuidedOrder, ...optionalVisible];
 }
-function findNextSection(sections, activeSection) {
-  const statuses = sections.map((section) => ({
-    id: section.id,
-    status: getSectionStatus(section)
-  }));
-  const preferred = statuses.find((section) => section.status === "Missing") || statuses.find((section) => section.status === "Needs detail");
-  if (preferred && preferred.id !== activeSection) {
-    return preferred.id;
-  }
-  const currentIndex = sections.findIndex((section) => section.id === activeSection);
-  const fallback = sections[(currentIndex + 1) % sections.length];
-  return fallback?.id || activeSection;
+function nextGuidedSection(sections, activeSection) {
+  const ordered = activeGuidedSections(sections);
+  const currentIndex = ordered.indexOf(activeSection);
+  return ordered[currentIndex + 1] || null;
 }
 function sectionToneTips(sectionId) {
   return {
@@ -21708,8 +22193,264 @@ function sectionToneTips(sectionId) {
     summary: "Aim for 2-3 lines. Explain direction and strengths without sounding inflated.",
     experience: "Prefer action + outcome. Show scope, ownership, or results when possible.",
     skills: "List only what helps the target role. Cut generic filler.",
-    education: "Only include details that still help your story."
+    education: "Only include details that still help your story.",
+    projects: "Show what you built, the tools involved, and why it mattered.",
+    certifications: "Only keep credentials that help this target role.",
+    community: "Treat this like resume evidence, not a biography sidebar.",
+    interests: "Keep this short and human. It should not compete with experience."
   }[sectionId];
+}
+function suggestionSection(title) {
+  const normalized = title.toLowerCase();
+  if (normalized.includes("summary")) return "summary";
+  if (normalized.includes("skills")) return "skills";
+  if (normalized.includes("education") || normalized.includes("dates")) return "education";
+  if (normalized.includes("project")) return "projects";
+  if (normalized.includes("certification") || normalized.includes("license")) return "certifications";
+  if (normalized.includes("community") || normalized.includes("volunteer") || normalized.includes("leadership")) return "community";
+  if (normalized.includes("interest")) return "interests";
+  if (normalized.includes("bullet") || normalized.includes("experience") || normalized.includes("verb tense") || normalized.includes("first-person") || normalized.includes("quantified") || normalized.includes("impact")) {
+    return "experience";
+  }
+  return "global";
+}
+function sectionIssues(sectionId, analysis) {
+  if (!analysis) {
+    return [];
+  }
+  const direct = (analysis.suggestions || []).filter((item) => suggestionSection(item.title) === sectionId);
+  const ats = (analysis.atsSafety || []).filter((item) => {
+    const normalized = item.title.toLowerCase();
+    if (sectionId === "experience") {
+      return normalized.includes("c.a.r.") || normalized.includes("first-person");
+    }
+    if (sectionId === "education") {
+      return normalized.includes("standard section titles");
+    }
+    if (sectionId === "skills") {
+      return normalized.includes("standard section titles");
+    }
+    if (sectionId === "projects" || sectionId === "certifications" || sectionId === "community" || sectionId === "interests") {
+      return false;
+    }
+    if (sectionId === "summary") {
+      return normalized.includes("first-person");
+    }
+    return false;
+  }).map((item) => ({
+    priority: item.status === "needs-attention" ? "high" : "medium",
+    title: item.title,
+    detail: item.detail
+  }));
+  return [...direct, ...ats];
+}
+function sectionAiActions(sectionId, targetRole) {
+  const roleLabel = targetRole.trim() || "your target role";
+  return {
+    header: [
+      {
+        id: "tighten_header",
+        kind: "ai",
+        label: "Preview tighter header",
+        detail: "Keep the header factual and easier to scan."
+      }
+    ],
+    summary: [
+      {
+        id: "rewrite_summary",
+        kind: "ai",
+        label: "Preview summary rewrite",
+        detail: "Tighten the summary without changing the core positioning."
+      },
+      {
+        id: "align_summary_to_role",
+        kind: "ai",
+        label: `Align to ${roleLabel}`,
+        detail: "Shift the summary toward the target role and strongest signal."
+      }
+    ],
+    experience: [
+      {
+        id: "strengthen_bullets",
+        kind: "ai",
+        label: "Preview stronger bullets",
+        detail: "Sharpen ownership and outcome language in this experience section."
+      },
+      {
+        id: "align_experience_to_role",
+        kind: "ai",
+        label: `Align to ${roleLabel}`,
+        detail: "Adjust bullet framing toward the target role and highlight measurable impact."
+      }
+    ],
+    skills: [
+      {
+        id: "trim_skills",
+        kind: "local",
+        label: "Trim weak skills",
+        detail: "Remove weak, duplicated, or low-signal skills from this list."
+      },
+      {
+        id: "align_skills_to_role",
+        kind: "local",
+        label: `Align to ${roleLabel}`,
+        detail: "Prioritize the skills that best support the target role."
+      }
+    ],
+    education: [
+      {
+        id: "tighten_education",
+        kind: "ai",
+        label: "Preview concise education",
+        detail: "Shorten education details without losing useful signal."
+      },
+      {
+        id: "clarify_degree",
+        kind: "ai",
+        label: "Preview degree cleanup",
+        detail: "Make the degree, school, and date easier to scan."
+      }
+    ],
+    projects: [
+      {
+        id: "tighten_optional_section",
+        kind: "ai",
+        label: "Preview project cleanup",
+        detail: "Make project scope and result easier to scan."
+      }
+    ],
+    certifications: [
+      {
+        id: "tighten_optional_section",
+        kind: "ai",
+        label: "Preview concise certification list",
+        detail: "Trim credentials to the ones that add signal."
+      }
+    ],
+    community: [
+      {
+        id: "tighten_optional_section",
+        kind: "ai",
+        label: "Preview cleaner community section",
+        detail: "Tighten this section into factual, resume-ready proof."
+      }
+    ],
+    interests: [
+      {
+        id: "tighten_optional_section",
+        kind: "ai",
+        label: "Preview shorter interests",
+        detail: "Keep only short, humanizing interests that do not distract."
+      }
+    ]
+  }[sectionId];
+}
+function sectionExample(sectionId) {
+  return {
+    header: "Maya Patel | San Francisco, CA | maya@email.com | linkedin.com/in/maya",
+    summary: "Product manager targeting growth roles with experience across onboarding, experimentation, and cross-functional delivery.",
+    experience: "Owned onboarding experiments across web and lifecycle email, lifting activation by 14% for new self-serve accounts.",
+    skills: "Product Strategy | Experimentation | SQL | Stakeholder Management",
+    education: "University of Washington | B.A. Economics | 2020",
+    projects: "Activation Dashboard | Built a KPI dashboard in SQL and Tableau used in weekly product reviews.",
+    certifications: "Pragmatic Certified Product Manager",
+    community: "Mentor, Product School | Coach early-career PMs on experimentation and case-study storytelling.",
+    interests: "Distance running | Ceramics"
+  }[sectionId];
+}
+var weakSkillTerms = /* @__PURE__ */ new Set([
+  "communication",
+  "teamwork",
+  "hard working",
+  "hardworking",
+  "detail oriented",
+  "detail-oriented",
+  "leadership",
+  "problem solving",
+  "problem-solving",
+  "microsoft office",
+  "collaboration"
+]);
+var roleSkillHints = [
+  ["product manager", ["Product Strategy", "Roadmapping", "Experimentation", "Analytics", "SQL", "Stakeholder Management", "User Research", "Prioritization"]],
+  ["product", ["Product Strategy", "Roadmapping", "Experimentation", "Analytics", "SQL", "Stakeholder Management"]],
+  ["designer", ["User Research", "Interaction Design", "Figma", "Design Systems", "Prototyping"]],
+  ["engineer", ["JavaScript", "TypeScript", "React", "Node.js", "System Design", "Testing"]],
+  ["data", ["SQL", "Python", "Analytics", "Experimentation", "Dashboarding"]]
+];
+function serializeSkills(skills) {
+  return skills.join("\n");
+}
+function trimWeakSkillsContent(content, targetRole) {
+  const trimmed = trimWeakSkillsList(content);
+  const normalizedRole = targetRole.toLowerCase();
+  const preferredSkills = roleSkillHints.find(([role]) => normalizedRole.includes(role))?.[1] || [];
+  if (!preferredSkills.length) {
+    return serializeSkills(trimmed.slice(0, 10));
+  }
+  const preferredSet = new Set(preferredSkills.map((skill) => skill.toLowerCase()));
+  const prioritized = [];
+  const secondary = [];
+  for (const skill of trimmed) {
+    if (preferredSet.has(skill.toLowerCase())) {
+      prioritized.push(skill);
+    } else if (!weakSkillTerms.has(skill.toLowerCase())) {
+      secondary.push(skill);
+    }
+  }
+  if (prioritized.length >= 3) {
+    return serializeSkills(prioritized.slice(0, 10));
+  }
+  return serializeSkills([...prioritized, ...secondary.slice(0, Math.max(0, 10 - prioritized.length))].slice(0, 10));
+}
+function alignSkillsToRoleContent(content, targetRole) {
+  const skills = alignSkillsToRoleList(content, targetRole);
+  if (!skills.length) {
+    return "";
+  }
+  return serializeSkills(skills.slice(0, 10));
+}
+function navigatorStatus(section, hasDraft, activeSection) {
+  if (!hasDraft) {
+    return section.required ? "Ready after draft" : "Not started";
+  }
+  if (section.id === activeSection) {
+    return "In progress";
+  }
+  const status = getSectionStatus(section);
+  if (status === "Ready") return "Complete";
+  if (status === "Needs detail") return "Recommended next";
+  return "Not started";
+}
+function parseExperienceRoles(content) {
+  const lines = normalizeText2(content).split("\n");
+  const roles = [];
+  let currentTitle = "";
+  let currentBullets = [];
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) {
+      if (currentTitle || currentBullets.length) {
+        roles.push({ title: currentTitle || `Role ${roles.length + 1}`, bullets: currentBullets });
+      }
+      currentTitle = "";
+      currentBullets = [];
+      continue;
+    }
+    if (/^[-*•]/.test(line)) {
+      currentBullets.push(line.replace(/^[-*•]\s*/, ""));
+      continue;
+    }
+    if (!currentTitle) {
+      currentTitle = line;
+    } else {
+      currentBullets.push(line);
+    }
+  }
+  if (currentTitle || currentBullets.length) {
+    roles.push({ title: currentTitle || `Role ${roles.length + 1}`, bullets: currentBullets });
+  }
+  return roles.filter((role) => role.title || role.bullets.length);
 }
 function readPersistedState() {
   if (typeof window === "undefined") {
@@ -21756,67 +22497,163 @@ function Panel({
     "div",
     {
       className: cn(
-        "rounded-2xl border border-neutral-200 bg-white shadow-sm",
+        "rounded-2xl border border-neutral-200 bg-white",
         className
       )
     },
     children
   );
 }
+function ProgressStepper({
+  sections,
+  hasDraft,
+  activeSection,
+  onSectionSelect
+}) {
+  const guidedSections = activeGuidedSections(sections);
+  const finalReviewUnlocked = requiredGuidedOrder.every((sectionId) => {
+    const section = sections.find((item) => item.id === sectionId);
+    return section ? getSectionStatus(section) !== "Missing" : false;
+  });
+  return /* @__PURE__ */ React.createElement("aside", { className: "h-fit xl:sticky xl:top-8" }, /* @__PURE__ */ React.createElement(SectionEyebrow, null, "Progress"), /* @__PURE__ */ React.createElement("div", { className: "mt-4 rounded-2xl bg-white/75 p-4 ring-1 ring-neutral-200/80 backdrop-blur" }, /* @__PURE__ */ React.createElement("div", { className: "space-y-1.5" }, /* @__PURE__ */ React.createElement("div", { className: "flex items-start gap-3 rounded-xl px-2 py-2" }, /* @__PURE__ */ React.createElement("span", { className: cn(
+    "mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold",
+    hasDraft ? "bg-emerald-50 text-emerald-700" : "bg-neutral-950 text-white"
+  ) }, "1"), /* @__PURE__ */ React.createElement("div", { className: "min-w-0" }, /* @__PURE__ */ React.createElement("p", { className: "text-sm font-medium text-neutral-950" }, "Create first draft"), /* @__PURE__ */ React.createElement("p", { className: "mt-1 text-xs leading-5 text-neutral-500" }, hasDraft ? "Complete" : "Start here"))), guidedSections.map((sectionId, index) => {
+    const section = sections.find((item) => item.id === sectionId);
+    const state = navigatorStatus(section, hasDraft, activeSection);
+    const tone = state === "Complete" ? "bg-emerald-50 text-emerald-700" : state === "In progress" ? "bg-neutral-950 text-white" : "bg-neutral-100 text-neutral-500";
+    const canSelect = Boolean(hasDraft && onSectionSelect);
+    return /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        key: section.id,
+        type: "button",
+        "data-testid": `left-rail-section-${section.id}`,
+        onClick: () => {
+          if (canSelect) {
+            onSectionSelect?.(section.id);
+          }
+        },
+        disabled: !canSelect,
+        className: cn(
+          "flex w-full items-start gap-3 rounded-xl px-2 py-2 text-left transition",
+          canSelect ? "hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-950/15" : "cursor-default"
+        )
+      },
+      /* @__PURE__ */ React.createElement("span", { className: cn("mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold", tone) }, index + 2),
+      /* @__PURE__ */ React.createElement("div", { className: "min-w-0" }, /* @__PURE__ */ React.createElement("p", { className: "text-sm font-medium text-neutral-900" }, section.title), /* @__PURE__ */ React.createElement("p", { className: "text-xs leading-5 text-neutral-500" }, state))
+    );
+  }), /* @__PURE__ */ React.createElement("div", { className: "flex items-start gap-3 rounded-xl px-2 py-2" }, /* @__PURE__ */ React.createElement("span", { className: cn(
+    "mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold",
+    hasDraft ? "bg-neutral-50 text-neutral-600" : "border border-dashed border-neutral-300 bg-white text-neutral-400"
+  ) }, guidedSections.length + 2), /* @__PURE__ */ React.createElement("div", { className: "min-w-0" }, /* @__PURE__ */ React.createElement("p", { className: "text-sm font-medium text-neutral-900" }, "Final review"), /* @__PURE__ */ React.createElement("p", { className: "mt-1 text-xs leading-5 text-neutral-500" }, hasDraft ? finalReviewUnlocked ? "Ready next" : "Locked until required sections are complete" : "Ready after draft"))))));
+}
+function EvidenceBadge({ level }) {
+  const copy = {
+    grounded: "Grounded",
+    structured: "Structured",
+    inferred: "Inferred"
+  }[level];
+  const className = {
+    grounded: "border-neutral-200 bg-neutral-100 text-neutral-700",
+    structured: "border-sky-200 bg-sky-50 text-sky-700",
+    inferred: "border-amber-200 bg-amber-50 text-amber-700"
+  }[level];
+  return /* @__PURE__ */ React.createElement("span", { className: cn("rounded-lg border px-2.5 py-1 text-[11px] font-medium", className) }, copy);
+}
+function AtsSafetyBadge({ status }) {
+  const label = status === "looks-safe" ? "Looks safe" : status === "needs-attention" ? "Needs attention" : "Info";
+  const classes = status === "looks-safe" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : status === "needs-attention" ? "border-amber-200 bg-amber-50 text-amber-700" : "border-neutral-200 bg-neutral-50 text-neutral-600";
+  return /* @__PURE__ */ React.createElement("span", { className: cn("rounded-full border px-3 py-1 text-xs font-medium", classes) }, label);
+}
 function ResumePreview({
   sections,
   missingKeywords
 }) {
-  const sectionMap = Object.fromEntries(sections.map((section) => [section.id, normalizeText(section.content)]));
+  const sectionMap = Object.fromEntries(sections.map((section) => [section.id, normalizeText2(section.content)]));
   const headerLines = sectionMap.header.split("\n").filter(Boolean);
   return /* @__PURE__ */ React.createElement("div", { "data-testid": "resume-preview", className: "mt-4 rounded-2xl border border-neutral-200 bg-neutral-50 p-6" }, sectionMap.header ? /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { className: "whitespace-pre-wrap break-words text-xl font-semibold leading-8 text-neutral-950" }, headerLines[0]), headerLines.slice(1).length > 0 && /* @__PURE__ */ React.createElement("div", { className: "mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-neutral-500" }, headerLines.slice(1).join("  |  "))) : /* @__PURE__ */ React.createElement("p", { className: "text-sm text-neutral-500" }, "Your live preview will appear here as sections fill in."), missingKeywords.length > 0 && /* @__PURE__ */ React.createElement("div", { className: "mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800" }, "Missing keywords: ", missingKeywords.join(", ")), [
     ["summary", "Summary"],
     ["experience", "Experience"],
     ["skills", "Skills"],
-    ["education", "Education"]
+    ["education", "Education"],
+    ["projects", "Projects"],
+    ["certifications", "Certifications"],
+    ["community", "Community"],
+    ["interests", "Interests"]
   ].map(
     ([id, label]) => sectionMap[id] ? /* @__PURE__ */ React.createElement("section", { key: id, className: "mt-6" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.16em] text-neutral-400" }, label), /* @__PURE__ */ React.createElement("div", { className: "mt-2 space-y-2 text-sm leading-6 text-neutral-700" }, sectionMap[id].split("\n").filter(Boolean).map(
       (line) => /^[-*•]/.test(line) ? /* @__PURE__ */ React.createElement("div", { key: `${id}-${line}`, className: "flex gap-2" }, /* @__PURE__ */ React.createElement("span", { className: "mt-[2px] text-neutral-400" }, "\u2022"), /* @__PURE__ */ React.createElement("span", null, line.replace(/^[-*•]\s*/, ""))) : /* @__PURE__ */ React.createElement("p", { key: `${id}-${line}`, className: "whitespace-pre-wrap break-words" }, line)
     ))) : null
   ));
 }
-function SampleResumeCard() {
-  return /* @__PURE__ */ React.createElement("div", { className: "rounded-[28px] border border-neutral-200 bg-white p-6 shadow-sm" }, /* @__PURE__ */ React.createElement("div", { className: "flex items-center justify-between gap-3 border-b border-neutral-200 pb-4" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("p", { className: "text-sm font-semibold text-neutral-950" }, "Resume preview"), /* @__PURE__ */ React.createElement("p", { className: "text-xs uppercase tracking-[0.16em] text-neutral-400" }, "After Resume Refresh")), /* @__PURE__ */ React.createElement("div", { className: "rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700" }, "Cleaner wording")), /* @__PURE__ */ React.createElement("div", { className: "space-y-5 pt-5" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("p", { className: "text-xl font-semibold text-neutral-950" }, "Maya Patel"), /* @__PURE__ */ React.createElement("p", { className: "mt-1 text-sm leading-6 text-neutral-500" }, "San Francisco, CA  |  maya@resumerefresh.app  |  linkedin.com/in/mayapatel")), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("p", { className: "text-[11px] font-semibold uppercase tracking-[0.16em] text-neutral-400" }, "Summary"), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-700" }, "Product leader driving growth, onboarding, and monetization across B2B SaaS.")), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("p", { className: "text-[11px] font-semibold uppercase tracking-[0.16em] text-neutral-400" }, "Experience"), /* @__PURE__ */ React.createElement("div", { className: "mt-2 space-y-3 text-sm leading-6 text-neutral-700" }, /* @__PURE__ */ React.createElement("p", { className: "font-medium text-neutral-900" }, "Senior Product Manager, Northstar"), /* @__PURE__ */ React.createElement("div", { className: "flex gap-2" }, /* @__PURE__ */ React.createElement("span", { className: "mt-[2px] text-neutral-400" }, "\u2022"), /* @__PURE__ */ React.createElement("span", null, "Ran onboarding experiments that lifted activation 18%.")), /* @__PURE__ */ React.createElement("div", { className: "flex gap-2" }, /* @__PURE__ */ React.createElement("span", { className: "mt-[2px] text-neutral-400" }, "\u2022"), /* @__PURE__ */ React.createElement("span", null, "Led pricing tests that increased expansion revenue 11%.")))), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("p", { className: "text-[11px] font-semibold uppercase tracking-[0.16em] text-neutral-400" }, "Skills"), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-700" }, "Product Strategy  |  Experimentation  |  SQL  |  Stakeholder Management"))));
+function hasExperienceDateSignal(text) {
+  return /\b(?:19|20)\d{2}\b|\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\s+(?:19|20)\d{2}\b/i.test(text);
+}
+function buildFinalReviewChecks(sections) {
+  const findSection = (id) => sections.find((section) => section.id === id);
+  const items = [];
+  const requiredSections = requiredGuidedOrder.map((id) => findSection(id)).filter(Boolean);
+  const missingRequired = requiredSections.filter((section) => getSectionStatus(section) === "Missing");
+  if (missingRequired.length) {
+    items.push({
+      status: "needs-attention",
+      title: "Required sections are still incomplete",
+      detail: `Finish ${missingRequired.map((section) => section.title.toLowerCase()).join(", ")} before export.`
+    });
+  } else {
+    items.push({
+      status: "looks-safe",
+      title: "Required sections are present",
+      detail: "Header, summary, experience, skills, and education are all filled in."
+    });
+  }
+  const experience = findSection("experience");
+  if (experience && normalizeText2(experience.content) && !hasExperienceDateSignal(experience.content)) {
+    items.push({
+      status: "needs-attention",
+      title: "Experience needs date clarity",
+      detail: "Add date ranges to experience entries so recruiters can quickly understand timeline and tenure."
+    });
+  } else if (experience && normalizeText2(experience.content)) {
+    items.push({
+      status: "looks-safe",
+      title: "Experience timeline looks clear",
+      detail: "Experience entries include visible date cues."
+    });
+  }
+  const optionalPresent = optionalGuidedOrder.filter((sectionId) => {
+    const section = findSection(sectionId);
+    return Boolean(section && normalizeText2(section.content));
+  });
+  if (optionalPresent.length) {
+    items.push({
+      status: "info",
+      title: "Optional sections included",
+      detail: `${optionalPresent.map((sectionId) => findSection(sectionId)?.title).filter(Boolean).join(", ")} will be included in the final resume.`
+    });
+  }
+  return items;
 }
 function Landing({
   onStart,
-  onViewSample,
-  onUseSample
+  onViewSample
 }) {
-  return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("section", { className: "py-10 sm:py-14" }, /* @__PURE__ */ React.createElement("div", { className: "overflow-hidden rounded-[32px] border border-neutral-200 bg-[#f7f3ec] shadow-[0_18px_48px_rgba(24,24,24,0.06)]" }, /* @__PURE__ */ React.createElement("div", { className: "grid gap-6 px-5 py-6 sm:px-7 sm:py-8 lg:grid-cols-12 lg:gap-6 lg:px-8 lg:py-8" }, /* @__PURE__ */ React.createElement("div", { className: "flex flex-col justify-between gap-6 lg:col-span-5" }, /* @__PURE__ */ React.createElement("div", { className: "space-y-5" }, /* @__PURE__ */ React.createElement("div", { className: "inline-flex items-center gap-2 rounded-full border border-neutral-200 bg-white px-4 py-2 text-xs font-medium uppercase tracking-[0.16em] text-neutral-500 shadow-sm" }, /* @__PURE__ */ React.createElement("span", { className: "h-2 w-2 rounded-full bg-emerald-500" }), "Resume Refresh"), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("h1", { className: "max-w-[9ch] text-4xl font-semibold leading-[0.94] tracking-[-0.05em] text-neutral-950 sm:text-5xl lg:text-[3.35rem]" }, "Import your resume. Leave with stronger proof."), /* @__PURE__ */ React.createElement("p", { className: "mt-4 max-w-lg text-base leading-7 text-neutral-600" }, "Bring in a resume or LinkedIn profile, tighten weak bullets, and leave with a cleaner draft built around sharper outcomes.")), /* @__PURE__ */ React.createElement("div", { className: "flex flex-col gap-3 sm:flex-row" }, /* @__PURE__ */ React.createElement(
+  return /* @__PURE__ */ React.createElement("section", { className: "py-8 sm:py-10" }, /* @__PURE__ */ React.createElement("div", { className: "overflow-hidden rounded-3xl border border-neutral-200 bg-white" }, /* @__PURE__ */ React.createElement("div", { className: "border-b border-neutral-200 px-5 py-3 sm:px-6" }, /* @__PURE__ */ React.createElement("div", { className: "flex items-center justify-between gap-3" }, /* @__PURE__ */ React.createElement("div", { className: "inline-flex items-center gap-2" }, /* @__PURE__ */ React.createElement("span", { className: "h-2 w-2 rounded-full bg-emerald-600" }), /* @__PURE__ */ React.createElement("p", { className: "text-xs font-medium uppercase tracking-[0.16em] text-neutral-500" }, "Resume Refresh")), /* @__PURE__ */ React.createElement("p", { className: "hidden text-xs text-neutral-400 sm:block" }, "Resume cleanup for first-pass credibility"))), /* @__PURE__ */ React.createElement("div", { className: "grid gap-8 px-5 py-8 sm:px-6 sm:py-10 lg:grid-cols-[minmax(0,1.05fr)_minmax(320px,0.95fr)] lg:gap-10 lg:px-8" }, /* @__PURE__ */ React.createElement("div", { className: "max-w-xl" }, /* @__PURE__ */ React.createElement(SectionEyebrow, null, "Resume cleanup, without the fluff"), /* @__PURE__ */ React.createElement("h1", { className: "mt-4 max-w-[10ch] text-4xl font-semibold leading-[0.96] tracking-[-0.045em] text-neutral-950 sm:text-5xl" }, "Import your resume. Leave with stronger proof."), /* @__PURE__ */ React.createElement("p", { className: "mt-4 max-w-lg text-base leading-7 text-neutral-600" }, "Bring in your current resume or LinkedIn profile, tighten weak bullets, and leave with a cleaner draft built around clearer outcomes."), /* @__PURE__ */ React.createElement("div", { className: "mt-6 flex flex-col gap-3 sm:flex-row sm:items-center" }, /* @__PURE__ */ React.createElement(
     "button",
     {
       onClick: onStart,
-      className: "w-full rounded-full bg-neutral-950 px-5 py-3 text-sm font-medium text-white transition hover:bg-neutral-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-950 sm:w-auto"
+      className: "inline-flex h-11 items-center justify-center rounded-xl bg-neutral-950 px-4 text-sm font-medium text-white transition hover:bg-neutral-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-950"
     },
     "Start Resume Refresh"
   ), /* @__PURE__ */ React.createElement(
     "button",
     {
       onClick: onViewSample,
-      className: "w-full rounded-full border border-neutral-200 bg-white px-5 py-3 text-sm font-medium text-neutral-800 transition hover:bg-neutral-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-950 sm:w-auto"
+      className: "inline-flex h-11 items-center justify-center rounded-xl border border-neutral-200 bg-white px-4 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-950"
     },
     "View sample"
-  ))), /* @__PURE__ */ React.createElement("div", { className: "grid gap-3 sm:grid-cols-3" }, landingStats.map(([label, copy]) => /* @__PURE__ */ React.createElement("div", { key: label, className: "rounded-2xl border border-neutral-200 bg-white p-4" }, /* @__PURE__ */ React.createElement("p", { className: "text-sm font-semibold text-neutral-950" }, label), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-500" }, copy))))), /* @__PURE__ */ React.createElement("div", { className: "grid gap-4 lg:col-span-7 lg:grid-cols-[0.52fr_0.48fr]" }, /* @__PURE__ */ React.createElement("div", { className: "rounded-[28px] border border-neutral-200 bg-white p-5 shadow-sm" }, /* @__PURE__ */ React.createElement("div", { className: "flex items-center justify-between gap-3 border-b border-neutral-200 pb-4" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("p", { className: "text-sm font-semibold text-neutral-950" }, "Bullet rewrite preview"), /* @__PURE__ */ React.createElement("p", { className: "text-xs uppercase tracking-[0.16em] text-neutral-400" }, "Shorter and metric-led")), /* @__PURE__ */ React.createElement("div", { className: "rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700" }, "Before \u2192 After")), /* @__PURE__ */ React.createElement("div", { className: "mt-4 space-y-3" }, beforeAfter.map((item) => /* @__PURE__ */ React.createElement("div", { key: item.before, className: "grid overflow-hidden rounded-2xl border border-neutral-200 md:grid-cols-2" }, /* @__PURE__ */ React.createElement("div", { className: "bg-neutral-100 px-4 py-4" }, /* @__PURE__ */ React.createElement("p", { className: "text-[11px] font-semibold uppercase tracking-[0.16em] text-neutral-500" }, "Before"), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-600" }, item.before)), /* @__PURE__ */ React.createElement("div", { className: "border-t border-neutral-200 bg-[#eef6f0] px-4 py-4 md:border-l md:border-t-0" }, /* @__PURE__ */ React.createElement("p", { className: "text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-700" }, "After"), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-900" }, item.after)))))), /* @__PURE__ */ React.createElement(SampleResumeCard, null))))), /* @__PURE__ */ React.createElement("section", { id: "sample-preview", className: "scroll-mt-24 py-10 sm:py-14" }, /* @__PURE__ */ React.createElement("div", { className: "grid gap-5 lg:grid-cols-12 lg:items-start" }, /* @__PURE__ */ React.createElement("div", { className: "space-y-5 lg:col-span-4" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement(SectionEyebrow, null, "Proof and process"), /* @__PURE__ */ React.createElement("h2", { className: "mt-3 max-w-[11ch] text-4xl font-semibold tracking-[-0.05em] text-neutral-950 sm:text-5xl" }, "Better bullets, tighter flow, full control."), /* @__PURE__ */ React.createElement("p", { className: "mt-4 max-w-md text-base leading-7 text-neutral-600" }, "The page now moves from proof to process to control in one continuous composition instead of repeating the same split layout.")), /* @__PURE__ */ React.createElement(
-    "button",
-    {
-      onClick: onUseSample,
-      className: "w-full rounded-full bg-neutral-950 px-5 py-3 text-sm font-medium text-white transition hover:bg-neutral-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-950 sm:w-auto"
-    },
-    "Try this sample"
-  ), /* @__PURE__ */ React.createElement("div", { className: "grid gap-3" }, workflowSteps.map((item, index) => /* @__PURE__ */ React.createElement("div", { key: item.title, className: "rounded-2xl border border-neutral-200 bg-white px-4 py-4 shadow-sm" }, /* @__PURE__ */ React.createElement("div", { className: "flex items-center gap-3" }, /* @__PURE__ */ React.createElement("div", { className: "flex h-8 w-8 items-center justify-center rounded-full bg-neutral-950 text-xs font-semibold text-white" }, index + 1), /* @__PURE__ */ React.createElement("p", { className: "text-sm font-semibold text-neutral-950" }, item.title)), /* @__PURE__ */ React.createElement("p", { className: "mt-3 text-sm leading-6 text-neutral-600" }, item.copy))))), /* @__PURE__ */ React.createElement("div", { className: "grid gap-4 lg:col-span-8 lg:grid-cols-[0.48fr_0.52fr]" }, /* @__PURE__ */ React.createElement("div", { className: "grid gap-4" }, featureCards.map(([title, copy]) => /* @__PURE__ */ React.createElement(Panel, { key: title, className: "rounded-[24px] p-5" }, /* @__PURE__ */ React.createElement("p", { className: "text-sm font-semibold text-neutral-950" }, title), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-600" }, copy)))), /* @__PURE__ */ React.createElement("div", { className: "rounded-[28px] border border-neutral-200 bg-white p-6 shadow-sm" }, /* @__PURE__ */ React.createElement("div", { className: "flex items-start justify-between gap-4" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("p", { className: "text-sm font-semibold text-neutral-950" }, "Live product preview"), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-600" }, "Edit one section at a time, review stronger wording, and watch the draft update in place.")), /* @__PURE__ */ React.createElement("div", { className: "rounded-full bg-neutral-100 px-3 py-1 text-xs font-medium text-neutral-500" }, "Editable")), /* @__PURE__ */ React.createElement("div", { className: "mt-5 space-y-5 text-sm leading-6 text-neutral-700" }, /* @__PURE__ */ React.createElement("div", { className: "rounded-2xl bg-neutral-50 p-4" }, /* @__PURE__ */ React.createElement("p", { className: "text-[11px] font-semibold uppercase tracking-[0.16em] text-neutral-400" }, "Experience"), /* @__PURE__ */ React.createElement("p", { className: "mt-2" }, "Led onboarding tests that lifted activation 18%."), /* @__PURE__ */ React.createElement("p", { className: "mt-2" }, "Ran pricing experiments that increased expansion revenue 11%.")), /* @__PURE__ */ React.createElement("div", { className: "grid gap-3 md:grid-cols-2" }, /* @__PURE__ */ React.createElement("div", { className: "rounded-2xl border border-neutral-200 p-4" }, /* @__PURE__ */ React.createElement("p", { className: "text-[11px] font-semibold uppercase tracking-[0.16em] text-neutral-400" }, "Section guidance"), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-600" }, "Push vague bullets toward ownership, metrics, and outcomes.")), /* @__PURE__ */ React.createElement("div", { className: "rounded-2xl border border-neutral-200 p-4" }, /* @__PURE__ */ React.createElement("p", { className: "text-[11px] font-semibold uppercase tracking-[0.16em] text-neutral-400" }, "Live preview"), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-600" }, "See changes before export, then keep editing or ship the cleaner version."))), /* @__PURE__ */ React.createElement("div", { className: "border-t border-neutral-200 pt-4" }, /* @__PURE__ */ React.createElement("p", { className: "font-semibold text-neutral-950" }, "Maya Patel"), /* @__PURE__ */ React.createElement("p", { className: "mt-1 text-sm text-neutral-500" }, "San Francisco, CA  |  maya@resumerefresh.app"), /* @__PURE__ */ React.createElement("p", { className: "mt-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-neutral-400" }, "Summary"), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-700" }, "Product leader focused on growth, onboarding, and monetization."))))))), /* @__PURE__ */ React.createElement("section", { className: "py-10 sm:py-14" }, /* @__PURE__ */ React.createElement("div", { className: "grid gap-4 lg:grid-cols-12 lg:items-stretch" }, /* @__PURE__ */ React.createElement("div", { className: "rounded-[28px] border border-neutral-200 bg-white p-6 shadow-sm lg:col-span-7" }, /* @__PURE__ */ React.createElement("div", { className: "max-w-lg" }, /* @__PURE__ */ React.createElement(SectionEyebrow, null, "Trust"), /* @__PURE__ */ React.createElement("h2", { className: "mt-3 text-4xl font-semibold tracking-[-0.05em] text-neutral-950 sm:text-5xl" }, "Helpful, not a black box."), /* @__PURE__ */ React.createElement("p", { className: "mt-4 text-base leading-7 text-neutral-600" }, "Resume Refresh stays calm and explicit about what it uses, what it changes, and what remains editable.")), /* @__PURE__ */ React.createElement("div", { className: "mt-6 grid gap-3 md:grid-cols-3" }, trustPoints.map((point) => /* @__PURE__ */ React.createElement("div", { key: point, className: "rounded-2xl bg-neutral-50 p-4" }, /* @__PURE__ */ React.createElement("span", { className: "mb-3 block h-2 w-2 rounded-full bg-emerald-500" }), /* @__PURE__ */ React.createElement("p", { className: "text-sm leading-6 text-neutral-700" }, point))))), /* @__PURE__ */ React.createElement(Panel, { className: "rounded-[28px] bg-neutral-950 p-6 text-white shadow-sm lg:col-span-5" }, /* @__PURE__ */ React.createElement("div", { className: "flex h-full flex-col justify-between gap-6" }, /* @__PURE__ */ React.createElement("div", { className: "max-w-md" }, /* @__PURE__ */ React.createElement(SectionEyebrow, null, "Start now"), /* @__PURE__ */ React.createElement("h2", { className: "mt-3 text-3xl font-semibold tracking-[-0.04em] text-white" }, "Start with what you have. Finish with something stronger."), /* @__PURE__ */ React.createElement("p", { className: "mt-4 text-base leading-7 text-white/72" }, "Import your current material, tighten the weak parts, and export a resume that reads with more signal and less filler.")), /* @__PURE__ */ React.createElement("div", { className: "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between" }, /* @__PURE__ */ React.createElement("p", { className: "text-sm leading-6 text-white/60" }, "Resume or LinkedIn in. Cleaner PDF or DOCX out."), /* @__PURE__ */ React.createElement(
-    "button",
-    {
-      onClick: onStart,
-      className: "w-full rounded-full bg-white px-5 py-3 text-sm font-medium text-neutral-950 transition hover:bg-white/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:w-auto"
-    },
-    "Start now"
-  )))))));
+  ))), /* @__PURE__ */ React.createElement(Panel, { className: "p-4 sm:p-5" }, /* @__PURE__ */ React.createElement("div", { className: "flex items-start justify-between gap-3 border-b border-neutral-200 pb-4" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("p", { className: "text-sm font-semibold text-neutral-950" }, "Rewrite example"), /* @__PURE__ */ React.createElement("p", { className: "mt-1 text-xs uppercase tracking-[0.16em] text-neutral-400" }, "Shorter, clearer, more credible")), /* @__PURE__ */ React.createElement("div", { className: "rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-700" }, "Before to after")), /* @__PURE__ */ React.createElement("div", { className: "mt-4 space-y-3" }, beforeAfter.map((item) => /* @__PURE__ */ React.createElement("div", { key: item.before, className: "grid overflow-hidden rounded-xl border border-neutral-200 sm:grid-cols-2" }, /* @__PURE__ */ React.createElement("div", { className: "bg-neutral-50 px-4 py-4" }, /* @__PURE__ */ React.createElement("p", { className: "text-[11px] font-semibold uppercase tracking-[0.16em] text-neutral-500" }, "Before"), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-600" }, item.before)), /* @__PURE__ */ React.createElement("div", { className: "border-t border-neutral-200 bg-emerald-50/60 px-4 py-4 sm:border-l sm:border-t-0" }, /* @__PURE__ */ React.createElement("p", { className: "text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-700" }, "After"), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-900" }, item.after)))))))), /* @__PURE__ */ React.createElement("section", { id: "sample-preview", className: "mt-4 scroll-mt-24" }, /* @__PURE__ */ React.createElement("div", { className: "grid gap-3 rounded-2xl border border-neutral-200 bg-white px-4 py-4 sm:grid-cols-3 sm:px-5" }, landingProofItems.map(([title, copy]) => /* @__PURE__ */ React.createElement("div", { key: title, className: "rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-4" }, /* @__PURE__ */ React.createElement("p", { className: "text-sm font-semibold text-neutral-950" }, title), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-600" }, copy))))));
 }
 function WorkflowHeader({
   stage,
@@ -21843,38 +22680,75 @@ function SourceChoice({
   onImport,
   onManual
 }) {
-  return /* @__PURE__ */ React.createElement(Panel, { className: "p-8 sm:p-10" }, /* @__PURE__ */ React.createElement(SectionEyebrow, null, "How do you want to start?"), /* @__PURE__ */ React.createElement("h2", { className: "mt-4 text-3xl font-semibold tracking-[-0.04em] text-neutral-950" }, "Choose the fastest path for you."), /* @__PURE__ */ React.createElement("div", { className: "mt-8 grid gap-4 md:grid-cols-2" }, /* @__PURE__ */ React.createElement(
+  return /* @__PURE__ */ React.createElement(Panel, { className: "p-8 sm:p-10" }, /* @__PURE__ */ React.createElement(SectionEyebrow, null, "How do you want to start?"), /* @__PURE__ */ React.createElement("h2", { className: "mt-4 text-3xl font-semibold tracking-[-0.04em] text-neutral-950" }, "Pick your starting point."), /* @__PURE__ */ React.createElement("p", { className: "mt-4 max-w-2xl text-sm leading-7 text-neutral-600" }, "Paste LinkedIn text if you want a faster import path without scraping. Start manually if you want a blank builder with placeholders only."), /* @__PURE__ */ React.createElement("div", { className: "mt-8 grid gap-4 md:grid-cols-2" }, /* @__PURE__ */ React.createElement(
     "button",
     {
       onClick: onImport,
       className: "rounded-2xl border border-neutral-200 bg-neutral-50 p-6 text-left transition hover:border-neutral-300 hover:bg-white"
     },
-    /* @__PURE__ */ React.createElement("p", { className: "text-base font-semibold text-neutral-950" }, "Bring in what you already have"),
-    /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-600" }, "Use LinkedIn and your current resume as a shortcut. You will review everything before it is used.")
+    /* @__PURE__ */ React.createElement("p", { className: "text-base font-semibold text-neutral-950" }, "Paste LinkedIn text"),
+    /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-600" }, "Paste the parts of your LinkedIn profile you want to use, then review what came in before it touches your draft.")
   ), /* @__PURE__ */ React.createElement(
     "button",
     {
       onClick: onManual,
       className: "rounded-2xl border border-neutral-200 bg-neutral-50 p-6 text-left transition hover:border-neutral-300 hover:bg-white"
     },
-    /* @__PURE__ */ React.createElement("p", { className: "text-base font-semibold text-neutral-950" }, "Build it step by step"),
-    /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-600" }, "Answer guided prompts and create a resume without importing anything.")
+    /* @__PURE__ */ React.createElement("p", { className: "text-base font-semibold text-neutral-950" }, "Start manually"),
+    /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-600" }, "Open a blank builder and write section by section without importing anything.")
   )));
 }
-function ImportPermissions({
+function LinkedInPasteImport({
   onContinue,
   onManual,
-  isLinkedInReady,
-  isConfigReady
+  linkedinUrl,
+  linkedinHeadline,
+  linkedinExperience,
+  linkedinSkills,
+  onLinkedinUrlChange,
+  onLinkedinHeadlineChange,
+  onLinkedinExperienceChange,
+  onLinkedinSkillsChange
 }) {
-  return /* @__PURE__ */ React.createElement(Panel, { className: "p-8 sm:p-10" }, /* @__PURE__ */ React.createElement(SectionEyebrow, null, "Review what will be used"), /* @__PURE__ */ React.createElement("h2", { className: "mt-4 text-3xl font-semibold tracking-[-0.04em] text-neutral-950" }, "Import is visible and reversible."), /* @__PURE__ */ React.createElement("p", { className: "mt-4 max-w-2xl text-sm leading-7 text-neutral-600" }, "We only use the information you approve. Nothing is posted, changed, or shared."), /* @__PURE__ */ React.createElement("div", { className: "mt-8 grid gap-4 md:grid-cols-2" }, /* @__PURE__ */ React.createElement(Panel, { className: "p-5" }, /* @__PURE__ */ React.createElement("p", { className: "text-sm font-semibold text-neutral-900" }, "Will import"), /* @__PURE__ */ React.createElement("ul", { className: "mt-3 space-y-2 text-sm leading-6 text-neutral-600" }, /* @__PURE__ */ React.createElement("li", null, "Basic profile identity"), /* @__PURE__ */ React.createElement("li", null, "Pasted or exported profile text"), /* @__PURE__ */ React.createElement("li", null, "Uploaded resume text"))), /* @__PURE__ */ React.createElement(Panel, { className: "p-5" }, /* @__PURE__ */ React.createElement("p", { className: "text-sm font-semibold text-neutral-900" }, "Will not do"), /* @__PURE__ */ React.createElement("ul", { className: "mt-3 space-y-2 text-sm leading-6 text-neutral-600" }, /* @__PURE__ */ React.createElement("li", null, "Post to LinkedIn"), /* @__PURE__ */ React.createElement("li", null, "Change your LinkedIn account"), /* @__PURE__ */ React.createElement("li", null, "Publish anything without review")))), /* @__PURE__ */ React.createElement("div", { className: "mt-8 flex flex-wrap gap-3" }, /* @__PURE__ */ React.createElement(
+  return /* @__PURE__ */ React.createElement(Panel, { className: "p-8 sm:p-10" }, /* @__PURE__ */ React.createElement(SectionEyebrow, null, "LinkedIn import"), /* @__PURE__ */ React.createElement("h2", { "data-step-heading": "true", tabIndex: -1, className: "mt-4 text-3xl font-semibold tracking-[-0.04em] text-neutral-950" }, "Paste LinkedIn text to build your draft."), /* @__PURE__ */ React.createElement("p", { className: "mt-4 max-w-2xl text-sm leading-7 text-neutral-600" }, "This app does not scrape LinkedIn profile data because that would violate LinkedIn's rules. Paste your own profile text here instead, and the app will turn it into a reviewable draft input."), /* @__PURE__ */ React.createElement("div", { className: "mt-8 grid gap-4 lg:grid-cols-[0.95fr_1.05fr]" }, /* @__PURE__ */ React.createElement(Panel, { className: "p-5" }, /* @__PURE__ */ React.createElement("p", { className: "text-sm font-semibold text-neutral-900" }, "What to paste"), /* @__PURE__ */ React.createElement("ul", { className: "mt-3 space-y-2 text-sm leading-6 text-neutral-600" }, /* @__PURE__ */ React.createElement("li", null, "Your LinkedIn profile URL."), /* @__PURE__ */ React.createElement("li", null, "Headline or About text."), /* @__PURE__ */ React.createElement("li", null, "Experience text copied from your profile."), /* @__PURE__ */ React.createElement("li", null, "Skills, if it helps the target role.")), /* @__PURE__ */ React.createElement("p", { className: "mt-4 text-sm font-semibold text-neutral-900" }, "Why it has to work this way"), /* @__PURE__ */ React.createElement("p", { className: "mt-3 text-sm leading-6 text-neutral-600" }, "The app can use LinkedIn text that you paste yourself, but it does not scrape profile data because that would violate LinkedIn's rules. This keeps the workflow compliant and still gives the draft builder enough material to work with.")), /* @__PURE__ */ React.createElement(Panel, { className: "p-5" }, /* @__PURE__ */ React.createElement("div", { className: "grid gap-4" }, /* @__PURE__ */ React.createElement("label", { className: "grid gap-2 text-sm font-medium text-neutral-900" }, "LinkedIn profile URL", /* @__PURE__ */ React.createElement(
+    "input",
+    {
+      value: linkedinUrl,
+      onChange: (event) => onLinkedinUrlChange(event.target.value),
+      placeholder: "https://www.linkedin.com/in/your-name",
+      className: "rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm text-neutral-900 outline-none"
+    }
+  )), /* @__PURE__ */ React.createElement("label", { className: "grid gap-2 text-sm font-medium text-neutral-900" }, "Headline or About", /* @__PURE__ */ React.createElement(
+    "textarea",
+    {
+      value: linkedinHeadline,
+      onChange: (event) => onLinkedinHeadlineChange(event.target.value),
+      placeholder: "Paste your headline or About section",
+      className: "min-h-[110px] rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm leading-6 text-neutral-900 outline-none"
+    }
+  )), /* @__PURE__ */ React.createElement("label", { className: "grid gap-2 text-sm font-medium text-neutral-900" }, "Experience", /* @__PURE__ */ React.createElement(
+    "textarea",
+    {
+      value: linkedinExperience,
+      onChange: (event) => onLinkedinExperienceChange(event.target.value),
+      placeholder: "Paste your LinkedIn experience text",
+      className: "min-h-[140px] rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm leading-6 text-neutral-900 outline-none"
+    }
+  )), /* @__PURE__ */ React.createElement("label", { className: "grid gap-2 text-sm font-medium text-neutral-900" }, "Skills", /* @__PURE__ */ React.createElement(
+    "textarea",
+    {
+      value: linkedinSkills,
+      onChange: (event) => onLinkedinSkillsChange(event.target.value),
+      placeholder: "Optional: paste skills that support your target role",
+      className: "min-h-[90px] rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm leading-6 text-neutral-900 outline-none"
+    }
+  ))))), /* @__PURE__ */ React.createElement("div", { className: "mt-8 flex flex-wrap gap-3" }, /* @__PURE__ */ React.createElement(
     "button",
     {
       onClick: onContinue,
-      disabled: !isConfigReady,
       className: "rounded-full bg-neutral-950 px-5 py-3 text-sm font-medium text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-300"
     },
-    !isConfigReady ? "Checking import options..." : isLinkedInReady ? "Continue import" : "Continue without LinkedIn"
+    "Use this LinkedIn text"
   ), /* @__PURE__ */ React.createElement(
     "button",
     {
@@ -21882,37 +22756,144 @@ function ImportPermissions({
       className: "rounded-full border border-neutral-200 bg-white px-5 py-3 text-sm font-medium text-neutral-800 transition hover:bg-neutral-50"
     },
     "Start manually instead"
-  )), !isConfigReady && /* @__PURE__ */ React.createElement("p", { className: "mt-4 text-sm text-neutral-500" }, "Checking whether LinkedIn import is available in this environment."), isConfigReady && !isLinkedInReady && /* @__PURE__ */ React.createElement("p", { className: "mt-4 text-sm text-amber-700" }, "LinkedIn auth is not currently configured, but you can still continue with a pasted profile summary or an uploaded resume."));
+  )));
 }
 function ImportReview({
   sections,
+  activeSection,
   onSectionChange,
-  onContinue
+  onSectionSelect,
+  onContinue,
+  linkedinText
 }) {
-  const sectionSummary = countSectionStatuses(sections);
-  return /* @__PURE__ */ React.createElement("div", { className: "space-y-5" }, /* @__PURE__ */ React.createElement(Panel, { className: "p-8" }, /* @__PURE__ */ React.createElement(SectionEyebrow, null, "Import review"), /* @__PURE__ */ React.createElement("h2", { className: "mt-4 text-3xl font-semibold tracking-[-0.04em] text-neutral-950" }, "Confirm what came in."), /* @__PURE__ */ React.createElement("p", { className: "mt-4 text-sm leading-7 text-neutral-600" }, "Imported content is only a starting point. Clean up each section now so the draft generator works with better material."), /* @__PURE__ */ React.createElement("div", { className: "mt-6 grid gap-3 sm:grid-cols-3" }, /* @__PURE__ */ React.createElement("div", { className: "rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-emerald-700" }, "Ready"), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-2xl font-semibold text-emerald-900" }, sectionSummary.ready)), /* @__PURE__ */ React.createElement("div", { className: "rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-amber-700" }, "Needs detail"), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-2xl font-semibold text-amber-900" }, sectionSummary.needsDetail)), /* @__PURE__ */ React.createElement("div", { className: "rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-neutral-500" }, "Missing"), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-2xl font-semibold text-neutral-900" }, sectionSummary.missing)))), /* @__PURE__ */ React.createElement("div", { className: "grid gap-4" }, sections.map((section) => {
-    const status = getSectionStatus(section);
-    return /* @__PURE__ */ React.createElement(Panel, { key: section.id, className: "p-5" }, /* @__PURE__ */ React.createElement("div", { className: "flex flex-wrap items-start justify-between gap-3" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("p", { className: "text-base font-semibold text-neutral-950" }, section.title), /* @__PURE__ */ React.createElement("p", { className: "mt-1 text-sm leading-6 text-neutral-600" }, section.prompt)), /* @__PURE__ */ React.createElement("span", { className: cn(
-      "rounded-full px-3 py-1 text-xs font-medium",
-      status === "Ready" ? "bg-emerald-50 text-emerald-700" : status === "Needs detail" ? "bg-amber-50 text-amber-700" : "bg-neutral-100 text-neutral-700"
-    ) }, status)), /* @__PURE__ */ React.createElement(
-      "textarea",
+  const reviewOrder = ["header", "summary", "experience", "skills", "education"];
+  const currentIndex = Math.max(0, reviewOrder.indexOf(activeSection));
+  const selectedSection = sections.find((section) => section.id === activeSection) || sections[0];
+  const nextSectionId = reviewOrder[currentIndex + 1] || null;
+  const hasLinkedinText = Boolean(normalizeText2(linkedinText));
+  const confidenceLabel = selectedSection.confidence === "high" ? "Looks solid" : selectedSection.confidence === "medium" ? "Quick review recommended" : "Needs a close look";
+  return /* @__PURE__ */ React.createElement("div", { className: "grid gap-6 xl:grid-cols-[220px_minmax(0,1fr)] xl:items-start" }, /* @__PURE__ */ React.createElement(Panel, { className: "h-fit p-5 xl:sticky xl:top-8" }, /* @__PURE__ */ React.createElement(SectionEyebrow, null, "Import review"), /* @__PURE__ */ React.createElement("p", { className: "mt-4 text-sm leading-6 text-neutral-600" }, "We organized your import into resume sections. Review each one before creating your first draft."), /* @__PURE__ */ React.createElement("div", { className: "mt-5 space-y-2" }, reviewOrder.map((sectionId, index) => {
+    const section = sections.find((item) => item.id === sectionId);
+    const isActive = sectionId === activeSection;
+    const isComplete = index < currentIndex;
+    return /* @__PURE__ */ React.createElement(
+      "button",
       {
-        "data-testid": `review-${section.id}`,
-        value: section.content,
-        onChange: (event) => onSectionChange(section.id, event.target.value),
-        placeholder: section.placeholder,
-        className: "mt-4 min-h-[140px] w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm leading-6 text-neutral-900 outline-none"
-      }
-    ), /* @__PURE__ */ React.createElement("p", { className: "mt-3 text-xs leading-5 text-neutral-500" }, section.helper));
-  })), /* @__PURE__ */ React.createElement("div", { className: "flex justify-end" }, /* @__PURE__ */ React.createElement(
+        key: sectionId,
+        onClick: () => onSectionSelect(sectionId),
+        className: cn(
+          "flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left transition",
+          isActive ? "bg-neutral-950 text-white" : "bg-neutral-50 text-neutral-800 hover:bg-neutral-100"
+        )
+      },
+      /* @__PURE__ */ React.createElement("span", null, /* @__PURE__ */ React.createElement("span", { className: "block text-xs uppercase tracking-[0.14em] opacity-60" }, "Step ", index + 1), /* @__PURE__ */ React.createElement("span", { className: "mt-1 block text-sm font-medium" }, section.title)),
+      /* @__PURE__ */ React.createElement("span", { className: cn("rounded-full px-2.5 py-1 text-[11px] font-medium", isActive ? "bg-white/15 text-white" : isComplete ? "bg-emerald-100 text-emerald-800" : "bg-white text-neutral-600") }, isComplete ? "Reviewed" : isActive ? "Current" : "Up next")
+    );
+  }))), /* @__PURE__ */ React.createElement("div", { className: "space-y-5" }, /* @__PURE__ */ React.createElement(Panel, { className: "p-8" }, /* @__PURE__ */ React.createElement(SectionEyebrow, null, "Step ", currentIndex + 1, " of ", reviewOrder.length), /* @__PURE__ */ React.createElement("h2", { "data-step-heading": "true", tabIndex: -1, className: "mt-4 text-3xl font-semibold tracking-[-0.04em] text-neutral-950" }, "Review ", selectedSection.title.toLowerCase(), " import"), /* @__PURE__ */ React.createElement("p", { className: "mt-4 max-w-2xl text-sm leading-7 text-neutral-600" }, selectedSection.prompt, " This is the structured version of what the app could infer from your import, not the final draft."), /* @__PURE__ */ React.createElement("div", { className: "mt-6 flex flex-wrap gap-3" }, /* @__PURE__ */ React.createElement("div", { className: "rounded-full border border-neutral-200 bg-neutral-50 px-3 py-1 text-xs font-medium text-neutral-700" }, selectedSection.sourceHint || "Parsed from imported content"), /* @__PURE__ */ React.createElement("div", { className: "rounded-full border border-neutral-200 bg-white px-3 py-1 text-xs font-medium text-neutral-600" }, confidenceLabel), hasLinkedinText && /* @__PURE__ */ React.createElement("div", { className: "rounded-full border border-neutral-200 bg-white px-3 py-1 text-xs font-medium text-neutral-600" }, "Pasted profile text cleaned automatically")), /* @__PURE__ */ React.createElement("div", { className: "mt-6 rounded-2xl border border-neutral-200 bg-neutral-50 p-4" }, /* @__PURE__ */ React.createElement("p", { className: "text-sm font-semibold text-neutral-900" }, "What to check"), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-600" }, selectedSection.helper)), /* @__PURE__ */ React.createElement("label", { className: "mt-6 block" }, /* @__PURE__ */ React.createElement("span", { className: "text-sm font-medium text-neutral-900" }, selectedSection.title), /* @__PURE__ */ React.createElement(
+    "textarea",
+    {
+      "data-testid": `review-${selectedSection.id}`,
+      value: selectedSection.content,
+      onChange: (event) => onSectionChange(selectedSection.id, event.target.value),
+      placeholder: selectedSection.placeholder,
+      className: "mt-3 min-h-[220px] w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm leading-6 text-neutral-900 outline-none transition focus:border-neutral-950 focus:ring-4 focus:ring-neutral-950/5"
+    }
+  )), /* @__PURE__ */ React.createElement("div", { className: "mt-6 flex flex-wrap gap-3" }, currentIndex > 0 && /* @__PURE__ */ React.createElement(
     "button",
     {
-      onClick: onContinue,
+      onClick: () => onSectionSelect(reviewOrder[currentIndex - 1]),
+      className: "rounded-full border border-neutral-200 bg-white px-5 py-3 text-sm font-medium text-neutral-800 transition hover:bg-neutral-50"
+    },
+    "Back"
+  ), /* @__PURE__ */ React.createElement(
+    "button",
+    {
+      onClick: () => {
+        if (nextSectionId) {
+          onSectionSelect(nextSectionId);
+          return;
+        }
+        onContinue();
+      },
       className: "rounded-full bg-neutral-950 px-5 py-3 text-sm font-medium text-white transition hover:bg-neutral-800"
     },
-    "Continue to builder"
-  )));
+    nextSectionId ? "Save and continue" : "Continue to draft setup"
+  ))), /* @__PURE__ */ React.createElement(Panel, { className: "border-transparent bg-white/60 p-5 shadow-none" }, /* @__PURE__ */ React.createElement(SectionEyebrow, null, "How it works"), /* @__PURE__ */ React.createElement("div", { className: "mt-4 grid gap-3 sm:grid-cols-3" }, [
+    "We cleaned obvious clipboard junk before this review step.",
+    "You are checking one section at a time before draft generation.",
+    "AI suggestions unlock only after the first draft exists."
+  ].map((item) => /* @__PURE__ */ React.createElement("div", { key: item, className: "rounded-2xl bg-white/80 px-4 py-4 ring-1 ring-neutral-200/80" }, /* @__PURE__ */ React.createElement("p", { className: "text-sm leading-6 text-neutral-600" }, item)))))));
+}
+function PreDraftSetup({
+  targetRole,
+  linkedinUrl,
+  linkedinText,
+  resumeFileName,
+  onTargetRoleChange,
+  onLinkedinUrlChange,
+  onLinkedinTextChange,
+  onResumeUpload,
+  onAnalyze,
+  isAnalyzing
+}) {
+  const canAnalyze = Boolean(targetRole.trim() && (resumeFileName || linkedinText.trim()));
+  const resumeInputId = "resume-upload-input";
+  const linkedinTextId = "linkedin-support-text";
+  const targetRoleId = "target-role-input";
+  const missingItems = [
+    !targetRole.trim() ? "Choose a target role" : "",
+    !resumeFileName && !linkedinText.trim() ? "Add a resume file or paste LinkedIn text" : ""
+  ].filter(Boolean);
+  return /* @__PURE__ */ React.createElement("div", { className: "space-y-5" }, /* @__PURE__ */ React.createElement(Panel, { className: "w-full overflow-hidden rounded-[28px] border-neutral-200 bg-white shadow-[0_20px_60px_rgba(15,23,42,0.06)]" }, /* @__PURE__ */ React.createElement("div", { className: "border-b border-neutral-200 px-6 py-6 sm:px-8 sm:py-8" }, /* @__PURE__ */ React.createElement(SectionEyebrow, null, "Resume Refresh"), /* @__PURE__ */ React.createElement("div", { className: "mt-4 max-w-3xl" }, /* @__PURE__ */ React.createElement("h2", { "data-step-heading": "true", tabIndex: -1, className: "text-[2.4rem] font-semibold leading-[1.02] tracking-[-0.05em] text-neutral-950 sm:text-[3.2rem]" }, "Create your first draft"), /* @__PURE__ */ React.createElement("p", { className: "mt-4 text-base leading-7 text-neutral-600" }, "Start with the role you want, add your current resume or LinkedIn text, and we'll turn it into a structured draft before any AI coaching appears."))), /* @__PURE__ */ React.createElement("div", { className: "divide-y divide-neutral-200" }, /* @__PURE__ */ React.createElement("section", { className: "px-6 py-6 sm:px-8 sm:py-7" }, /* @__PURE__ */ React.createElement("div", { className: "max-w-2xl" }, /* @__PURE__ */ React.createElement("p", { className: "text-sm font-semibold text-neutral-950" }, "Step 1"), /* @__PURE__ */ React.createElement("h3", { className: "mt-1 text-xl font-semibold tracking-[-0.03em] text-neutral-950" }, "Choose target role"), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-600" }, "This tells the draft generator what the resume should optimize for.")), /* @__PURE__ */ React.createElement("label", { htmlFor: targetRoleId, className: "mt-5 grid max-w-2xl gap-2 text-sm font-medium text-neutral-900" }, "Target role", /* @__PURE__ */ React.createElement(
+    "input",
+    {
+      id: targetRoleId,
+      value: targetRole,
+      onChange: (event) => onTargetRoleChange(event.target.value),
+      placeholder: "Senior Product Manager",
+      className: "h-12 rounded-2xl border border-neutral-300 bg-white px-4 text-sm text-neutral-900 outline-none transition focus-visible:border-neutral-950 focus-visible:ring-4 focus-visible:ring-neutral-950/5"
+    }
+  ))), /* @__PURE__ */ React.createElement("section", { className: "px-6 py-6 sm:px-8 sm:py-7" }, /* @__PURE__ */ React.createElement("div", { className: "flex flex-wrap items-start justify-between gap-3" }, /* @__PURE__ */ React.createElement("div", { className: "max-w-2xl" }, /* @__PURE__ */ React.createElement("p", { className: "text-sm font-semibold text-neutral-950" }, "Step 2"), /* @__PURE__ */ React.createElement("h3", { className: "mt-1 text-xl font-semibold tracking-[-0.03em] text-neutral-950" }, "Add your resume"), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-600" }, "Use whichever source is easier. You only need one to create the first draft.")), /* @__PURE__ */ React.createElement("span", { className: "rounded-full bg-neutral-100 px-3 py-1 text-xs font-medium text-neutral-600" }, "Upload or paste")), /* @__PURE__ */ React.createElement("div", { className: "mt-5 grid gap-4 lg:grid-cols-2" }, /* @__PURE__ */ React.createElement("div", { className: "rounded-3xl bg-neutral-50 p-5 ring-1 ring-inset ring-neutral-200" }, /* @__PURE__ */ React.createElement("p", { className: "text-base font-semibold text-neutral-950" }, "Upload resume"), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-600" }, "Best if you already have a resume draft file and want the fastest start."), /* @__PURE__ */ React.createElement("label", { htmlFor: resumeInputId, className: "mt-5 grid gap-3 text-sm font-medium text-neutral-900" }, /* @__PURE__ */ React.createElement("span", { className: "sr-only" }, "Resume file"), /* @__PURE__ */ React.createElement(
+    "input",
+    {
+      id: resumeInputId,
+      type: "file",
+      accept: ".pdf,.txt,.md",
+      onChange: (event) => onResumeUpload(event.target.files?.[0] || null),
+      className: "rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm text-neutral-900 outline-none transition file:mr-3 file:rounded-full file:border-0 file:bg-neutral-950 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-white focus-visible:border-neutral-950 focus-visible:ring-4 focus-visible:ring-neutral-950/5"
+    }
+  ), /* @__PURE__ */ React.createElement("span", { className: "text-sm text-neutral-500" }, resumeFileName || "No file selected yet"))), /* @__PURE__ */ React.createElement("div", { className: "rounded-3xl bg-neutral-50 p-5 ring-1 ring-inset ring-neutral-200" }, /* @__PURE__ */ React.createElement("p", { className: "text-base font-semibold text-neutral-950" }, "Paste LinkedIn text"), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-600" }, "Paste your headline, about section, or recent experience if that content is more up to date."), /* @__PURE__ */ React.createElement("label", { htmlFor: linkedinTextId, className: "mt-5 grid gap-3 text-sm font-medium text-neutral-900" }, "LinkedIn text", /* @__PURE__ */ React.createElement(
+    "textarea",
+    {
+      id: linkedinTextId,
+      "data-testid": "linkedin-support-text",
+      value: linkedinText,
+      onChange: (event) => onLinkedinTextChange(event.target.value),
+      placeholder: "Paste your headline, about section, or recent experience",
+      className: "min-h-[220px] w-full resize-y rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm leading-6 text-neutral-900 outline-none transition focus-visible:border-neutral-950 focus-visible:ring-4 focus-visible:ring-neutral-950/5"
+    }
+  )))), /* @__PURE__ */ React.createElement("details", { className: "mt-5 rounded-2xl bg-neutral-50 px-5 py-4 ring-1 ring-inset ring-neutral-200" }, /* @__PURE__ */ React.createElement("summary", { className: "cursor-pointer list-none text-sm font-medium text-neutral-900" }, "Add extra context", /* @__PURE__ */ React.createElement("span", { className: "ml-2 text-xs font-normal text-neutral-500" }, "Optional")), /* @__PURE__ */ React.createElement("label", { className: "mt-4 grid max-w-2xl gap-2 text-sm font-medium text-neutral-900" }, "LinkedIn URL", /* @__PURE__ */ React.createElement(
+    "input",
+    {
+      value: linkedinUrl,
+      onChange: (event) => onLinkedinUrlChange(event.target.value),
+      placeholder: "https://www.linkedin.com/in/your-name",
+      className: "h-12 rounded-2xl border border-neutral-300 bg-white px-4 text-sm text-neutral-900 outline-none transition focus-visible:border-neutral-950 focus-visible:ring-4 focus-visible:ring-neutral-950/5"
+    }
+  )))), /* @__PURE__ */ React.createElement("section", { className: "bg-neutral-50/80 px-6 py-6 sm:px-8 sm:py-7" }, /* @__PURE__ */ React.createElement("div", { className: "flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between" }, /* @__PURE__ */ React.createElement("div", { className: "max-w-2xl" }, /* @__PURE__ */ React.createElement("p", { className: "text-sm font-semibold text-neutral-950" }, "Step 3"), /* @__PURE__ */ React.createElement("h3", { className: "mt-1 text-xl font-semibold tracking-[-0.03em] text-neutral-950" }, "Create first draft"), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-600" }, "We'll analyze what you added, assemble a cleaner draft, and then unlock section-by-section AI suggestions where they actually help."), /* @__PURE__ */ React.createElement("p", { className: "mt-3 text-sm font-medium text-neutral-700" }, "AI suggestions unlock after your first draft is created."), missingItems.length > 0 && /* @__PURE__ */ React.createElement("div", { className: "mt-4 rounded-2xl bg-white px-4 py-3 ring-1 ring-inset ring-amber-200" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-amber-700" }, "Before you continue"), /* @__PURE__ */ React.createElement("ul", { className: "mt-2 space-y-1 text-sm leading-6 text-amber-900" }, missingItems.map((item) => /* @__PURE__ */ React.createElement("li", { key: item }, item))))), /* @__PURE__ */ React.createElement("div", { className: "min-w-[240px]" }, /* @__PURE__ */ React.createElement(
+    "button",
+    {
+      onClick: onAnalyze,
+      disabled: !canAnalyze || isAnalyzing,
+      "aria-describedby": !canAnalyze ? "create-first-draft-help" : void 0,
+      className: "inline-flex h-12 w-full items-center justify-center rounded-2xl bg-neutral-950 px-5 text-sm font-medium text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-950"
+    },
+    isAnalyzing ? "Creating first draft..." : "Create first draft"
+  ), /* @__PURE__ */ React.createElement("p", { id: "create-first-draft-help", className: "mt-3 text-xs leading-5 text-neutral-500" }, canAnalyze ? "Next: we\u2019ll show your biggest improvement areas and move you into section-by-section editing." : "Choose a target role and add a resume source to enable draft creation.")))))), /* @__PURE__ */ React.createElement("div", { className: "px-1" }, /* @__PURE__ */ React.createElement(Panel, { className: "border-transparent bg-white/60 p-5 shadow-none" }, /* @__PURE__ */ React.createElement(SectionEyebrow, null, "How this works"), /* @__PURE__ */ React.createElement("div", { className: "mt-4 grid gap-3 sm:grid-cols-3" }, [
+    "Generate a draft from your current resume",
+    "Review the biggest improvement areas",
+    "Use AI section-by-section after that"
+  ].map((item) => /* @__PURE__ */ React.createElement("div", { key: item, className: "rounded-2xl bg-white/80 px-4 py-4 ring-1 ring-neutral-200/80" }, /* @__PURE__ */ React.createElement("p", { className: "text-sm leading-6 text-neutral-600" }, item)))))));
 }
 function Builder({
   targetRole,
@@ -21930,8 +22911,9 @@ function Builder({
   onSectionSelect,
   onSectionChange,
   onAnalyze,
-  onRewrite,
-  onApplyRewrite,
+  onRunSectionAction,
+  onApplyRewriteSection,
+  onDiscardRewrite,
   analysis,
   rewrite,
   isAnalyzing,
@@ -21940,53 +22922,159 @@ function Builder({
   onContinue
 }) {
   const selectedSection = sections.find((section) => section.id === activeSection) || sections[0];
-  const sectionSummary = countSectionStatuses(sections);
-  const nextSectionId = findNextSection(sections, activeSection);
-  const deferredPreviewSections = (0, import_react.useDeferredValue)(
-    rewrite?.rewrittenResume ? deriveSections(null, "", rewrite.rewrittenResume) : sections
-  );
-  const missingKeywords = analysis?.extracted?.missingKeywords || [];
-  const rewrittenSections = rewrite?.rewrittenResume ? deriveSections(null, "", rewrite.rewrittenResume) : [];
+  const guidedSections = activeGuidedSections(sections);
+  const selectedSectionIndex = Math.max(0, guidedSections.findIndex((sectionId) => sectionId === selectedSection.id));
+  const nextSectionId = nextGuidedSection(sections, activeSection);
+  const rewriteMatchesSection = rewrite?.sectionId === selectedSection.id;
+  const rewrittenSections = rewriteMatchesSection && rewrite?.rewrittenResume ? deriveSections("", rewrite.rewrittenResume) : [];
   const rewrittenSectionMap = Object.fromEntries(
-    rewrittenSections.map((section) => [section.id, normalizeText(section.content)])
+    rewrittenSections.map((section) => [section.id, normalizeText2(section.content)])
   );
-  const currentSectionText = normalizeText(selectedSection.content);
+  const currentSectionText = normalizeText2(selectedSection.content);
   const rewrittenSectionText = rewrittenSectionMap[selectedSection.id] || "";
   const selectedSectionLineCount = currentSectionText ? currentSectionText.split("\n").filter(Boolean).length : 0;
-  return /* @__PURE__ */ React.createElement("div", { className: "grid gap-6 xl:grid-cols-[1.05fr_0.95fr]" }, /* @__PURE__ */ React.createElement("div", { className: "space-y-5" }, /* @__PURE__ */ React.createElement(Panel, { className: "p-6" }, /* @__PURE__ */ React.createElement(SectionEyebrow, null, "Builder"), /* @__PURE__ */ React.createElement("div", { className: "mt-4 flex flex-wrap items-center justify-between gap-4" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("h2", { className: "text-3xl font-semibold tracking-[-0.04em] text-neutral-950" }, "Make each section stronger."), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-600" }, "Edit sections directly, generate a draft, then polish wording only if it helps. Strong bullets should show what you owned, how you did it, and what changed.")), /* @__PURE__ */ React.createElement("div", { className: "grid min-w-[210px] gap-2 rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-xs text-neutral-600" }, /* @__PURE__ */ React.createElement("div", { className: "flex items-center justify-between gap-3" }, /* @__PURE__ */ React.createElement("span", null, "Sections ready"), /* @__PURE__ */ React.createElement("span", { className: "font-semibold text-neutral-900" }, sectionSummary.ready, "/", sections.length)), /* @__PURE__ */ React.createElement("div", { className: "flex items-center justify-between gap-3" }, /* @__PURE__ */ React.createElement("span", null, "Need attention"), /* @__PURE__ */ React.createElement("span", { className: "font-semibold text-neutral-900" }, sectionSummary.needsDetail + sectionSummary.missing))))), /* @__PURE__ */ React.createElement(Panel, { className: "grid gap-5 p-6" }, /* @__PURE__ */ React.createElement("div", { className: "grid gap-4 md:grid-cols-2" }, /* @__PURE__ */ React.createElement("label", { className: "grid gap-2 text-sm font-medium text-neutral-900" }, "Target role", /* @__PURE__ */ React.createElement(
-    "input",
+  const currentIssues = sectionIssues(selectedSection.id, analysis);
+  const sectionActions = sectionAiActions(selectedSection.id, targetRole);
+  const finalReviewReady = requiredGuidedOrder.every((sectionId) => {
+    const section = sections.find((item) => item.id === sectionId);
+    return section ? getSectionStatus(section) !== "Missing" : false;
+  });
+  const sectionRewriteReady = Boolean(canRewrite && currentSectionText.trim());
+  const rewriteDisabledReason = !canRewrite ? "AI rewrite is unavailable right now." : !currentSectionText.trim() ? `Add some ${selectedSection.title.toLowerCase()} content to unlock AI suggestions.` : "";
+  const nextSectionLabel = sections.find((section) => section.id === nextSectionId)?.title || "Final review";
+  const experienceRoles = selectedSection.id === "experience" ? parseExperienceRoles(selectedSection.content) : [];
+  const [activeRoleIndex, setActiveRoleIndex] = (0, import_react.useState)(0);
+  const [isEditorActive, setIsEditorActive] = (0, import_react.useState)(false);
+  (0, import_react.useEffect)(() => {
+    setActiveRoleIndex(0);
+  }, [selectedSection.id]);
+  (0, import_react.useEffect)(() => {
+    setIsEditorActive(false);
+  }, [selectedSection.id]);
+  const activeRole = experienceRoles[activeRoleIndex] || null;
+  const strongestBullet = activeRole?.bullets.reduce((best, bullet) => bullet.length > best.length ? bullet : best, activeRole?.bullets[0] || "");
+  const weakestBullet = activeRole?.bullets.reduce((worst, bullet) => {
+    const worstScore = worst ? worst.length : Number.MAX_SAFE_INTEGER;
+    return bullet.length < worstScore ? bullet : worst;
+  }, activeRole?.bullets[0] || "");
+  const visibleTrustEntries = rewriteMatchesSection && rewrite?.trustEntries?.length ? rewrite.trustEntries : rewrittenSectionText && rewrittenSectionText !== currentSectionText ? [{
+    original: currentSectionText || "Source content is limited for this section.",
+    rewrite: rewrittenSectionText,
+    whatChanged: "The wording was tightened to foreground ownership, execution, and outcomes without changing the overall claim.",
+    whyStronger: "The revised version is easier to scan and makes the accomplishment clearer to a hiring manager.",
+    evidenceLevel: "structured",
+    confidenceNote: ""
+  }] : [];
+  if (!analysis) {
+    return /* @__PURE__ */ React.createElement("div", { className: "grid gap-8 xl:grid-cols-[180px_minmax(0,1fr)] xl:items-start" }, /* @__PURE__ */ React.createElement(ProgressStepper, { sections, hasDraft: false, activeSection }), /* @__PURE__ */ React.createElement(
+      PreDraftSetup,
+      {
+        targetRole,
+        linkedinUrl,
+        linkedinText,
+        resumeFileName,
+        onTargetRoleChange,
+        onLinkedinUrlChange,
+        onLinkedinTextChange,
+        onResumeUpload,
+        onAnalyze,
+        isAnalyzing
+      }
+    ));
+  }
+  return /* @__PURE__ */ React.createElement("div", { className: cn("grid gap-6", rewrite ? "xl:grid-cols-[200px_minmax(0,1fr)_320px]" : "xl:grid-cols-[200px_minmax(0,1fr)]") }, /* @__PURE__ */ React.createElement(ProgressStepper, { sections, hasDraft: true, activeSection, onSectionSelect }), /* @__PURE__ */ React.createElement("div", { className: "space-y-5" }, /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(Panel, { className: "p-6" }, /* @__PURE__ */ React.createElement(SectionEyebrow, null, "Section editor"), /* @__PURE__ */ React.createElement("div", { className: "mt-4 flex flex-wrap items-start justify-between gap-4" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("p", { className: "text-sm font-medium text-neutral-500" }, "Step ", selectedSectionIndex + 1, " of ", guidedSections.length), /* @__PURE__ */ React.createElement("h2", { "data-step-heading": "true", tabIndex: -1, className: "text-3xl font-semibold tracking-[-0.04em] text-neutral-950" }, selectedSection.title), /* @__PURE__ */ React.createElement("p", { className: "mt-2 max-w-2xl text-sm leading-7 text-neutral-600" }, selectedSection.prompt), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm font-medium text-neutral-700" }, "Focus on this section now. Next up: ", nextSectionLabel, ".")), /* @__PURE__ */ React.createElement("div", { className: "rounded-full border border-neutral-200 bg-neutral-50 px-3 py-1 text-xs text-neutral-500" }, selectedSectionLineCount, " line", selectedSectionLineCount === 1 ? "" : "s")), /* @__PURE__ */ React.createElement("div", { className: "mt-6 grid gap-4 md:grid-cols-2" }, /* @__PURE__ */ React.createElement("div", { className: "rounded-2xl border border-neutral-200 bg-neutral-50 p-4" }, /* @__PURE__ */ React.createElement("p", { className: "text-sm font-semibold text-neutral-900" }, "Why this matters"), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-600" }, sectionToneTips(selectedSection.id))), /* @__PURE__ */ React.createElement("div", { className: "rounded-2xl border border-neutral-200 bg-neutral-50 p-4" }, /* @__PURE__ */ React.createElement("p", { className: "text-sm font-semibold text-neutral-900" }, "Why this needs work"), /* @__PURE__ */ React.createElement("div", { className: "mt-2 space-y-2" }, (currentIssues.length ? currentIssues : [{ title: "This section is in solid shape", detail: "Keep it concise and move on once it reads cleanly for the target role." }]).map((item) => /* @__PURE__ */ React.createElement("div", { key: item.title }, /* @__PURE__ */ React.createElement("p", { className: "text-sm font-medium text-neutral-900" }, item.title), /* @__PURE__ */ React.createElement("p", { className: "text-sm leading-6 text-neutral-600" }, item.detail)))))), /* @__PURE__ */ React.createElement(
+    "div",
     {
-      value: targetRole,
-      onChange: (event) => onTargetRoleChange(event.target.value),
-      placeholder: "Senior Product Manager",
-      className: "rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm text-neutral-900 outline-none"
-    }
-  )), /* @__PURE__ */ React.createElement("label", { className: "grid gap-2 text-sm font-medium text-neutral-900" }, "LinkedIn URL", /* @__PURE__ */ React.createElement(
-    "input",
+      className: "relative mt-6 rounded-2xl border border-neutral-200 bg-white p-4",
+      onMouseEnter: () => setIsEditorActive(true),
+      onMouseLeave: () => setIsEditorActive(false),
+      onFocusCapture: () => setIsEditorActive(true),
+      onBlurCapture: (event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) {
+          setIsEditorActive(false);
+        }
+      }
+    },
+    /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400" }, "Current version"),
+    /* @__PURE__ */ React.createElement("div", { className: "mt-2 flex items-center justify-between gap-3" }, /* @__PURE__ */ React.createElement("p", { className: "text-sm leading-6 text-neutral-600" }, "Edit this section directly, then use AI only if you want help tightening the wording."), /* @__PURE__ */ React.createElement("span", { className: "hidden rounded-full bg-neutral-100 px-3 py-1 text-xs text-neutral-600 lg:inline-flex" }, "AI unlocks per section")),
+    /* @__PURE__ */ React.createElement(
+      "textarea",
+      {
+        "data-testid": "section-editor",
+        value: selectedSection.content,
+        onChange: (event) => onSectionChange(selectedSection.id, event.target.value),
+        onFocus: () => setIsEditorActive(true),
+        onClick: () => setIsEditorActive(true),
+        placeholder: selectedSection.placeholder,
+        className: "mt-3 min-h-[240px] w-full rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm leading-6 text-neutral-900 outline-none transition focus:border-neutral-950 focus:ring-4 focus:ring-neutral-950/5"
+      }
+    ),
+    /* @__PURE__ */ React.createElement("p", { className: "mt-3 text-xs text-neutral-500" }, "Changes are saved in this browser session while you work."),
+    /* @__PURE__ */ React.createElement(
+      "div",
+      {
+        className: cn(
+          "overflow-hidden transition-all duration-200",
+          isEditorActive ? "mt-4 max-h-[420px] opacity-100" : "max-h-0 opacity-0 pointer-events-none"
+        )
+      },
+      /* @__PURE__ */ React.createElement("div", { className: "rounded-2xl border border-neutral-200 bg-neutral-50 p-4 shadow-sm" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400" }, "AI tips"), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-600" }, sectionRewriteReady ? `Use AI for ${selectedSection.title.toLowerCase()} only after the content says what you mean. Any generated text stays in preview until you apply it.` : rewriteDisabledReason), /* @__PURE__ */ React.createElement("div", { className: "mt-3 flex flex-wrap gap-2" }, sectionActions.slice(0, 2).map((action, index) => /* @__PURE__ */ React.createElement(
+        "button",
+        {
+          key: action.id,
+          "data-testid": `inline-ai-action-${index}`,
+          onClick: () => onRunSectionAction(action),
+          disabled: !sectionRewriteReady || isRewriting,
+          className: cn(
+            "rounded-full border px-3 py-2 text-xs font-medium transition disabled:cursor-not-allowed",
+            index === 0 ? "border-neutral-950 bg-neutral-950 text-white hover:bg-neutral-800 disabled:bg-neutral-300" : "border-neutral-200 bg-white text-neutral-800 hover:bg-neutral-50 disabled:text-neutral-400"
+          )
+        },
+        isRewriting && action.kind === "ai" && index === 0 ? "Preparing preview..." : action.label
+      ))), /* @__PURE__ */ React.createElement("div", { className: "mt-3 rounded-2xl bg-white px-3 py-3" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400" }, "Example"), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-700" }, sectionExample(selectedSection.id)), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-xs leading-5 text-neutral-500" }, "This is an example only. It has not changed your resume.")))
+    )
+  ), selectedSection.id === "experience" && activeRole && /* @__PURE__ */ React.createElement("div", { className: "mt-6 rounded-2xl border border-neutral-200 bg-neutral-50 p-4" }, /* @__PURE__ */ React.createElement("div", { className: "flex flex-wrap items-center justify-between gap-3" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("p", { className: "text-sm font-semibold text-neutral-900" }, experienceRoles.length > 1 ? `Experience entry ${activeRoleIndex + 1}` : "Current role"), /* @__PURE__ */ React.createElement("p", { className: "mt-1 text-sm leading-6 text-neutral-600" }, activeRole.title)), experienceRoles.length > 1 && /* @__PURE__ */ React.createElement("div", { className: "flex flex-wrap gap-2" }, experienceRoles.map((role, index) => /* @__PURE__ */ React.createElement(
+    "button",
     {
-      value: linkedinUrl,
-      onChange: (event) => onLinkedinUrlChange(event.target.value),
-      placeholder: "Paste your public profile URL",
-      className: "rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm text-neutral-900 outline-none"
-    }
-  ))), /* @__PURE__ */ React.createElement("label", { className: "grid gap-2 text-sm font-medium text-neutral-900" }, "LinkedIn support text", /* @__PURE__ */ React.createElement(
-    "textarea",
+      key: `${role.title}-${index}`,
+      onClick: () => setActiveRoleIndex(index),
+      className: cn(
+        "rounded-full border px-3 py-2 text-xs font-medium transition",
+        index === activeRoleIndex ? "border-neutral-950 bg-neutral-950 text-white" : "border-neutral-200 bg-white text-neutral-800 hover:bg-neutral-50"
+      )
+    },
+    role.title || `Role ${index + 1}`
+  )))), /* @__PURE__ */ React.createElement("div", { className: "mt-4 grid gap-3 md:grid-cols-2" }, /* @__PURE__ */ React.createElement("div", { className: "rounded-2xl border border-neutral-200 bg-white p-4" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400" }, "Strongest bullet"), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-700" }, strongestBullet || "Add bullets with ownership and measurable outcomes.")), /* @__PURE__ */ React.createElement("div", { className: "rounded-2xl border border-neutral-200 bg-white p-4" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400" }, "Weakest bullet"), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-700" }, weakestBullet || "No bullets yet for this role.")))), /* @__PURE__ */ React.createElement("div", { className: "mt-6 flex flex-wrap gap-3" }, /* @__PURE__ */ React.createElement(
+    "button",
     {
-      "data-testid": "linkedin-support-text",
-      value: linkedinText,
-      onChange: (event) => onLinkedinTextChange(event.target.value),
-      placeholder: "Paste About, Experience, or Skills",
-      className: "min-h-[120px] rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm leading-6 text-neutral-900 outline-none"
-    }
-  )), /* @__PURE__ */ React.createElement("div", { className: "grid gap-4 md:grid-cols-2" }, /* @__PURE__ */ React.createElement("label", { className: "grid gap-2 text-sm font-medium text-neutral-900" }, "Resume file", /* @__PURE__ */ React.createElement(
-    "input",
+      onClick: () => {
+        if (nextSectionId) {
+          onSectionSelect(nextSectionId);
+          return;
+        }
+        if (finalReviewReady) {
+          onContinue();
+        }
+      },
+      className: "rounded-full bg-neutral-950 px-5 py-3 text-sm font-medium text-white transition hover:bg-neutral-800"
+    },
+    nextSectionId ? "Save and continue" : "Continue to final review"
+  ), !finalReviewReady && !nextSectionId && /* @__PURE__ */ React.createElement("p", { className: "self-center text-sm text-amber-700" }, "Finish the required sections before final review unlocks."))))), rewriteMatchesSection && rewrite && /* @__PURE__ */ React.createElement("div", { className: "space-y-5" }, /* @__PURE__ */ React.createElement(Panel, { className: "p-6" }, /* @__PURE__ */ React.createElement(SectionEyebrow, null, "Suggestion preview"), /* @__PURE__ */ React.createElement("p", { className: "mt-4 text-sm leading-6 text-neutral-600" }, "This preview affects ", selectedSection.title.toLowerCase(), " only. It has not changed your editable content yet."), visibleTrustEntries.length > 0 && /* @__PURE__ */ React.createElement("div", { className: "mt-4 space-y-3" }, visibleTrustEntries.map((entry, index) => /* @__PURE__ */ React.createElement("div", { key: `${entry.original}-${index}`, className: "rounded-2xl border border-neutral-200 bg-white p-4" }, /* @__PURE__ */ React.createElement("div", { className: "flex flex-wrap items-center justify-between gap-3" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400" }, "Rewrite trust check"), /* @__PURE__ */ React.createElement(EvidenceBadge, { level: entry.evidenceLevel })), /* @__PURE__ */ React.createElement("div", { className: "mt-4 grid gap-4" }, /* @__PURE__ */ React.createElement("div", { className: "rounded-2xl border border-neutral-200 bg-neutral-50 p-4" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400" }, "Original"), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-700" }, entry.original)), /* @__PURE__ */ React.createElement("div", { className: "rounded-2xl border border-emerald-200 bg-emerald-50 p-4" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-emerald-700" }, "Suggested text"), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-emerald-950" }, entry.rewrite))), /* @__PURE__ */ React.createElement("div", { className: "mt-4 grid gap-3" }, /* @__PURE__ */ React.createElement("div", { className: "rounded-2xl border border-neutral-200 bg-neutral-50 p-4" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400" }, "What changed"), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-700" }, entry.whatChanged)), /* @__PURE__ */ React.createElement("div", { className: "rounded-2xl border border-neutral-200 bg-neutral-50 p-4" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400" }, "Why this is stronger"), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-700" }, entry.whyStronger))), entry.evidenceLevel === "inferred" && entry.confidenceNote && /* @__PURE__ */ React.createElement("div", { className: "mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-amber-700" }, "Confidence note"), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-amber-900" }, entry.confidenceNote))))), rewrittenSectionText && rewrittenSectionText !== currentSectionText && /* @__PURE__ */ React.createElement("div", { className: "mt-4 grid gap-4" }, /* @__PURE__ */ React.createElement("div", { className: "rounded-2xl border border-neutral-200 bg-white p-4" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400" }, "Before"), /* @__PURE__ */ React.createElement("div", { className: "mt-2 whitespace-pre-wrap text-sm leading-6 text-neutral-600" }, currentSectionText || "Nothing written yet for this section.")), /* @__PURE__ */ React.createElement("div", { className: "rounded-2xl border border-emerald-200 bg-emerald-50 p-4" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-emerald-700" }, "Preview"), /* @__PURE__ */ React.createElement("div", { className: "mt-2 whitespace-pre-wrap text-sm leading-6 text-emerald-950" }, rewrittenSectionText))), /* @__PURE__ */ React.createElement("div", { className: "mt-4 flex flex-wrap gap-3" }, /* @__PURE__ */ React.createElement(
+    "button",
     {
-      type: "file",
-      accept: ".pdf,.txt,.md",
-      onChange: (event) => onResumeUpload(event.target.files?.[0] || null),
-      className: "rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm text-neutral-900 outline-none file:mr-3 file:rounded-full file:border-0 file:bg-neutral-950 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-white"
-    }
-  ), /* @__PURE__ */ React.createElement("span", { className: "text-xs text-neutral-500" }, resumeFileName || "No file selected")), /* @__PURE__ */ React.createElement("div", { className: "grid gap-2 text-sm font-medium text-neutral-900" }, /* @__PURE__ */ React.createElement("span", null, "Rewrite style"), /* @__PURE__ */ React.createElement("div", { className: "flex rounded-full border border-neutral-200 bg-neutral-50 p-1" }, [
+      onClick: () => onApplyRewriteSection(selectedSection.id, rewrittenSectionText),
+      disabled: !rewrittenSectionText || rewrittenSectionText === currentSectionText,
+      className: "rounded-full bg-neutral-950 px-5 py-3 text-sm font-medium text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-300"
+    },
+    "Apply to this section"
+  ), /* @__PURE__ */ React.createElement(
+    "button",
+    {
+      onClick: onDiscardRewrite,
+      className: "rounded-full border border-neutral-200 bg-white px-5 py-3 text-sm font-medium text-neutral-800 transition hover:bg-neutral-50"
+    },
+    "Keep current version"
+  ))), canRewrite && analysis && /* @__PURE__ */ React.createElement(Panel, { className: "h-fit p-6 xl:sticky xl:top-8" }, /* @__PURE__ */ React.createElement(SectionEyebrow, null, "AI wording preference"), /* @__PURE__ */ React.createElement("p", { className: "mt-4 text-sm leading-6 text-neutral-600" }, "Pick the tone you want before you apply AI changes to this section."), /* @__PURE__ */ React.createElement("div", { className: "mt-4 flex rounded-xl border border-neutral-200 bg-neutral-50 p-1" }, [
     ["concise", "Concise"],
     ["balanced", "Balanced"],
     ["achievement", "Achievement"]
@@ -21996,112 +23084,52 @@ function Builder({
       key: value,
       onClick: () => onRewriteStyleChange(value),
       className: cn(
-        "rounded-full px-3 py-2 text-xs font-medium transition",
-        rewriteStyle === value ? "bg-white text-neutral-950 shadow-sm" : "text-neutral-500 hover:text-neutral-800"
+        "rounded-lg px-3 py-2 text-xs font-medium transition",
+        rewriteStyle === value ? "bg-neutral-950 text-white" : "text-neutral-500 hover:text-neutral-800"
       )
     },
     label
-  ))))), /* @__PURE__ */ React.createElement("div", { className: "grid gap-4 lg:grid-cols-[0.34fr_0.66fr]" }, /* @__PURE__ */ React.createElement("div", { className: "space-y-2" }, /* @__PURE__ */ React.createElement("p", { className: "text-sm font-medium text-neutral-900" }, "Resume sections"), sections.map((section) => {
-    const status = getSectionStatus(section);
-    return /* @__PURE__ */ React.createElement(
-      "button",
-      {
-        key: section.id,
-        onClick: () => onSectionSelect(section.id),
-        "data-testid": `section-tab-${section.id}`,
-        className: cn(
-          "w-full rounded-2xl border px-4 py-3 text-left transition",
-          activeSection === section.id ? "border-neutral-900 bg-neutral-950 text-white" : "border-neutral-200 bg-neutral-50 text-neutral-800 hover:bg-white"
-        )
-      },
-      /* @__PURE__ */ React.createElement("p", { className: "text-sm font-medium" }, section.title),
-      /* @__PURE__ */ React.createElement("p", { className: cn("mt-1 text-xs", activeSection === section.id ? "text-white/70" : "text-neutral-500") }, status)
-    );
-  })), /* @__PURE__ */ React.createElement("div", { className: "rounded-2xl border border-neutral-200 bg-neutral-50 p-4" }, /* @__PURE__ */ React.createElement("div", { className: "flex items-start justify-between gap-4" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("p", { className: "text-sm font-semibold text-neutral-900" }, selectedSection.title), /* @__PURE__ */ React.createElement("p", { className: "mt-1 text-sm leading-6 text-neutral-600" }, selectedSection.prompt)), /* @__PURE__ */ React.createElement("div", { className: "rounded-full border border-neutral-200 bg-white px-3 py-1 text-xs text-neutral-500" }, selectedSectionLineCount, " line", selectedSectionLineCount === 1 ? "" : "s")), /* @__PURE__ */ React.createElement(
-    "textarea",
-    {
-      "data-testid": "section-editor",
-      value: selectedSection.content,
-      onChange: (event) => onSectionChange(selectedSection.id, event.target.value),
-      placeholder: selectedSection.placeholder,
-      className: "mt-4 min-h-[220px] w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm leading-6 text-neutral-900 outline-none"
-    }
-  ), /* @__PURE__ */ React.createElement("p", { className: "mt-3 text-xs text-neutral-500" }, "Changes are saved in this browser session while you work."), /* @__PURE__ */ React.createElement("div", { className: "mt-3 grid gap-3 md:grid-cols-2" }, /* @__PURE__ */ React.createElement("div", { className: "rounded-2xl border border-neutral-200 bg-white px-4 py-3" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400" }, "Section guidance"), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-600" }, sectionToneTips(selectedSection.id))), /* @__PURE__ */ React.createElement("div", { className: "rounded-2xl border border-neutral-200 bg-white px-4 py-3" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400" }, "Editing goal"), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-600" }, selectedSection.helper), selectedSection.id === "experience" && /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-600" }, "Try: strong verb + initiative or scope + result. Example: \u201COwned onboarding experiments across web and lifecycle email, lifting activation for new accounts.\u201D"))))), /* @__PURE__ */ React.createElement("div", { className: "flex flex-col gap-3 sm:flex-row sm:flex-wrap" }, /* @__PURE__ */ React.createElement(
-    "button",
-    {
-      onClick: onAnalyze,
-      disabled: isAnalyzing || !(targetRole.trim() && (serializeSections(sections) || resumeFileName)),
-      className: "w-full rounded-full bg-neutral-950 px-5 py-3 text-sm font-medium text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-300 sm:w-auto"
-    },
-    isAnalyzing ? "Generating..." : "Generate draft"
-  ), /* @__PURE__ */ React.createElement(
-    "button",
-    {
-      onClick: onRewrite,
-      disabled: !canRewrite || isRewriting,
-      className: "w-full rounded-full border border-neutral-200 bg-white px-5 py-3 text-sm font-medium text-neutral-800 transition hover:bg-neutral-50 disabled:cursor-not-allowed disabled:text-neutral-400 sm:w-auto"
-    },
-    isRewriting ? "Polishing..." : "Polish with AI"
-  ), /* @__PURE__ */ React.createElement(
-    "button",
-    {
-      onClick: onContinue,
-      className: "w-full rounded-full border border-neutral-200 bg-white px-5 py-3 text-sm font-medium text-neutral-800 transition hover:bg-neutral-50 sm:w-auto"
-    },
-    "Export"
-  ), /* @__PURE__ */ React.createElement(
-    "button",
-    {
-      onClick: () => onSectionSelect(nextSectionId),
-      className: "w-full rounded-full border border-neutral-200 bg-white px-5 py-3 text-sm font-medium text-neutral-800 transition hover:bg-neutral-50 sm:w-auto"
-    },
-    "Next section"
-  ))), analysis && /* @__PURE__ */ React.createElement(Panel, { className: "p-6" }, /* @__PURE__ */ React.createElement(SectionEyebrow, null, "Top fixes"), /* @__PURE__ */ React.createElement("p", { className: "mt-4 text-sm leading-6 text-neutral-600" }, "Bullet quality score: ", analysis.extracted?.bulletQualityScore || 0, "/9. Strong bullets usually show clear ownership, execution, and a visible result."), /* @__PURE__ */ React.createElement("div", { className: "mt-4 space-y-4" }, (analysis.suggestions || []).map((item) => /* @__PURE__ */ React.createElement("div", { key: item.title, className: "rounded-2xl border border-neutral-200 bg-neutral-50 p-4" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400" }, item.priority), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm font-semibold text-neutral-900" }, item.title), /* @__PURE__ */ React.createElement("p", { className: "mt-1 text-sm leading-6 text-neutral-600" }, item.detail))))), rewrite && /* @__PURE__ */ React.createElement(Panel, { className: "p-6" }, /* @__PURE__ */ React.createElement(SectionEyebrow, null, "AI polish"), /* @__PURE__ */ React.createElement("p", { className: "mt-4 text-sm leading-6 text-neutral-600" }, "Review the polished draft before applying it back into your editable sections."), /* @__PURE__ */ React.createElement("div", { className: "mt-4 rounded-2xl border border-neutral-200 bg-neutral-50 p-4" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400" }, "Summary"), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-700" }, rewrite.summary), rewrite.notes && rewrite.notes.length > 0 && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("p", { className: "mt-4 text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400" }, "Notes"), /* @__PURE__ */ React.createElement("ul", { className: "mt-2 space-y-2 text-sm leading-6 text-neutral-600" }, rewrite.notes.map((note) => /* @__PURE__ */ React.createElement("li", { key: note }, note))))), rewrittenSectionText && rewrittenSectionText !== currentSectionText && /* @__PURE__ */ React.createElement("div", { className: "mt-4 grid gap-4 lg:grid-cols-2" }, /* @__PURE__ */ React.createElement("div", { className: "rounded-2xl border border-neutral-200 bg-white p-4" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400" }, "Before"), /* @__PURE__ */ React.createElement("div", { className: "mt-2 whitespace-pre-wrap text-sm leading-6 text-neutral-600" }, currentSectionText || "Nothing written yet for this section.")), /* @__PURE__ */ React.createElement("div", { className: "rounded-2xl border border-emerald-200 bg-emerald-50 p-4" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-emerald-700" }, "After"), /* @__PURE__ */ React.createElement("div", { className: "mt-2 whitespace-pre-wrap text-sm leading-6 text-emerald-950" }, rewrittenSectionText))), /* @__PURE__ */ React.createElement("div", { className: "mt-4 flex flex-wrap gap-3" }, /* @__PURE__ */ React.createElement(
-    "button",
-    {
-      onClick: onApplyRewrite,
-      className: "rounded-full bg-neutral-950 px-5 py-3 text-sm font-medium text-white transition hover:bg-neutral-800"
-    },
-    "Apply AI polish to sections"
-  )))), /* @__PURE__ */ React.createElement(Panel, { className: "h-fit rounded-2xl p-6 xl:sticky xl:top-8" }, /* @__PURE__ */ React.createElement(SectionEyebrow, null, "Live preview"), /* @__PURE__ */ React.createElement("p", { className: "mt-3 text-sm text-neutral-500" }, rewrite?.rewrittenResume ? "Previewing the AI-polished version. Apply it if you want these edits in the builder." : "Preview updates as you edit sections."), /* @__PURE__ */ React.createElement(ResumePreview, { sections: deferredPreviewSections, missingKeywords }), /* @__PURE__ */ React.createElement("div", { className: "mt-5 rounded-2xl border border-neutral-200 bg-white p-4" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400" }, "What to do next"), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-700" }, sectionSummary.missing > 0 ? "Fill the missing required sections first so the generated draft has enough structure." : sectionSummary.needsDetail > 0 ? "Tighten the sections marked as needing detail, then generate a new draft." : "Generate a draft, review the suggestions, and use AI polish only if the wording needs help."))));
+  ))))));
 }
 function ExportStep({
   onDownload,
   onBack,
   hasDraft,
-  resumeText
+  resumeText,
+  analysis,
+  sections
 }) {
-  return /* @__PURE__ */ React.createElement(Panel, { className: "p-8 sm:p-10" }, /* @__PURE__ */ React.createElement(SectionEyebrow, null, "Export"), /* @__PURE__ */ React.createElement("h2", { className: "mt-4 text-3xl font-semibold tracking-[-0.04em] text-neutral-950" }, "Your refreshed resume is ready."), /* @__PURE__ */ React.createElement("p", { className: "mt-4 max-w-2xl text-sm leading-7 text-neutral-600" }, "Download it now, or go back and keep editing first."), /* @__PURE__ */ React.createElement("div", { className: "mt-8 grid gap-4 md:grid-cols-3" }, [
-    ["Clearer impact", "Bullets now emphasize ownership and outcomes."],
-    ["Cleaner structure", "Sections are easier to scan and more balanced."],
-    ["Ready to send", "Export a polished version or make final edits first."]
-  ].map(([title, copy]) => /* @__PURE__ */ React.createElement(Panel, { key: title, className: "p-5" }, /* @__PURE__ */ React.createElement("p", { className: "text-sm font-semibold text-neutral-900" }, title), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-600" }, copy)))), /* @__PURE__ */ React.createElement("div", { className: "mt-8 flex flex-wrap gap-3" }, /* @__PURE__ */ React.createElement(
-    "button",
-    {
-      onClick: () => onDownload("pdf"),
-      disabled: !hasDraft,
-      className: "rounded-full bg-neutral-950 px-5 py-3 text-sm font-medium text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-300"
-    },
-    "Download PDF"
-  ), /* @__PURE__ */ React.createElement(
+  const previewSections = deriveSections("", resumeText);
+  const readiness = buildFinalReviewChecks(sections);
+  const canExport = hasDraft && readiness.every((item) => item.status !== "needs-attention");
+  return /* @__PURE__ */ React.createElement("div", { className: "grid gap-6 xl:grid-cols-[1.05fr_0.95fr]" }, /* @__PURE__ */ React.createElement(Panel, { className: "p-8 sm:p-10" }, /* @__PURE__ */ React.createElement(SectionEyebrow, null, "Final review"), /* @__PURE__ */ React.createElement("h2", { "data-step-heading": "true", tabIndex: -1, className: "mt-4 text-3xl font-semibold tracking-[-0.04em] text-neutral-950" }, "Final resume preview"), /* @__PURE__ */ React.createElement("p", { className: "mt-4 max-w-2xl text-sm leading-7 text-neutral-600" }, "Review the assembled draft now that the sections are complete. This is the first place the full resume preview appears."), /* @__PURE__ */ React.createElement(ResumePreview, { sections: previewSections, missingKeywords: analysis?.extracted?.missingKeywords || [] })), /* @__PURE__ */ React.createElement("div", { className: "space-y-5" }, /* @__PURE__ */ React.createElement(Panel, { className: "p-6" }, /* @__PURE__ */ React.createElement(SectionEyebrow, null, "Export readiness"), /* @__PURE__ */ React.createElement("div", { className: "mt-4 space-y-4" }, /* @__PURE__ */ React.createElement("div", { className: "rounded-2xl border border-neutral-200 bg-neutral-50 p-4" }, /* @__PURE__ */ React.createElement("p", { className: "text-sm font-semibold text-neutral-900" }, "Formatting review"), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-600" }, "Keep the final file single-column, use a text-based PDF or DOCX, and avoid tables, graphics, headers, footers, and text boxes.")), /* @__PURE__ */ React.createElement("div", { className: "rounded-2xl border border-neutral-200 bg-neutral-50 p-4" }, /* @__PURE__ */ React.createElement("p", { className: "text-sm font-semibold text-neutral-900" }, "Filename guidance"), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-600" }, "Name the file like a human: `FirstName_LastName_RoleTitle.pdf` or `.docx`.")), /* @__PURE__ */ React.createElement("div", { className: "rounded-2xl border border-neutral-200 bg-neutral-50 p-4" }, /* @__PURE__ */ React.createElement("p", { className: "text-sm font-semibold text-neutral-900" }, "ATS safety"), /* @__PURE__ */ React.createElement("div", { className: "mt-2 space-y-2" }, (analysis?.atsSafety || []).map((item) => /* @__PURE__ */ React.createElement("div", { key: item.title, className: "flex items-start justify-between gap-3" }, /* @__PURE__ */ React.createElement("p", { className: "text-sm leading-6 text-neutral-600" }, item.title), /* @__PURE__ */ React.createElement(AtsSafetyBadge, { status: item.status }))))), /* @__PURE__ */ React.createElement("div", { className: "rounded-2xl border border-neutral-200 bg-neutral-50 p-4" }, /* @__PURE__ */ React.createElement("p", { className: "text-sm font-semibold text-neutral-900" }, "Resume structure"), /* @__PURE__ */ React.createElement("div", { className: "mt-2 space-y-3" }, readiness.map((item) => /* @__PURE__ */ React.createElement("div", { key: item.title, className: "flex items-start justify-between gap-3" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("p", { className: "text-sm font-medium text-neutral-900" }, item.title), /* @__PURE__ */ React.createElement("p", { className: "text-sm leading-6 text-neutral-600" }, item.detail)), /* @__PURE__ */ React.createElement(AtsSafetyBadge, { status: item.status })))))), /* @__PURE__ */ React.createElement("div", { className: "mt-6 flex flex-wrap gap-3" }, /* @__PURE__ */ React.createElement(
     "button",
     {
       onClick: () => onDownload("docx"),
-      disabled: !hasDraft,
-      className: "rounded-full border border-neutral-200 bg-white px-5 py-3 text-sm font-medium text-neutral-800 transition hover:bg-neutral-50 disabled:cursor-not-allowed disabled:text-neutral-400"
+      disabled: !canExport,
+      className: "rounded-full bg-neutral-950 px-5 py-3 text-sm font-medium text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-300"
     },
     "Download DOCX"
+  ), /* @__PURE__ */ React.createElement(
+    "button",
+    {
+      onClick: () => onDownload("pdf"),
+      disabled: !canExport,
+      className: "rounded-full border border-neutral-200 bg-white px-5 py-3 text-sm font-medium text-neutral-800 transition hover:bg-neutral-50 disabled:cursor-not-allowed disabled:text-neutral-400"
+    },
+    "Download PDF"
   ), /* @__PURE__ */ React.createElement(
     "button",
     {
       onClick: onBack,
       className: "rounded-full border border-neutral-200 bg-white px-5 py-3 text-sm font-medium text-neutral-800 transition hover:bg-neutral-50"
     },
-    "Keep editing"
-  )), !resumeText.trim() && /* @__PURE__ */ React.createElement("p", { className: "mt-4 text-sm text-amber-700" }, "Generate a draft before exporting."));
+    "Back to sections"
+  )), !canExport && /* @__PURE__ */ React.createElement("p", { className: "mt-4 text-sm text-amber-700" }, "Resolve the final review issues before exporting."))));
 }
 function ResumeRefreshPrototype() {
   const persisted = (0, import_react.useMemo)(() => readPersistedState(), []);
+  const appShellRef = (0, import_react.useRef)(null);
   const [stage, setStage] = (0, import_react.useState)(persisted.stage);
   const [sourceMethod, setSourceMethod] = (0, import_react.useState)(persisted.sourceMethod);
   const [targetRole, setTargetRole] = (0, import_react.useState)(persisted.targetRole);
@@ -22109,60 +23137,46 @@ function ResumeRefreshPrototype() {
   const [linkedinText, setLinkedinText] = (0, import_react.useState)(persisted.linkedinText);
   const [rewriteStyle, setRewriteStyle] = (0, import_react.useState)(persisted.rewriteStyle);
   const [activeSection, setActiveSection] = (0, import_react.useState)(persisted.activeSection);
+  const [reviewSection, setReviewSection] = (0, import_react.useState)(persisted.reviewSection);
   const [sections, setSections] = (0, import_react.useState)(persisted.sections);
+  const [sampleMode, setSampleMode] = (0, import_react.useState)(Boolean(persisted.sampleMode));
+  const [linkedinHeadlineInput, setLinkedinHeadlineInput] = (0, import_react.useState)("");
+  const [linkedinExperienceInput, setLinkedinExperienceInput] = (0, import_react.useState)("");
+  const [linkedinSkillsInput, setLinkedinSkillsInput] = (0, import_react.useState)("");
   const [resumeFile, setResumeFile] = (0, import_react.useState)(null);
   const [resumeFileName, setResumeFileName] = (0, import_react.useState)("");
   const [config, setConfig] = (0, import_react.useState)(null);
-  const [profile, setProfile] = (0, import_react.useState)(null);
   const [analysis, setAnalysis] = (0, import_react.useState)(null);
   const [rewrite, setRewrite] = (0, import_react.useState)(null);
   const [status, setStatus] = (0, import_react.useState)("");
   const [error, setError] = (0, import_react.useState)("");
   const [isAnalyzing, setIsAnalyzing] = (0, import_react.useState)(false);
   const [isRewriting, setIsRewriting] = (0, import_react.useState)(false);
-  const normalizedRewriteDraft = (0, import_react.useMemo)(
-    () => rewrite?.rewrittenResume ? serializeSections(deriveSections(profile, linkedinText, rewrite.rewrittenResume)) : "",
-    [linkedinText, profile, rewrite]
-  );
+  const transitionKey = stage === "builder" ? `${stage}:${analysis ? activeSection : "setup"}` : stage === "review" ? `${stage}:${reviewSection}` : stage;
   (0, import_react.useEffect)(() => {
+    if (sampleMode || ["landing", "source", "permissions"].includes(stage)) {
+      window.sessionStorage.removeItem(storageKey);
+      return;
+    }
     window.sessionStorage.setItem(
       storageKey,
       JSON.stringify({
         stage,
         sourceMethod,
+        sampleMode,
         targetRole,
         linkedinUrl,
         linkedinText,
         rewriteStyle,
         activeSection,
+        reviewSection,
         sections
       })
     );
-  }, [stage, sourceMethod, targetRole, linkedinUrl, linkedinText, rewriteStyle, activeSection, sections]);
+  }, [stage, sourceMethod, sampleMode, targetRole, linkedinUrl, linkedinText, rewriteStyle, activeSection, reviewSection, sections]);
   (0, import_react.useEffect)(() => {
-    const url = new URL(window.location.href);
-    const linkedInStatus = url.searchParams.get("linkedin");
-    if (linkedInStatus) {
-      url.searchParams.delete("linkedin");
-      window.history.replaceState({}, "", url);
-      if (linkedInStatus === "connected") {
-        setStatus("LinkedIn connected.");
-        (0, import_react.startTransition)(() => {
-          setStage("review");
-          setSourceMethod("import");
-        });
-      } else {
-        setError("LinkedIn sign-in did not complete. You can continue manually.");
-      }
-    }
-  }, []);
-  (0, import_react.useEffect)(() => {
-    Promise.all([
-      fetchJson("/api/config"),
-      fetchJson("/api/session")
-    ]).then(([nextConfig, session]) => {
+    fetchJson("/api/config").then((nextConfig) => {
       setConfig(nextConfig);
-      setProfile(session.profile);
     }).catch((requestError) => {
       setError(requestError.message || "Unable to load app state.");
     });
@@ -22171,22 +23185,35 @@ function ResumeRefreshPrototype() {
     if (sourceMethod !== "import") {
       return;
     }
-    const hasContent = sections.some((section) => normalizeText(section.content));
+    const hasContent = sections.some((section) => normalizeText2(section.content));
     if (hasContent) {
       return;
     }
-    setSections(deriveSections(profile, linkedinText, ""));
-  }, [sourceMethod, profile, linkedinText, sections]);
+    setSections(deriveSections(linkedinText, "", linkedinUrl));
+  }, [sourceMethod, linkedinText, linkedinUrl, sections]);
+  (0, import_react.useLayoutEffect)(() => {
+    const shell = appShellRef.current;
+    shell?.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    const focusHeading = () => {
+      const heading = document.querySelector("[data-step-heading='true']");
+      heading?.focus({ preventScroll: true });
+    };
+    if (typeof window !== "undefined" && "requestAnimationFrame" in window) {
+      window.requestAnimationFrame(focusHeading);
+    } else {
+      focusHeading();
+    }
+  }, [transitionKey]);
   function updateSection(id, content) {
     setRewrite(null);
-    setAnalysis(null);
     setSections(
       (current) => current.map((section) => section.id === id ? { ...section, content } : section)
     );
   }
   async function runAnalyze() {
     setError("");
-    setStatus("Generating draft...");
+    setStatus("Creating your first draft...");
     setIsAnalyzing(true);
     setRewrite(null);
     try {
@@ -22195,8 +23222,7 @@ function ResumeRefreshPrototype() {
         targetRole,
         linkedinUrl,
         linkedinText,
-        resumeText: serializedResume,
-        style: rewriteStyle
+        resumeText: serializedResume
       };
       if (resumeFile) {
         payload.resumeFileName = resumeFile.name;
@@ -22210,9 +23236,11 @@ function ResumeRefreshPrototype() {
       setAnalysis(result);
       const draftedText = result.rewrittenResume || result.extractedResumeText || serializedResume;
       if (draftedText) {
-        setSections(deriveSections(profile, linkedinText, draftedText));
+        setSections(deriveSections(linkedinText, draftedText, linkedinUrl));
       }
-      setStatus("Draft ready.");
+      setSampleMode(false);
+      setActiveSection("header");
+      setStatus("We analyzed your resume. Start with your header, then continue section by section.");
       (0, import_react.startTransition)(() => setStage("builder"));
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Analyze failed");
@@ -22220,9 +23248,28 @@ function ResumeRefreshPrototype() {
       setIsAnalyzing(false);
     }
   }
-  async function runRewrite() {
+  async function runSectionAction(action) {
+    if (action.kind === "local") {
+      const currentSection = sections.find((section) => section.id === activeSection);
+      if (!currentSection) {
+        return;
+      }
+      let nextContent = currentSection.content;
+      if (action.id === "trim_skills") {
+        nextContent = trimWeakSkillsContent(currentSection.content, targetRole);
+      } else if (action.id === "align_skills_to_role") {
+        nextContent = alignSkillsToRoleContent(currentSection.content, targetRole);
+      }
+      if (!normalizeText2(nextContent) || normalizeText2(nextContent) === normalizeText2(currentSection.content)) {
+        setStatus(`${action.label} did not need to change this section.`);
+        return;
+      }
+      updateSection(activeSection, nextContent);
+      setStatus(`${action.label} applied to ${currentSection.title.toLowerCase()}.`);
+      return;
+    }
     setError("");
-    setStatus("Polishing draft...");
+    setStatus(`Preparing a suggestion preview for ${sections.find((section) => section.id === activeSection)?.title.toLowerCase() || "this section"}...`);
     setIsRewriting(true);
     try {
       const serializedResume = serializeSections(sections);
@@ -22231,7 +23278,9 @@ function ResumeRefreshPrototype() {
         linkedinUrl,
         linkedinText,
         resumeText: serializedResume,
-        style: rewriteStyle
+        style: rewriteStyle,
+        sectionId: activeSection,
+        actionId: action.id
       };
       if (resumeFile) {
         payload.resumeFileName = resumeFile.name;
@@ -22242,27 +23291,33 @@ function ResumeRefreshPrototype() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify(payload)
       });
-      setRewrite(result);
-      setStatus("Polished draft ready.");
+      setRewrite({
+        ...result,
+        sectionId: activeSection,
+        actionId: action.id
+      });
+      setStatus("Suggestion preview ready for this section.");
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Rewrite failed");
     } finally {
       setIsRewriting(false);
     }
   }
-  function applyRewriteToSections() {
-    if (!rewrite?.rewrittenResume) {
+  function applyRewriteToSection(id, rewrittenContent) {
+    if (!rewrite?.rewrittenResume || !rewrittenContent.trim()) {
       return;
     }
-    setSections(deriveSections(profile, linkedinText, rewrite.rewrittenResume));
+    setSections(
+      (current) => current.map((section) => section.id === id ? { ...section, content: rewrittenContent } : section)
+    );
     setRewrite(null);
-    setStatus("AI polish applied back into editable sections.");
+    setStatus("Suggestion applied to this section.");
   }
   async function handleDownload(format) {
     setError("");
     setStatus(`Preparing ${format.toUpperCase()}...`);
     try {
-      const finalText = normalizedRewriteDraft || serializeSections(sections);
+      const finalText = serializeSections(sections);
       const response = await fetch("/api/export", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -22293,51 +23348,76 @@ function ResumeRefreshPrototype() {
   }
   function beginImport() {
     setSourceMethod("import");
+    setSampleMode(false);
+    setLinkedinUrl("");
+    setLinkedinText("");
+    setLinkedinHeadlineInput("");
+    setLinkedinExperienceInput("");
+    setLinkedinSkillsInput("");
+    setSections(buildDefaultSections());
+    setReviewSection("header");
+    setAnalysis(null);
+    setRewrite(null);
+    setError("");
     setStage("permissions");
   }
   function beginManual() {
     setSourceMethod("manual");
+    setSampleMode(false);
+    setTargetRole("");
+    setLinkedinText("");
+    setLinkedinUrl("");
+    setRewriteStyle("balanced");
+    setSections(buildDefaultSections());
+    setActiveSection("summary");
+    setReviewSection("header");
+    setResumeFile(null);
+    setResumeFileName("");
+    setAnalysis(null);
+    setRewrite(null);
+    setStatus("Blank builder ready. Start with the target role, then create your first draft.");
+    setError("");
     setStage("builder");
   }
   function viewSample() {
-    document.getElementById("sample-preview")?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
-  function loadSampleResume() {
     setSourceMethod("manual");
+    setSampleMode(true);
     setTargetRole(sampleResumeSeed.targetRole);
     setLinkedinText(sampleResumeSeed.linkedinText);
     setLinkedinUrl("");
     setRewriteStyle("balanced");
     setSections(sampleResumeSeed.sections);
-    setActiveSection("experience");
+    setActiveSection("summary");
+    setReviewSection("header");
     setAnalysis(null);
     setRewrite(null);
+    setResumeFile(null);
+    setResumeFileName("");
     setStage("builder");
-    setStatus("Sample resume loaded. You can edit it or generate a draft immediately.");
+    setStatus("Sample resume loaded. Create your first draft to see what to improve first.");
   }
   function continueImport() {
-    if (!config) {
-      setStatus("Checking import options...");
-      return;
-    }
-    if (config?.linkedInAuthEnabled && !profile) {
-      window.location.href = "/api/auth/linkedin?return_to=/v2.html";
-      return;
-    }
-    if (profile) {
-      setSections(deriveSections(profile, linkedinText, serializeSections(sections)));
-    } else if (!sections.some((section) => normalizeText(section.content))) {
-      setSections(deriveSections(null, linkedinText, ""));
-    }
+    const combinedLinkedInText = [
+      linkedinHeadlineInput ? `ABOUT
+${linkedinHeadlineInput}` : "",
+      linkedinExperienceInput ? `EXPERIENCE
+${linkedinExperienceInput}` : "",
+      linkedinSkillsInput ? `SKILLS
+${linkedinSkillsInput}` : ""
+    ].filter(Boolean).join("\n\n").trim();
+    setLinkedinText(combinedLinkedInText);
+    setSampleMode(false);
+    setSections(deriveSections(combinedLinkedInText, "", linkedinUrl));
+    setReviewSection("header");
+    setStatus("LinkedIn text imported. Review each section before creating your first draft.");
     setStage("review");
   }
-  const currentDraft = normalizedRewriteDraft || serializeSections(sections);
-  return /* @__PURE__ */ React.createElement("div", { className: "min-h-screen overflow-x-hidden bg-[radial-gradient(circle_at_top_left,rgba(179,120,67,0.12),transparent_28%),linear-gradient(180deg,#fcfaf6_0%,#f4efe8_100%)] px-4 py-6 text-neutral-950 sm:px-6 sm:py-8" }, /* @__PURE__ */ React.createElement("div", { className: "mx-auto max-w-6xl" }, stage === "landing" ? /* @__PURE__ */ React.createElement(
+  const currentDraft = serializeSections(sections);
+  return /* @__PURE__ */ React.createElement("div", { ref: appShellRef, className: "min-h-screen overflow-x-hidden bg-[#f5f4ef] px-4 py-6 text-neutral-950 sm:px-6 sm:py-8" }, /* @__PURE__ */ React.createElement("div", { className: "mx-auto max-w-6xl" }, stage === "landing" ? /* @__PURE__ */ React.createElement(
     Landing,
     {
       onStart: () => setStage("source"),
-      onViewSample: viewSample,
-      onUseSample: loadSampleResume
+      onViewSample: viewSample
     }
   ) : /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(WorkflowHeader, { stage, onBackToLanding: () => setStage("landing") }), (status || error) && /* @__PURE__ */ React.createElement(
     "div",
@@ -22349,19 +23429,31 @@ function ResumeRefreshPrototype() {
     },
     error || status
   ), stage === "source" && /* @__PURE__ */ React.createElement(SourceChoice, { onImport: beginImport, onManual: beginManual }), stage === "permissions" && /* @__PURE__ */ React.createElement(
-    ImportPermissions,
+    LinkedInPasteImport,
     {
       onContinue: continueImport,
       onManual: beginManual,
-      isLinkedInReady: Boolean(config?.linkedInAuthEnabled),
-      isConfigReady: Boolean(config)
+      linkedinUrl,
+      linkedinHeadline: linkedinHeadlineInput,
+      linkedinExperience: linkedinExperienceInput,
+      linkedinSkills: linkedinSkillsInput,
+      onLinkedinUrlChange: setLinkedinUrl,
+      onLinkedinHeadlineChange: setLinkedinHeadlineInput,
+      onLinkedinExperienceChange: setLinkedinExperienceInput,
+      onLinkedinSkillsChange: setLinkedinSkillsInput
     }
   ), stage === "review" && /* @__PURE__ */ React.createElement(
     ImportReview,
     {
       sections,
+      activeSection: reviewSection,
       onSectionChange: updateSection,
-      onContinue: () => setStage("builder")
+      onSectionSelect: setReviewSection,
+      onContinue: () => {
+        setStatus("Import review complete. Add your target role, then create your first draft.");
+        setStage("builder");
+      },
+      linkedinText
     }
   ), stage === "builder" && /* @__PURE__ */ React.createElement(
     Builder,
@@ -22396,13 +23488,17 @@ function ResumeRefreshPrototype() {
       onSectionSelect: setActiveSection,
       onSectionChange: updateSection,
       onAnalyze: runAnalyze,
-      onRewrite: runRewrite,
-      onApplyRewrite: applyRewriteToSections,
+      onRunSectionAction: runSectionAction,
+      onApplyRewriteSection: applyRewriteToSection,
+      onDiscardRewrite: () => {
+        setRewrite(null);
+        setStatus("Kept the current section text.");
+      },
       analysis,
       rewrite,
       isAnalyzing,
       isRewriting,
-      canRewrite: Boolean(config?.openAiRewriteEnabled && currentDraft.trim()),
+      canRewrite: Boolean(config?.openAiRewriteEnabled),
       onContinue: () => setStage("export")
     }
   ), stage === "export" && /* @__PURE__ */ React.createElement(
@@ -22411,7 +23507,9 @@ function ResumeRefreshPrototype() {
       onDownload: handleDownload,
       onBack: () => setStage("builder"),
       hasDraft: Boolean(currentDraft.trim()),
-      resumeText: currentDraft
+      resumeText: currentDraft,
+      analysis,
+      sections
     }
   ))));
 }

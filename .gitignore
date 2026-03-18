@@ -5,3 +5,4 @@ npm-debug.log*
 node_modules
 test-results
 playwright-report
+docs/superpowers/

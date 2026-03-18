@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { analyzeResume } from "./resume-analyzer.js";
+import { analyzeResume, reviewResumeQuality } from "./resume-analyzer.js";
 
 test("analyzeResume produces suggestions and a draft", () => {
   const result = analyzeResume({
@@ -108,4 +108,56 @@ EXPERIENCE
   assert.ok(result.suggestions.some((item) => item.title === "Close more bullets with impact"));
   assert.ok(Array.isArray(result.lint.failingBullets));
   assert.ok(result.lint.failingBullets.length >= 1);
+});
+
+test("analyzeResume returns separate ATS safety guidance for parser and content risks", () => {
+  const result = analyzeResume({
+    linkedinText: "Customer success manager with CRM, onboarding, renewals, and stakeholder communication experience.",
+    resumeText: `
+Jane Doe
+SUMMARY
+I help customers solve onboarding issues and I manage renewals.
+
+EXPERIENCE
+- Helped with onboarding for new customers across a few product areas and handled follow-up requests from internal partners without clear measurable outcomes
+- Worked on renewal coordination with account teams
+`,
+    targetRole: "Customer Success Manager"
+  });
+
+  assert.ok(Array.isArray(result.atsSafety));
+  assert.ok(result.atsSafety.some((item) => item.status === "needs-attention"));
+  assert.ok(result.atsSafety.some((item) => /standard section titles/i.test(item.title)));
+  assert.ok(result.atsSafety.some((item) => /first-person/i.test(item.title)));
+  assert.ok(result.atsSafety.some((item) => /C\.A\.R\./i.test(item.detail)));
+});
+
+test("reviewResumeQuality flags missing experience dates and preserves optional sections", () => {
+  const checks = reviewResumeQuality({
+    resumeText: `
+Jane Doe
+
+SUMMARY
+Product manager focused on growth and activation.
+
+EXPERIENCE
+Product Manager, Atlas
+- Led onboarding experiments that improved activation 18%.
+
+SKILLS
+SQL
+Experimentation
+
+EDUCATION
+University of California, Berkeley
+B.A. Economics, 2018
+
+PROJECTS
+Activation Dashboard
+- Built a KPI dashboard in SQL and Tableau.
+`
+  });
+
+  assert.ok(checks.some((item) => /experience dates/i.test(item.title)));
+  assert.ok(checks.some((item) => /optional sections detected/i.test(item.title)));
 });
