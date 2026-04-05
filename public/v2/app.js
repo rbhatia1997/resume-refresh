@@ -21456,6 +21456,225 @@ var import_client = __toESM(require_client(), 1);
 // prototype/ResumeRefreshPrototype.tsx
 var React = __toESM(require_react(), 1);
 var import_react = __toESM(require_react(), 1);
+
+// src/skills-grounding.js
+var SKILL_VOCABULARY = [
+  { canonical: "Product Strategy", aliases: ["product strategy", "strategy"] },
+  { canonical: "Roadmap Prioritization", aliases: ["roadmap prioritization", "roadmap planning", "roadmapping"] },
+  { canonical: "Experimentation", aliases: ["experimentation", "a/b testing", "ab testing", "testing"] },
+  { canonical: "Analytics", aliases: ["analytics", "product analytics", "data analysis"] },
+  { canonical: "SQL", aliases: ["sql"] },
+  { canonical: "Stakeholder Management", aliases: ["stakeholder management", "stakeholder alignment"] },
+  { canonical: "User Research", aliases: ["user research", "customer research"] },
+  { canonical: "Onboarding", aliases: ["onboarding", "user onboarding"] },
+  { canonical: "Growth Strategy", aliases: ["growth", "growth strategy", "growth marketing"] },
+  { canonical: "Monetization", aliases: ["monetization", "pricing", "pricing strategy"] },
+  { canonical: "Go-to-Market Strategy", aliases: ["go to market", "go-to-market", "gtm"] },
+  { canonical: "Lifecycle Marketing", aliases: ["lifecycle", "lifecycle marketing", "crm"] },
+  { canonical: "Product Discovery", aliases: ["product discovery", "discovery"] },
+  { canonical: "Jira", aliases: ["jira"] },
+  { canonical: "Figma", aliases: ["figma"] },
+  { canonical: "Tableau", aliases: ["tableau"] },
+  { canonical: "Looker", aliases: ["looker"] },
+  { canonical: "Amplitude", aliases: ["amplitude"] },
+  { canonical: "Mixpanel", aliases: ["mixpanel"] },
+  { canonical: "React", aliases: ["react"] },
+  { canonical: "Node.js", aliases: ["node", "node.js"] },
+  { canonical: "AWS", aliases: ["aws", "amazon web services"] },
+  { canonical: "Python", aliases: ["python"] }
+];
+var ROLE_SKILL_PRIORITIES = [
+  {
+    pattern: /senior product manager|product manager/i,
+    preferred: [
+      "Product Strategy",
+      "Roadmap Prioritization",
+      "Experimentation",
+      "Analytics",
+      "SQL",
+      "Stakeholder Management",
+      "User Research",
+      "Onboarding",
+      "Growth Strategy",
+      "Monetization",
+      "Go-to-Market Strategy",
+      "Lifecycle Marketing",
+      "Product Discovery"
+    ]
+  }
+];
+var GENERIC_REJECTION_PATTERNS = [
+  /\b(communication|communicator|storytelling|leadership|problem solving|hardworking|detail oriented|team player)\b/i,
+  /\b(experience|professional|results|ownership|collaboration)\b/i
+];
+var aliasToCanonical = /* @__PURE__ */ new Map();
+for (const skill of SKILL_VOCABULARY) {
+  for (const alias of skill.aliases) {
+    aliasToCanonical.set(alias, skill.canonical);
+  }
+}
+function normalizeToken(value = "") {
+  return value.toLowerCase().replace(/[()]/g, " ").replace(/[|/]/g, " ").replace(/[^a-z0-9+#.\- ]+/g, " ").replace(/\s+/g, " ").trim();
+}
+function parseSkillChunks(text = "") {
+  return String(text).split(/\n|[;,]/).map((chunk) => chunk.trim()).filter(Boolean);
+}
+function resolveRecognizedSkill(rawValue = "") {
+  const normalized = normalizeToken(rawValue);
+  if (!normalized) {
+    return [];
+  }
+  const direct = aliasToCanonical.get(normalized);
+  if (direct) {
+    return [direct];
+  }
+  const matches = [];
+  for (const [alias, canonical] of aliasToCanonical.entries()) {
+    const pattern = new RegExp(`(^|\\b)${alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(\\b|$)`, "i");
+    if (pattern.test(normalized)) {
+      matches.push(canonical);
+    }
+  }
+  return [...new Set(matches)];
+}
+function normalizeSkillLines(text = "") {
+  const accepted = [];
+  const rejected = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const rawChunk of parseSkillChunks(text)) {
+    const recognized = resolveRecognizedSkill(rawChunk);
+    if (recognized.length) {
+      for (const skill of recognized) {
+        if (!seen.has(skill)) {
+          accepted.push(skill);
+          seen.add(skill);
+        }
+      }
+      continue;
+    }
+    if (GENERIC_REJECTION_PATTERNS.some((pattern) => pattern.test(rawChunk))) {
+      rejected.push({ value: rawChunk.trim(), reason: "generic or trait-like" });
+      continue;
+    }
+    rejected.push({ value: rawChunk.trim(), reason: "not recognized as a recruiter-facing skill" });
+  }
+  return { accepted, rejected };
+}
+function getRolePriorityList(targetRole = "") {
+  return ROLE_SKILL_PRIORITIES.find((entry) => entry.pattern.test(targetRole || ""))?.preferred || [];
+}
+function buildSkillActionPreview({
+  action,
+  currentText = "",
+  targetRole = "",
+  supportingText = ""
+}) {
+  const current = normalizeSkillLines(currentText);
+  const supporting = normalizeSkillLines(supportingText);
+  const rolePreferred = getRolePriorityList(targetRole);
+  const ranked = /* @__PURE__ */ new Map();
+  for (const skill of current.accepted) {
+    ranked.set(skill, (ranked.get(skill) || 0) + 3);
+  }
+  for (const skill of supporting.accepted) {
+    ranked.set(skill, (ranked.get(skill) || 0) + 2);
+  }
+  for (const skill of rolePreferred) {
+    ranked.set(skill, (ranked.get(skill) || 0) + (action === "align" ? 4 : 1));
+  }
+  const suggested = [...ranked.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([skill]) => skill).slice(0, action === "align" ? 10 : 8);
+  const removed = [
+    ...current.rejected,
+    ...current.accepted.filter((skill) => !suggested.includes(skill)).map((skill) => ({ value: skill, reason: action === "align" ? `lower priority for ${targetRole || "this role"}` : "weaker or redundant compared with stronger skills" }))
+  ];
+  return {
+    action,
+    suggested,
+    removed,
+    supportingMatches: supporting.accepted.filter((skill) => suggested.includes(skill))
+  };
+}
+
+// src/resume-validator.js
+var REQUIRED_SECTIONS = ["header", "summary", "experience"];
+function normalizeText(value = "") {
+  return String(value).replace(/\r/g, "").trim();
+}
+function hasExperienceDates(value = "") {
+  return /\b(19|20)\d{2}\b/.test(value);
+}
+function hasRoleAndCompany(value = "") {
+  const firstMeaningfulLine = normalizeText(value).split("\n").find((line) => line.trim() && !/^[-*•]/.test(line));
+  if (!firstMeaningfulLine) {
+    return false;
+  }
+  return /,|\|| at /i.test(firstMeaningfulLine);
+}
+function buildValidationFromSectionMap(sectionMap) {
+  const normalizedSections = Object.fromEntries(
+    Object.entries(sectionMap).map(([key, lines]) => [key, normalizeText(Array.isArray(lines) ? lines.join("\n") : lines)])
+  );
+  const presentSections = Object.entries(normalizedSections).filter(([, value]) => value).map(([key]) => key);
+  const blockingIssues = [];
+  for (const id of REQUIRED_SECTIONS) {
+    if (!normalizedSections[id]) {
+      blockingIssues.push({ id: `missing-${id}`, sectionId: id, message: `${id[0].toUpperCase()}${id.slice(1)} is required before final review.` });
+    }
+  }
+  if (normalizedSections.experience && !hasExperienceDates(normalizedSections.experience)) {
+    blockingIssues.push({ id: "experience-dates", sectionId: "experience", message: "Add dates to experience entries before export." });
+  }
+  if (normalizedSections.experience && !hasRoleAndCompany(normalizedSections.experience)) {
+    blockingIssues.push({ id: "experience-role-company", sectionId: "experience", message: "Experience should clearly show role and company on the entry heading." });
+  }
+  const warnings = [];
+  if (normalizedSections.education && !/\b(19|20)\d{2}\b/.test(normalizedSections.education)) {
+    warnings.push({ id: "education-year", sectionId: "education", message: "Education is easier to scan with a graduation year or date." });
+  }
+  if (normalizedSections.skills && normalizedSections.skills.split("\n").length < 3) {
+    warnings.push({ id: "skills-thin", sectionId: "skills", message: "Skills can be tighter and more complete before export." });
+  }
+  const atsChecks = [
+    {
+      id: "ats-headings",
+      label: "Standard section headings",
+      status: normalizedSections.summary && normalizedSections.experience ? "pass" : "warn",
+      detail: "Use clear headings like Summary, Experience, Skills, and Education."
+    },
+    {
+      id: "ats-dates",
+      label: "Experience dates present",
+      status: normalizedSections.experience ? hasExperienceDates(normalizedSections.experience) ? "pass" : "fail" : "fail",
+      detail: "Recruiters and ATS systems expect visible timelines for roles."
+    },
+    {
+      id: "ats-role-company",
+      label: "Role and company are clear",
+      status: normalizedSections.experience ? hasRoleAndCompany(normalizedSections.experience) ? "pass" : "fail" : "fail",
+      detail: "Each experience entry should clearly show title and company."
+    },
+    {
+      id: "ats-skills",
+      label: "Skills are scan-friendly",
+      status: normalizedSections.skills ? "pass" : "warn",
+      detail: "Keep skills standardized and easy to parse."
+    }
+  ];
+  return {
+    presentSections,
+    blockingIssues,
+    warnings,
+    atsChecks
+  };
+}
+function buildResumeValidation(sections = []) {
+  const sectionMap = Object.fromEntries(
+    sections.map((section) => [section.id, section.content || ""])
+  );
+  return buildValidationFromSectionMap(sectionMap);
+}
+
+// prototype/ResumeRefreshPrototype.tsx
 var storageKey = "resume_refresh_v2_state";
 var sectionBlueprints = [
   {
@@ -21506,7 +21725,7 @@ var defaultPersistedState = {
   linkedinUrl: "",
   linkedinText: "",
   rewriteStyle: "balanced",
-  activeSection: "summary",
+  activeSection: "header",
   sections: sectionBlueprints.map((item) => ({ ...item, content: "" }))
 };
 var featureCards = [
@@ -21568,7 +21787,7 @@ function buildDefaultSections(seed) {
     content: seed?.[item.id]?.trim() || ""
   }));
 }
-function normalizeText(value) {
+function normalizeText2(value) {
   return value.replace(/\r/g, "").trim();
 }
 var headingAliases = {
@@ -21579,7 +21798,7 @@ var headingAliases = {
   education: ["EDUCATION"]
 };
 function parseStructuredSections(text) {
-  const lines = normalizeText(text).split("\n");
+  const lines = normalizeText2(text).split("\n");
   const sections = {
     header: [],
     summary: [],
@@ -21609,7 +21828,7 @@ function parseStructuredSections(text) {
   return sections;
 }
 function extractHeaderBlock(text) {
-  const normalized = normalizeText(text);
+  const normalized = normalizeText2(text);
   if (!normalized) {
     return "";
   }
@@ -21628,8 +21847,8 @@ function extractHeaderBlock(text) {
   return collected.join("\n");
 }
 function deriveSections(profile, linkedinText, resumeText) {
-  const normalizedLinkedIn = normalizeText(linkedinText);
-  const normalizedResume = normalizeText(resumeText);
+  const normalizedLinkedIn = normalizeText2(linkedinText);
+  const normalizedResume = normalizeText2(resumeText);
   const parsedResume = parseStructuredSections(normalizedResume);
   const headerFromProfile = [profile?.name, profile?.email].filter(Boolean).join("\n");
   const parsedHeader = parsedResume.header.filter(Boolean).slice(0, 3).join("\n");
@@ -21647,7 +21866,7 @@ function deriveSections(profile, linkedinText, resumeText) {
   });
 }
 function serializeSections(sections) {
-  const sectionMap = Object.fromEntries(sections.map((section) => [section.id, normalizeText(section.content)]));
+  const sectionMap = Object.fromEntries(sections.map((section) => [section.id, normalizeText2(section.content)]));
   const blocks = [
     sectionMap.header,
     sectionMap.summary ? `SUMMARY
@@ -21662,7 +21881,7 @@ ${sectionMap.education}` : ""
   return blocks.join("\n\n").trim();
 }
 function getSectionStatus(section) {
-  const value = normalizeText(section.content);
+  const value = normalizeText2(section.content);
   if (!value) {
     return section.required ? "Missing" : "Optional";
   }
@@ -21689,19 +21908,6 @@ function countSectionStatuses(sections) {
     { ready: 0, needsDetail: 0, missing: 0, optional: 0 }
   );
 }
-function findNextSection(sections, activeSection) {
-  const statuses = sections.map((section) => ({
-    id: section.id,
-    status: getSectionStatus(section)
-  }));
-  const preferred = statuses.find((section) => section.status === "Missing") || statuses.find((section) => section.status === "Needs detail");
-  if (preferred && preferred.id !== activeSection) {
-    return preferred.id;
-  }
-  const currentIndex = sections.findIndex((section) => section.id === activeSection);
-  const fallback = sections[(currentIndex + 1) % sections.length];
-  return fallback?.id || activeSection;
-}
 function sectionToneTips(sectionId) {
   return {
     header: "Keep this factual, scan-friendly, and compact.",
@@ -21710,6 +21916,82 @@ function sectionToneTips(sectionId) {
     skills: "List only what helps the target role. Cut generic filler.",
     education: "Only include details that still help your story."
   }[sectionId];
+}
+function getGuidedSectionIndex(sectionId) {
+  return sectionBlueprints.findIndex((section) => section.id === sectionId);
+}
+function getNextGuidedSection(activeSection) {
+  const index = getGuidedSectionIndex(activeSection);
+  return sectionBlueprints[index + 1]?.id || null;
+}
+function buildSectionSuggestions(selectedSection, sections, analysis, targetRole) {
+  const scopedFromAnalysis = analysis?.sectionSuggestions?.[selectedSection.id];
+  if (Array.isArray(scopedFromAnalysis) && scopedFromAnalysis.length) {
+    return scopedFromAnalysis;
+  }
+  if (selectedSection.id === "skills") {
+    const normalized = normalizeSkillLines(selectedSection.content);
+    const suggestions = [];
+    if (normalized.rejected.length) {
+      suggestions.push({
+        sectionId: "skills",
+        title: "Replace vague skills",
+        detail: "Use recognizable recruiter-facing skills, tools, and methods instead of traits or summary prose."
+      });
+    }
+    if (normalized.accepted.length < 3) {
+      suggestions.push({
+        sectionId: "skills",
+        title: "Ground skills in the role",
+        detail: `List the standardized skills a ${targetRole || "hiring manager"} would expect to scan quickly.`
+      });
+    }
+    return suggestions;
+  }
+  if (selectedSection.id === "education") {
+    const value = normalizeText2(selectedSection.content);
+    const suggestions = [];
+    if (!value) {
+      suggestions.push({
+        sectionId: "education",
+        title: "Add education only if it helps",
+        detail: "If education strengthens this resume, keep it concise: school, degree, and year."
+      });
+    } else if (!/\b(19|20)\d{2}\b/.test(value)) {
+      suggestions.push({
+        sectionId: "education",
+        title: "Include a year",
+        detail: "Education entries are easier to trust when they include a graduation year or date."
+      });
+    }
+    return suggestions;
+  }
+  if (selectedSection.id === "experience") {
+    if (!normalizeText2(selectedSection.content)) {
+      return [{
+        sectionId: "experience",
+        title: "Add a real role entry",
+        detail: "Experience should show title, company, dates, and the strongest bullets for that role."
+      }];
+    }
+    return [];
+  }
+  if (selectedSection.id === "summary" && !normalizeText2(selectedSection.content)) {
+    return [{
+      sectionId: "summary",
+      title: "Write a clear direction-setting summary",
+      detail: `Use 2-3 lines to point toward ${targetRole || "your target role"} without repeating the whole work history.`
+    }];
+  }
+  return [];
+}
+function describeExperienceEntries(content) {
+  const lines = normalizeText2(content).split("\n").map((line) => line.trim()).filter(Boolean);
+  const roleLines = lines.filter((line) => !/^[-*•]/.test(line));
+  if (!roleLines.length) {
+    return [];
+  }
+  return roleLines.slice(0, 4);
 }
 function readPersistedState() {
   if (typeof window === "undefined") {
@@ -21767,7 +22049,7 @@ function ResumePreview({
   sections,
   missingKeywords
 }) {
-  const sectionMap = Object.fromEntries(sections.map((section) => [section.id, normalizeText(section.content)]));
+  const sectionMap = Object.fromEntries(sections.map((section) => [section.id, normalizeText2(section.content)]));
   const headerLines = sectionMap.header.split("\n").filter(Boolean);
   return /* @__PURE__ */ React.createElement("div", { "data-testid": "resume-preview", className: "mt-4 rounded-2xl border border-neutral-200 bg-neutral-50 p-6" }, sectionMap.header ? /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { className: "whitespace-pre-wrap break-words text-xl font-semibold leading-8 text-neutral-950" }, headerLines[0]), headerLines.slice(1).length > 0 && /* @__PURE__ */ React.createElement("div", { className: "mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-neutral-500" }, headerLines.slice(1).join("  |  "))) : /* @__PURE__ */ React.createElement("p", { className: "text-sm text-neutral-500" }, "Your live preview will appear here as sections fill in."), missingKeywords.length > 0 && /* @__PURE__ */ React.createElement("div", { className: "mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800" }, "Missing keywords: ", missingKeywords.join(", ")), [
     ["summary", "Summary"],
@@ -21826,7 +22108,8 @@ function WorkflowHeader({
     ["source", "Start"],
     ["permissions", "Import"],
     ["review", "Review"],
-    ["builder", "Build"],
+    ["builder", "Edit"],
+    ["final-review", "Final review"],
     ["export", "Export"]
   ];
   const currentIndex = Math.max(0, stages.findIndex(([key]) => key === stage));
@@ -21941,19 +22224,27 @@ function Builder({
 }) {
   const selectedSection = sections.find((section) => section.id === activeSection) || sections[0];
   const sectionSummary = countSectionStatuses(sections);
-  const nextSectionId = findNextSection(sections, activeSection);
+  const nextSectionId = getNextGuidedSection(activeSection);
   const deferredPreviewSections = (0, import_react.useDeferredValue)(
     rewrite?.rewrittenResume ? deriveSections(null, "", rewrite.rewrittenResume) : sections
   );
   const missingKeywords = analysis?.extracted?.missingKeywords || [];
   const rewrittenSections = rewrite?.rewrittenResume ? deriveSections(null, "", rewrite.rewrittenResume) : [];
   const rewrittenSectionMap = Object.fromEntries(
-    rewrittenSections.map((section) => [section.id, normalizeText(section.content)])
+    rewrittenSections.map((section) => [section.id, normalizeText2(section.content)])
   );
-  const currentSectionText = normalizeText(selectedSection.content);
+  const currentSectionText = normalizeText2(selectedSection.content);
   const rewrittenSectionText = rewrittenSectionMap[selectedSection.id] || "";
   const selectedSectionLineCount = currentSectionText ? currentSectionText.split("\n").filter(Boolean).length : 0;
-  return /* @__PURE__ */ React.createElement("div", { className: "grid gap-6 xl:grid-cols-[1.05fr_0.95fr]" }, /* @__PURE__ */ React.createElement("div", { className: "space-y-5" }, /* @__PURE__ */ React.createElement(Panel, { className: "p-6" }, /* @__PURE__ */ React.createElement(SectionEyebrow, null, "Builder"), /* @__PURE__ */ React.createElement("div", { className: "mt-4 flex flex-wrap items-center justify-between gap-4" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("h2", { className: "text-3xl font-semibold tracking-[-0.04em] text-neutral-950" }, "Make each section stronger."), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-600" }, "Edit sections directly, generate a draft, then polish wording only if it helps. Strong bullets should show what you owned, how you did it, and what changed.")), /* @__PURE__ */ React.createElement("div", { className: "grid min-w-[210px] gap-2 rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-xs text-neutral-600" }, /* @__PURE__ */ React.createElement("div", { className: "flex items-center justify-between gap-3" }, /* @__PURE__ */ React.createElement("span", null, "Sections ready"), /* @__PURE__ */ React.createElement("span", { className: "font-semibold text-neutral-900" }, sectionSummary.ready, "/", sections.length)), /* @__PURE__ */ React.createElement("div", { className: "flex items-center justify-between gap-3" }, /* @__PURE__ */ React.createElement("span", null, "Need attention"), /* @__PURE__ */ React.createElement("span", { className: "font-semibold text-neutral-900" }, sectionSummary.needsDetail + sectionSummary.missing))))), /* @__PURE__ */ React.createElement(Panel, { className: "grid gap-5 p-6" }, /* @__PURE__ */ React.createElement("div", { className: "grid gap-4 md:grid-cols-2" }, /* @__PURE__ */ React.createElement("label", { className: "grid gap-2 text-sm font-medium text-neutral-900" }, "Target role", /* @__PURE__ */ React.createElement(
+  const sectionSuggestions = buildSectionSuggestions(selectedSection, sections, analysis, targetRole);
+  const experienceEntries = selectedSection.id === "experience" ? describeExperienceEntries(selectedSection.content) : [];
+  const currentSectionStatus = getSectionStatus(selectedSection);
+  const canAdvance = !selectedSection.required || currentSectionStatus !== "Missing";
+  const [skillsPreview, setSkillsPreview] = (0, import_react.useState)(null);
+  (0, import_react.useEffect)(() => {
+    setSkillsPreview(null);
+  }, [activeSection, currentSectionText, targetRole, linkedinText]);
+  return /* @__PURE__ */ React.createElement("div", { className: "grid gap-6 xl:grid-cols-[1.05fr_0.95fr]" }, /* @__PURE__ */ React.createElement("div", { className: "space-y-5" }, /* @__PURE__ */ React.createElement(Panel, { className: "p-6" }, /* @__PURE__ */ React.createElement(SectionEyebrow, null, "Builder"), /* @__PURE__ */ React.createElement("div", { className: "mt-4 flex flex-wrap items-center justify-between gap-4" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("h2", { className: "text-3xl font-semibold tracking-[-0.04em] text-neutral-950" }, "Make each section stronger."), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-600" }, "Stay in one section until it is ready enough to move forward. Save and Continue always moves to the next guided step.")), /* @__PURE__ */ React.createElement("div", { className: "grid min-w-[210px] gap-2 rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-xs text-neutral-600" }, /* @__PURE__ */ React.createElement("div", { className: "flex items-center justify-between gap-3" }, /* @__PURE__ */ React.createElement("span", null, "Current step"), /* @__PURE__ */ React.createElement("span", { className: "font-semibold text-neutral-900" }, getGuidedSectionIndex(activeSection) + 1, "/", sectionBlueprints.length)), /* @__PURE__ */ React.createElement("div", { className: "flex items-center justify-between gap-3" }, /* @__PURE__ */ React.createElement("span", null, "Next"), /* @__PURE__ */ React.createElement("span", { className: "font-semibold text-neutral-900" }, nextSectionId ? sections.find((section) => section.id === nextSectionId)?.title : "Final Review"))))), /* @__PURE__ */ React.createElement(Panel, { className: "grid gap-5 p-6" }, /* @__PURE__ */ React.createElement("div", { className: "grid gap-4 md:grid-cols-2" }, /* @__PURE__ */ React.createElement("label", { className: "grid gap-2 text-sm font-medium text-neutral-900" }, "Target role", /* @__PURE__ */ React.createElement(
     "input",
     {
       value: targetRole,
@@ -22017,7 +22308,7 @@ function Builder({
       /* @__PURE__ */ React.createElement("p", { className: "text-sm font-medium" }, section.title),
       /* @__PURE__ */ React.createElement("p", { className: cn("mt-1 text-xs", activeSection === section.id ? "text-white/70" : "text-neutral-500") }, status)
     );
-  })), /* @__PURE__ */ React.createElement("div", { className: "rounded-2xl border border-neutral-200 bg-neutral-50 p-4" }, /* @__PURE__ */ React.createElement("div", { className: "flex items-start justify-between gap-4" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("p", { className: "text-sm font-semibold text-neutral-900" }, selectedSection.title), /* @__PURE__ */ React.createElement("p", { className: "mt-1 text-sm leading-6 text-neutral-600" }, selectedSection.prompt)), /* @__PURE__ */ React.createElement("div", { className: "rounded-full border border-neutral-200 bg-white px-3 py-1 text-xs text-neutral-500" }, selectedSectionLineCount, " line", selectedSectionLineCount === 1 ? "" : "s")), /* @__PURE__ */ React.createElement(
+  })), /* @__PURE__ */ React.createElement("div", { className: "rounded-2xl border border-neutral-200 bg-neutral-50 p-4" }, /* @__PURE__ */ React.createElement("div", { className: "flex items-start justify-between gap-4" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400" }, "Step ", getGuidedSectionIndex(selectedSection.id) + 1), /* @__PURE__ */ React.createElement("h3", { className: "mt-2 text-2xl font-semibold text-neutral-950" }, selectedSection.title), /* @__PURE__ */ React.createElement("p", { className: "mt-1 text-sm leading-6 text-neutral-600" }, selectedSection.prompt)), /* @__PURE__ */ React.createElement("div", { className: "rounded-full border border-neutral-200 bg-white px-3 py-1 text-xs text-neutral-500" }, selectedSectionLineCount ? `${selectedSectionLineCount} line${selectedSectionLineCount === 1 ? "" : "s"}` : selectedSection.required ? "Required" : "Optional")), /* @__PURE__ */ React.createElement(
     "textarea",
     {
       "data-testid": "section-editor",
@@ -22026,7 +22317,48 @@ function Builder({
       placeholder: selectedSection.placeholder,
       className: "mt-4 min-h-[220px] w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm leading-6 text-neutral-900 outline-none"
     }
-  ), /* @__PURE__ */ React.createElement("p", { className: "mt-3 text-xs text-neutral-500" }, "Changes are saved in this browser session while you work."), /* @__PURE__ */ React.createElement("div", { className: "mt-3 grid gap-3 md:grid-cols-2" }, /* @__PURE__ */ React.createElement("div", { className: "rounded-2xl border border-neutral-200 bg-white px-4 py-3" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400" }, "Section guidance"), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-600" }, sectionToneTips(selectedSection.id))), /* @__PURE__ */ React.createElement("div", { className: "rounded-2xl border border-neutral-200 bg-white px-4 py-3" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400" }, "Editing goal"), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-600" }, selectedSection.helper), selectedSection.id === "experience" && /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-600" }, "Try: strong verb + initiative or scope + result. Example: \u201COwned onboarding experiments across web and lifecycle email, lifting activation for new accounts.\u201D"))))), /* @__PURE__ */ React.createElement("div", { className: "flex flex-col gap-3 sm:flex-row sm:flex-wrap" }, /* @__PURE__ */ React.createElement(
+  ), /* @__PURE__ */ React.createElement("p", { className: "mt-3 text-xs text-neutral-500" }, "Changes are saved in this browser session while you work."), /* @__PURE__ */ React.createElement("div", { className: "mt-3 grid gap-3 md:grid-cols-2" }, /* @__PURE__ */ React.createElement("div", { className: "rounded-2xl border border-neutral-200 bg-white px-4 py-3" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400" }, "Section guidance"), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-600" }, sectionToneTips(selectedSection.id))), /* @__PURE__ */ React.createElement("div", { className: "rounded-2xl border border-neutral-200 bg-white px-4 py-3" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400" }, "Editing goal"), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-600" }, selectedSection.helper), selectedSection.id === "experience" && /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-600" }, "Try: strong verb + initiative or scope + result. Example: \u201COwned onboarding experiments across web and lifecycle email, lifting activation for new accounts.\u201D"))), selectedSection.id === "experience" && experienceEntries.length > 0 && /* @__PURE__ */ React.createElement("div", { className: "mt-3 rounded-2xl border border-neutral-200 bg-white px-4 py-3" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400" }, experienceEntries.length === 1 ? "Current role entry" : "Detected role entries"), /* @__PURE__ */ React.createElement("div", { className: "mt-2 flex flex-wrap gap-2" }, experienceEntries.map((entry) => /* @__PURE__ */ React.createElement("span", { key: entry, className: "rounded-full bg-neutral-100 px-3 py-1 text-xs font-medium text-neutral-700" }, entry)))), selectedSection.id === "skills" && /* @__PURE__ */ React.createElement("div", { className: "mt-3 rounded-2xl border border-neutral-200 bg-white px-4 py-3" }, /* @__PURE__ */ React.createElement("div", { className: "flex flex-wrap gap-3" }, /* @__PURE__ */ React.createElement(
+    "button",
+    {
+      onClick: () => setSkillsPreview(buildSkillActionPreview({
+        action: "trim",
+        currentText: selectedSection.content,
+        targetRole,
+        supportingText: linkedinText
+      })),
+      className: "rounded-full border border-neutral-200 bg-white px-4 py-2 text-sm font-medium text-neutral-800 transition hover:bg-neutral-50"
+    },
+    "Trim weak skills"
+  ), /* @__PURE__ */ React.createElement(
+    "button",
+    {
+      onClick: () => setSkillsPreview(buildSkillActionPreview({
+        action: "align",
+        currentText: selectedSection.content,
+        targetRole,
+        supportingText: linkedinText
+      })),
+      className: "rounded-full border border-neutral-200 bg-white px-4 py-2 text-sm font-medium text-neutral-800 transition hover:bg-neutral-50"
+    },
+    `Align to ${targetRole.trim() || "target role"}`
+  )), skillsPreview && /* @__PURE__ */ React.createElement("div", { className: "mt-4 rounded-2xl border border-neutral-200 bg-neutral-50 p-4" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400" }, "Suggested skills list"), /* @__PURE__ */ React.createElement("div", { className: "mt-3 flex flex-wrap gap-2" }, skillsPreview.suggested.map((skill) => /* @__PURE__ */ React.createElement("span", { key: skill, className: "rounded-full bg-white px-3 py-1 text-xs font-medium text-neutral-800" }, skill))), skillsPreview.removed.length > 0 && /* @__PURE__ */ React.createElement("div", { className: "mt-4" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400" }, "Removed or deprioritized"), /* @__PURE__ */ React.createElement("ul", { className: "mt-2 space-y-2 text-sm leading-6 text-neutral-600" }, skillsPreview.removed.map((item) => /* @__PURE__ */ React.createElement("li", { key: `${item.value}-${item.reason}` }, item.value, " \u2014 ", item.reason)))), /* @__PURE__ */ React.createElement("div", { className: "mt-4 flex flex-wrap gap-3" }, /* @__PURE__ */ React.createElement(
+    "button",
+    {
+      onClick: () => {
+        onSectionChange("skills", skillsPreview.suggested.join("\n"));
+        setSkillsPreview(null);
+      },
+      className: "rounded-full bg-neutral-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-800"
+    },
+    "Apply skills update"
+  ), /* @__PURE__ */ React.createElement(
+    "button",
+    {
+      onClick: () => setSkillsPreview(null),
+      className: "rounded-full border border-neutral-200 bg-white px-4 py-2 text-sm font-medium text-neutral-800 transition hover:bg-neutral-50"
+    },
+    "Discard"
+  )))), sectionSuggestions.length > 0 && /* @__PURE__ */ React.createElement("div", { className: "mt-3 rounded-2xl border border-neutral-200 bg-white px-4 py-3" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400" }, "Section-specific guidance"), /* @__PURE__ */ React.createElement("div", { className: "mt-3 space-y-3" }, sectionSuggestions.map((item) => /* @__PURE__ */ React.createElement("div", { key: item.title, className: "rounded-2xl border border-neutral-200 bg-neutral-50 p-3" }, /* @__PURE__ */ React.createElement("p", { className: "text-sm font-semibold text-neutral-900" }, item.title), /* @__PURE__ */ React.createElement("p", { className: "mt-1 text-sm leading-6 text-neutral-600" }, item.detail))))))), /* @__PURE__ */ React.createElement("div", { className: "flex flex-col gap-3 sm:flex-row sm:flex-wrap" }, /* @__PURE__ */ React.createElement(
     "button",
     {
       onClick: onAnalyze,
@@ -22046,24 +22378,18 @@ function Builder({
     "button",
     {
       onClick: onContinue,
-      className: "w-full rounded-full border border-neutral-200 bg-white px-5 py-3 text-sm font-medium text-neutral-800 transition hover:bg-neutral-50 sm:w-auto"
+      disabled: !canAdvance,
+      className: "w-full rounded-full border border-neutral-200 bg-white px-5 py-3 text-sm font-medium text-neutral-800 transition hover:bg-neutral-50 disabled:cursor-not-allowed disabled:text-neutral-400 sm:w-auto"
     },
-    "Export"
-  ), /* @__PURE__ */ React.createElement(
-    "button",
-    {
-      onClick: () => onSectionSelect(nextSectionId),
-      className: "w-full rounded-full border border-neutral-200 bg-white px-5 py-3 text-sm font-medium text-neutral-800 transition hover:bg-neutral-50 sm:w-auto"
-    },
-    "Next section"
-  ))), analysis && /* @__PURE__ */ React.createElement(Panel, { className: "p-6" }, /* @__PURE__ */ React.createElement(SectionEyebrow, null, "Top fixes"), /* @__PURE__ */ React.createElement("p", { className: "mt-4 text-sm leading-6 text-neutral-600" }, "Bullet quality score: ", analysis.extracted?.bulletQualityScore || 0, "/9. Strong bullets usually show clear ownership, execution, and a visible result."), /* @__PURE__ */ React.createElement("div", { className: "mt-4 space-y-4" }, (analysis.suggestions || []).map((item) => /* @__PURE__ */ React.createElement("div", { key: item.title, className: "rounded-2xl border border-neutral-200 bg-neutral-50 p-4" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400" }, item.priority), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm font-semibold text-neutral-900" }, item.title), /* @__PURE__ */ React.createElement("p", { className: "mt-1 text-sm leading-6 text-neutral-600" }, item.detail))))), rewrite && /* @__PURE__ */ React.createElement(Panel, { className: "p-6" }, /* @__PURE__ */ React.createElement(SectionEyebrow, null, "AI polish"), /* @__PURE__ */ React.createElement("p", { className: "mt-4 text-sm leading-6 text-neutral-600" }, "Review the polished draft before applying it back into your editable sections."), /* @__PURE__ */ React.createElement("div", { className: "mt-4 rounded-2xl border border-neutral-200 bg-neutral-50 p-4" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400" }, "Summary"), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-700" }, rewrite.summary), rewrite.notes && rewrite.notes.length > 0 && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("p", { className: "mt-4 text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400" }, "Notes"), /* @__PURE__ */ React.createElement("ul", { className: "mt-2 space-y-2 text-sm leading-6 text-neutral-600" }, rewrite.notes.map((note) => /* @__PURE__ */ React.createElement("li", { key: note }, note))))), rewrittenSectionText && rewrittenSectionText !== currentSectionText && /* @__PURE__ */ React.createElement("div", { className: "mt-4 grid gap-4 lg:grid-cols-2" }, /* @__PURE__ */ React.createElement("div", { className: "rounded-2xl border border-neutral-200 bg-white p-4" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400" }, "Before"), /* @__PURE__ */ React.createElement("div", { className: "mt-2 whitespace-pre-wrap text-sm leading-6 text-neutral-600" }, currentSectionText || "Nothing written yet for this section.")), /* @__PURE__ */ React.createElement("div", { className: "rounded-2xl border border-emerald-200 bg-emerald-50 p-4" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-emerald-700" }, "After"), /* @__PURE__ */ React.createElement("div", { className: "mt-2 whitespace-pre-wrap text-sm leading-6 text-emerald-950" }, rewrittenSectionText))), /* @__PURE__ */ React.createElement("div", { className: "mt-4 flex flex-wrap gap-3" }, /* @__PURE__ */ React.createElement(
+    "Save and Continue"
+  ))), rewrite && /* @__PURE__ */ React.createElement(Panel, { className: "p-6" }, /* @__PURE__ */ React.createElement(SectionEyebrow, null, "AI polish"), /* @__PURE__ */ React.createElement("p", { className: "mt-4 text-sm leading-6 text-neutral-600" }, "Review the proposed wording for this section before applying it back into the editor."), rewrite.notes && rewrite.notes.length > 0 && /* @__PURE__ */ React.createElement("div", { className: "mt-4 rounded-2xl border border-neutral-200 bg-neutral-50 p-4" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400" }, "Notes"), /* @__PURE__ */ React.createElement("ul", { className: "mt-2 space-y-2 text-sm leading-6 text-neutral-600" }, rewrite.notes.map((note) => /* @__PURE__ */ React.createElement("li", { key: note }, note)))), rewrittenSectionText && rewrittenSectionText !== currentSectionText && /* @__PURE__ */ React.createElement("div", { className: "mt-4 grid gap-4 lg:grid-cols-2" }, /* @__PURE__ */ React.createElement("div", { className: "rounded-2xl border border-neutral-200 bg-white p-4" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400" }, "Before"), /* @__PURE__ */ React.createElement("div", { className: "mt-2 whitespace-pre-wrap text-sm leading-6 text-neutral-600" }, currentSectionText || "Nothing written yet for this section.")), /* @__PURE__ */ React.createElement("div", { className: "rounded-2xl border border-emerald-200 bg-emerald-50 p-4" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-emerald-700" }, "After"), /* @__PURE__ */ React.createElement("div", { className: "mt-2 whitespace-pre-wrap text-sm leading-6 text-emerald-950" }, rewrittenSectionText))), /* @__PURE__ */ React.createElement("div", { className: "mt-4 flex flex-wrap gap-3" }, /* @__PURE__ */ React.createElement(
     "button",
     {
       onClick: onApplyRewrite,
       className: "rounded-full bg-neutral-950 px-5 py-3 text-sm font-medium text-white transition hover:bg-neutral-800"
     },
     "Apply AI polish to sections"
-  )))), /* @__PURE__ */ React.createElement(Panel, { className: "h-fit rounded-2xl p-6 xl:sticky xl:top-8" }, /* @__PURE__ */ React.createElement(SectionEyebrow, null, "Live preview"), /* @__PURE__ */ React.createElement("p", { className: "mt-3 text-sm text-neutral-500" }, rewrite?.rewrittenResume ? "Previewing the AI-polished version. Apply it if you want these edits in the builder." : "Preview updates as you edit sections."), /* @__PURE__ */ React.createElement(ResumePreview, { sections: deferredPreviewSections, missingKeywords }), /* @__PURE__ */ React.createElement("div", { className: "mt-5 rounded-2xl border border-neutral-200 bg-white p-4" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400" }, "What to do next"), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-700" }, sectionSummary.missing > 0 ? "Fill the missing required sections first so the generated draft has enough structure." : sectionSummary.needsDetail > 0 ? "Tighten the sections marked as needing detail, then generate a new draft." : "Generate a draft, review the suggestions, and use AI polish only if the wording needs help."))));
+  )))), /* @__PURE__ */ React.createElement(Panel, { className: "h-fit rounded-2xl p-6 xl:sticky xl:top-8" }, /* @__PURE__ */ React.createElement(SectionEyebrow, null, "Live preview"), /* @__PURE__ */ React.createElement("p", { className: "mt-3 text-sm text-neutral-500" }, rewrite?.rewrittenResume ? "Previewing the AI-polished version. Apply it if you want these edits in the builder." : "Preview updates as you edit sections."), /* @__PURE__ */ React.createElement(ResumePreview, { sections: deferredPreviewSections, missingKeywords })));
 }
 function ExportStep({
   onDownload,
@@ -22099,6 +22425,34 @@ function ExportStep({
     },
     "Keep editing"
   )), !resumeText.trim() && /* @__PURE__ */ React.createElement("p", { className: "mt-4 text-sm text-amber-700" }, "Generate a draft before exporting."));
+}
+function FinalReview({
+  sections,
+  analysis,
+  onBack,
+  onContinue
+}) {
+  const validation = buildResumeValidation(sections);
+  const canExport = validation.blockingIssues.length === 0;
+  return /* @__PURE__ */ React.createElement("div", { className: "grid gap-6 xl:grid-cols-[1fr_0.92fr]" }, /* @__PURE__ */ React.createElement("div", { className: "space-y-5" }, /* @__PURE__ */ React.createElement(Panel, { className: "p-8" }, /* @__PURE__ */ React.createElement(SectionEyebrow, null, "Final review"), /* @__PURE__ */ React.createElement("h2", { className: "mt-4 text-3xl font-semibold tracking-[-0.04em] text-neutral-950" }, "Final Review"), /* @__PURE__ */ React.createElement("p", { className: "mt-4 text-sm leading-7 text-neutral-600" }, "This is the only place where export readiness and ATS safety appear. Finish the quality pass here, then export."), validation.blockingIssues.length > 0 && /* @__PURE__ */ React.createElement("div", { className: "mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900" }, /* @__PURE__ */ React.createElement("p", { className: "font-semibold" }, "Fix these before export"), /* @__PURE__ */ React.createElement("ul", { className: "mt-2 space-y-2" }, validation.blockingIssues.map((issue) => /* @__PURE__ */ React.createElement("li", { key: issue.id }, issue.message)))), validation.warnings.length > 0 && /* @__PURE__ */ React.createElement("div", { className: "mt-6 rounded-2xl border border-neutral-200 bg-neutral-50 p-4" }, /* @__PURE__ */ React.createElement("p", { className: "text-sm font-semibold text-neutral-900" }, "Quality notes"), /* @__PURE__ */ React.createElement("ul", { className: "mt-2 space-y-2 text-sm leading-6 text-neutral-600" }, validation.warnings.map((warning) => /* @__PURE__ */ React.createElement("li", { key: warning.id }, warning.message)))), analysis?.suggestions?.length ? /* @__PURE__ */ React.createElement("div", { className: "mt-6 rounded-2xl border border-neutral-200 bg-white p-4" }, /* @__PURE__ */ React.createElement("p", { className: "text-sm font-semibold text-neutral-900" }, "Final improvement priorities"), /* @__PURE__ */ React.createElement("div", { className: "mt-3 space-y-3" }, analysis.suggestions.slice(0, 4).map((item) => /* @__PURE__ */ React.createElement("div", { key: item.title, className: "rounded-2xl border border-neutral-200 bg-neutral-50 p-3" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400" }, item.priority), /* @__PURE__ */ React.createElement("p", { className: "mt-1 text-sm font-semibold text-neutral-900" }, item.title), /* @__PURE__ */ React.createElement("p", { className: "mt-1 text-sm leading-6 text-neutral-600" }, item.detail))))) : null, /* @__PURE__ */ React.createElement("div", { className: "mt-8 flex flex-wrap gap-3" }, /* @__PURE__ */ React.createElement(
+    "button",
+    {
+      onClick: onBack,
+      className: "rounded-full border border-neutral-200 bg-white px-5 py-3 text-sm font-medium text-neutral-800 transition hover:bg-neutral-50"
+    },
+    "Back to editing"
+  ), /* @__PURE__ */ React.createElement(
+    "button",
+    {
+      onClick: onContinue,
+      disabled: !canExport,
+      className: "rounded-full bg-neutral-950 px-5 py-3 text-sm font-medium text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-300"
+    },
+    "Continue to export"
+  )))), /* @__PURE__ */ React.createElement("div", { className: "space-y-5" }, /* @__PURE__ */ React.createElement(Panel, { className: "p-6" }, /* @__PURE__ */ React.createElement(SectionEyebrow, null, "ATS Safety"), /* @__PURE__ */ React.createElement("div", { className: "mt-4 space-y-3" }, validation.atsChecks.map((check) => /* @__PURE__ */ React.createElement("div", { key: check.id, className: "rounded-2xl border border-neutral-200 bg-neutral-50 p-4" }, /* @__PURE__ */ React.createElement("div", { className: "flex items-center justify-between gap-3" }, /* @__PURE__ */ React.createElement("p", { className: "text-sm font-semibold text-neutral-900" }, check.label), /* @__PURE__ */ React.createElement("span", { className: cn(
+    "rounded-full px-3 py-1 text-xs font-medium",
+    check.status === "pass" ? "bg-emerald-50 text-emerald-700" : check.status === "fail" ? "bg-amber-50 text-amber-800" : "bg-neutral-200 text-neutral-700"
+  ) }, check.status)), /* @__PURE__ */ React.createElement("p", { className: "mt-2 text-sm leading-6 text-neutral-600" }, check.detail))))), /* @__PURE__ */ React.createElement(Panel, { className: "p-6" }, /* @__PURE__ */ React.createElement(SectionEyebrow, null, "Live preview"), /* @__PURE__ */ React.createElement(ResumePreview, { sections, missingKeywords: analysis?.extracted?.missingKeywords || [] }))));
 }
 function ResumeRefreshPrototype() {
   const persisted = (0, import_react.useMemo)(() => readPersistedState(), []);
@@ -22171,12 +22525,17 @@ function ResumeRefreshPrototype() {
     if (sourceMethod !== "import") {
       return;
     }
-    const hasContent = sections.some((section) => normalizeText(section.content));
+    const hasContent = sections.some((section) => normalizeText2(section.content));
     if (hasContent) {
       return;
     }
     setSections(deriveSections(profile, linkedinText, ""));
   }, [sourceMethod, profile, linkedinText, sections]);
+  (0, import_react.useEffect)(() => {
+    if (stage === "final-review" && buildResumeValidation(sections).blockingIssues.length > 0) {
+      setStage("builder");
+    }
+  }, [stage, sections]);
   function updateSection(id, content) {
     setRewrite(null);
     setAnalysis(null);
@@ -22297,6 +22656,7 @@ function ResumeRefreshPrototype() {
   }
   function beginManual() {
     setSourceMethod("manual");
+    setActiveSection("header");
     setStage("builder");
   }
   function viewSample() {
@@ -22309,7 +22669,7 @@ function ResumeRefreshPrototype() {
     setLinkedinUrl("");
     setRewriteStyle("balanced");
     setSections(sampleResumeSeed.sections);
-    setActiveSection("experience");
+    setActiveSection("header");
     setAnalysis(null);
     setRewrite(null);
     setStage("builder");
@@ -22326,7 +22686,7 @@ function ResumeRefreshPrototype() {
     }
     if (profile) {
       setSections(deriveSections(profile, linkedinText, serializeSections(sections)));
-    } else if (!sections.some((section) => normalizeText(section.content))) {
+    } else if (!sections.some((section) => normalizeText2(section.content))) {
       setSections(deriveSections(null, linkedinText, ""));
     }
     setStage("review");
@@ -22361,7 +22721,10 @@ function ResumeRefreshPrototype() {
     {
       sections,
       onSectionChange: updateSection,
-      onContinue: () => setStage("builder")
+      onContinue: () => {
+        setActiveSection(normalizeText2(sections.find((section) => section.id === "summary")?.content || "") ? "summary" : "header");
+        setStage("builder");
+      }
     }
   ), stage === "builder" && /* @__PURE__ */ React.createElement(
     Builder,
@@ -22403,13 +22766,28 @@ function ResumeRefreshPrototype() {
       isAnalyzing,
       isRewriting,
       canRewrite: Boolean(config?.openAiRewriteEnabled && currentDraft.trim()),
+      onContinue: () => {
+        const nextSection = getNextGuidedSection(activeSection);
+        if (nextSection) {
+          setActiveSection(nextSection);
+          return;
+        }
+        setStage("final-review");
+      }
+    }
+  ), stage === "final-review" && /* @__PURE__ */ React.createElement(
+    FinalReview,
+    {
+      sections,
+      analysis,
+      onBack: () => setStage("builder"),
       onContinue: () => setStage("export")
     }
   ), stage === "export" && /* @__PURE__ */ React.createElement(
     ExportStep,
     {
       onDownload: handleDownload,
-      onBack: () => setStage("builder"),
+      onBack: () => setStage("final-review"),
       hasDraft: Boolean(currentDraft.trim()),
       resumeText: currentDraft
     }

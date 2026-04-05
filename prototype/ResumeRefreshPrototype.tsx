@@ -6,8 +6,10 @@ import {
   useMemo,
   useState
 } from "react";
+import { buildSkillActionPreview, normalizeSkillLines } from "../src/skills-grounding.js";
+import { buildResumeValidation } from "../src/resume-validator.js";
 
-type Stage = "landing" | "source" | "permissions" | "review" | "builder" | "export";
+type Stage = "landing" | "source" | "permissions" | "review" | "builder" | "final-review" | "export";
 type SourceMethod = "import" | "manual" | null;
 type RewriteStyle = "concise" | "balanced" | "achievement";
 type SectionId = "header" | "summary" | "experience" | "skills" | "education";
@@ -40,6 +42,7 @@ type AnalysisResult = {
     weakBulletCount?: number;
   };
   suggestions?: Suggestion[];
+  sectionSuggestions?: Partial<Record<SectionId, SectionSuggestion[]>>;
   rewrittenResume?: string;
   extractedResumeText?: string;
 };
@@ -49,6 +52,19 @@ type RewriteResult = {
   rewrittenResume?: string;
   bulletImprovements?: string[];
   notes?: string[];
+};
+
+type SectionSuggestion = {
+  sectionId: SectionId;
+  title: string;
+  detail: string;
+};
+
+type SkillsActionPreview = {
+  action: "trim" | "align";
+  suggested: string[];
+  removed: Array<{ value: string; reason: string }>;
+  supportingMatches: string[];
 };
 
 type ResumeSection = {
@@ -124,7 +140,7 @@ const defaultPersistedState: PersistedState = {
   linkedinUrl: "",
   linkedinText: "",
   rewriteStyle: "balanced",
-  activeSection: "summary",
+  activeSection: "header",
   sections: sectionBlueprints.map((item) => ({ ...item, content: "" }))
 };
 
@@ -378,6 +394,96 @@ function sectionToneTips(sectionId: SectionId) {
     skills: "List only what helps the target role. Cut generic filler.",
     education: "Only include details that still help your story."
   }[sectionId];
+}
+
+function getGuidedSectionIndex(sectionId: SectionId) {
+  return sectionBlueprints.findIndex((section) => section.id === sectionId);
+}
+
+function getNextGuidedSection(activeSection: SectionId) {
+  const index = getGuidedSectionIndex(activeSection);
+  return sectionBlueprints[index + 1]?.id || null;
+}
+
+function buildSectionSuggestions(
+  selectedSection: ResumeSection,
+  sections: ResumeSection[],
+  analysis: AnalysisResult | null,
+  targetRole: string
+): SectionSuggestion[] {
+  const scopedFromAnalysis = analysis?.sectionSuggestions?.[selectedSection.id];
+  if (Array.isArray(scopedFromAnalysis) && scopedFromAnalysis.length) {
+    return scopedFromAnalysis;
+  }
+
+  if (selectedSection.id === "skills") {
+    const normalized = normalizeSkillLines(selectedSection.content);
+    const suggestions: SectionSuggestion[] = [];
+    if (normalized.rejected.length) {
+      suggestions.push({
+        sectionId: "skills",
+        title: "Replace vague skills",
+        detail: "Use recognizable recruiter-facing skills, tools, and methods instead of traits or summary prose."
+      });
+    }
+    if (normalized.accepted.length < 3) {
+      suggestions.push({
+        sectionId: "skills",
+        title: "Ground skills in the role",
+        detail: `List the standardized skills a ${targetRole || "hiring manager"} would expect to scan quickly.`
+      });
+    }
+    return suggestions;
+  }
+
+  if (selectedSection.id === "education") {
+    const value = normalizeText(selectedSection.content);
+    const suggestions: SectionSuggestion[] = [];
+    if (!value) {
+      suggestions.push({
+        sectionId: "education",
+        title: "Add education only if it helps",
+        detail: "If education strengthens this resume, keep it concise: school, degree, and year."
+      });
+    } else if (!/\b(19|20)\d{2}\b/.test(value)) {
+      suggestions.push({
+        sectionId: "education",
+        title: "Include a year",
+        detail: "Education entries are easier to trust when they include a graduation year or date."
+      });
+    }
+    return suggestions;
+  }
+
+  if (selectedSection.id === "experience") {
+    if (!normalizeText(selectedSection.content)) {
+      return [{
+        sectionId: "experience",
+        title: "Add a real role entry",
+        detail: "Experience should show title, company, dates, and the strongest bullets for that role."
+      }];
+    }
+    return [];
+  }
+
+  if (selectedSection.id === "summary" && !normalizeText(selectedSection.content)) {
+    return [{
+      sectionId: "summary",
+      title: "Write a clear direction-setting summary",
+      detail: `Use 2-3 lines to point toward ${targetRole || "your target role"} without repeating the whole work history.`
+    }];
+  }
+
+  return [];
+}
+
+function describeExperienceEntries(content: string) {
+  const lines = normalizeText(content).split("\n").map((line) => line.trim()).filter(Boolean);
+  const roleLines = lines.filter((line) => !/^[-*•]/.test(line));
+  if (!roleLines.length) {
+    return [];
+  }
+  return roleLines.slice(0, 4);
 }
 
 function readPersistedState(): PersistedState {
@@ -796,7 +902,8 @@ function WorkflowHeader({
     ["source", "Start"],
     ["permissions", "Import"],
     ["review", "Review"],
-    ["builder", "Build"],
+    ["builder", "Edit"],
+    ["final-review", "Final review"],
     ["export", "Export"]
   ];
   const currentIndex = Math.max(0, stages.findIndex(([key]) => key === stage));
@@ -1063,7 +1170,7 @@ function Builder({
 }) {
   const selectedSection = sections.find((section) => section.id === activeSection) || sections[0];
   const sectionSummary = countSectionStatuses(sections);
-  const nextSectionId = findNextSection(sections, activeSection);
+  const nextSectionId = getNextGuidedSection(activeSection);
   const deferredPreviewSections = useDeferredValue(
     rewrite?.rewrittenResume
       ? deriveSections(null, "", rewrite.rewrittenResume)
@@ -1079,6 +1186,15 @@ function Builder({
   const currentSectionText = normalizeText(selectedSection.content);
   const rewrittenSectionText = rewrittenSectionMap[selectedSection.id] || "";
   const selectedSectionLineCount = currentSectionText ? currentSectionText.split("\n").filter(Boolean).length : 0;
+  const sectionSuggestions = buildSectionSuggestions(selectedSection, sections, analysis, targetRole);
+  const experienceEntries = selectedSection.id === "experience" ? describeExperienceEntries(selectedSection.content) : [];
+  const currentSectionStatus = getSectionStatus(selectedSection);
+  const canAdvance = !selectedSection.required || currentSectionStatus !== "Missing";
+  const [skillsPreview, setSkillsPreview] = useState<SkillsActionPreview | null>(null);
+
+  useEffect(() => {
+    setSkillsPreview(null);
+  }, [activeSection, currentSectionText, targetRole, linkedinText]);
 
   return (
     <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
@@ -1091,17 +1207,17 @@ function Builder({
                 Make each section stronger.
               </h2>
               <p className="mt-2 text-sm leading-6 text-neutral-600">
-                Edit sections directly, generate a draft, then polish wording only if it helps. Strong bullets should show what you owned, how you did it, and what changed.
+                Stay in one section until it is ready enough to move forward. Save and Continue always moves to the next guided step.
               </p>
             </div>
             <div className="grid min-w-[210px] gap-2 rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-xs text-neutral-600">
               <div className="flex items-center justify-between gap-3">
-                <span>Sections ready</span>
-                <span className="font-semibold text-neutral-900">{sectionSummary.ready}/{sections.length}</span>
+                <span>Current step</span>
+                <span className="font-semibold text-neutral-900">{getGuidedSectionIndex(activeSection) + 1}/{sectionBlueprints.length}</span>
               </div>
               <div className="flex items-center justify-between gap-3">
-                <span>Need attention</span>
-                <span className="font-semibold text-neutral-900">{sectionSummary.needsDetail + sectionSummary.missing}</span>
+                <span>Next</span>
+                <span className="font-semibold text-neutral-900">{nextSectionId ? sections.find((section) => section.id === nextSectionId)?.title : "Final Review"}</span>
               </div>
             </div>
           </div>
@@ -1203,11 +1319,12 @@ function Builder({
             <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="text-sm font-semibold text-neutral-900">{selectedSection.title}</p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400">Step {getGuidedSectionIndex(selectedSection.id) + 1}</p>
+                  <h3 className="mt-2 text-2xl font-semibold text-neutral-950">{selectedSection.title}</h3>
                   <p className="mt-1 text-sm leading-6 text-neutral-600">{selectedSection.prompt}</p>
                 </div>
                 <div className="rounded-full border border-neutral-200 bg-white px-3 py-1 text-xs text-neutral-500">
-                  {selectedSectionLineCount} line{selectedSectionLineCount === 1 ? "" : "s"}
+                  {selectedSectionLineCount ? `${selectedSectionLineCount} line${selectedSectionLineCount === 1 ? "" : "s"}` : selectedSection.required ? "Required" : "Optional"}
                 </div>
               </div>
               <textarea
@@ -1233,6 +1350,104 @@ function Builder({
                   )}
                 </div>
               </div>
+
+              {selectedSection.id === "experience" && experienceEntries.length > 0 && (
+                <div className="mt-3 rounded-2xl border border-neutral-200 bg-white px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400">
+                    {experienceEntries.length === 1 ? "Current role entry" : "Detected role entries"}
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {experienceEntries.map((entry) => (
+                      <span key={entry} className="rounded-full bg-neutral-100 px-3 py-1 text-xs font-medium text-neutral-700">
+                        {entry}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {selectedSection.id === "skills" && (
+                <div className="mt-3 rounded-2xl border border-neutral-200 bg-white px-4 py-3">
+                  <div className="flex flex-wrap gap-3">
+                    <button
+                      onClick={() => setSkillsPreview(buildSkillActionPreview({
+                        action: "trim",
+                        currentText: selectedSection.content,
+                        targetRole,
+                        supportingText: linkedinText
+                      }))}
+                      className="rounded-full border border-neutral-200 bg-white px-4 py-2 text-sm font-medium text-neutral-800 transition hover:bg-neutral-50"
+                    >
+                      Trim weak skills
+                    </button>
+                    <button
+                      onClick={() => setSkillsPreview(buildSkillActionPreview({
+                        action: "align",
+                        currentText: selectedSection.content,
+                        targetRole,
+                        supportingText: linkedinText
+                      }))}
+                      className="rounded-full border border-neutral-200 bg-white px-4 py-2 text-sm font-medium text-neutral-800 transition hover:bg-neutral-50"
+                    >
+                      {`Align to ${targetRole.trim() || "target role"}`}
+                    </button>
+                  </div>
+
+                  {skillsPreview && (
+                    <div className="mt-4 rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400">Suggested skills list</p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {skillsPreview.suggested.map((skill) => (
+                          <span key={skill} className="rounded-full bg-white px-3 py-1 text-xs font-medium text-neutral-800">
+                            {skill}
+                          </span>
+                        ))}
+                      </div>
+                      {skillsPreview.removed.length > 0 && (
+                        <div className="mt-4">
+                          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400">Removed or deprioritized</p>
+                          <ul className="mt-2 space-y-2 text-sm leading-6 text-neutral-600">
+                            {skillsPreview.removed.map((item) => (
+                              <li key={`${item.value}-${item.reason}`}>{item.value} — {item.reason}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      <div className="mt-4 flex flex-wrap gap-3">
+                        <button
+                          onClick={() => {
+                            onSectionChange("skills", skillsPreview.suggested.join("\n"));
+                            setSkillsPreview(null);
+                          }}
+                          className="rounded-full bg-neutral-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-800"
+                        >
+                          Apply skills update
+                        </button>
+                        <button
+                          onClick={() => setSkillsPreview(null)}
+                          className="rounded-full border border-neutral-200 bg-white px-4 py-2 text-sm font-medium text-neutral-800 transition hover:bg-neutral-50"
+                        >
+                          Discard
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {sectionSuggestions.length > 0 && (
+                <div className="mt-3 rounded-2xl border border-neutral-200 bg-white px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400">Section-specific guidance</p>
+                  <div className="mt-3 space-y-3">
+                    {sectionSuggestions.map((item) => (
+                      <div key={item.title} className="rounded-2xl border border-neutral-200 bg-neutral-50 p-3">
+                        <p className="text-sm font-semibold text-neutral-900">{item.title}</p>
+                        <p className="mt-1 text-sm leading-6 text-neutral-600">{item.detail}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -1253,57 +1468,30 @@ function Builder({
             </button>
             <button
               onClick={onContinue}
-              className="w-full rounded-full border border-neutral-200 bg-white px-5 py-3 text-sm font-medium text-neutral-800 transition hover:bg-neutral-50 sm:w-auto"
+              disabled={!canAdvance}
+              className="w-full rounded-full border border-neutral-200 bg-white px-5 py-3 text-sm font-medium text-neutral-800 transition hover:bg-neutral-50 disabled:cursor-not-allowed disabled:text-neutral-400 sm:w-auto"
             >
-              Export
-            </button>
-            <button
-              onClick={() => onSectionSelect(nextSectionId)}
-              className="w-full rounded-full border border-neutral-200 bg-white px-5 py-3 text-sm font-medium text-neutral-800 transition hover:bg-neutral-50 sm:w-auto"
-            >
-              Next section
+              Save and Continue
             </button>
           </div>
         </Panel>
-
-        {analysis && (
-          <Panel className="p-6">
-            <SectionEyebrow>Top fixes</SectionEyebrow>
-            <p className="mt-4 text-sm leading-6 text-neutral-600">
-              Bullet quality score: {analysis.extracted?.bulletQualityScore || 0}/9. Strong bullets usually show clear ownership, execution, and a visible result.
-            </p>
-            <div className="mt-4 space-y-4">
-              {(analysis.suggestions || []).map((item) => (
-                <div key={item.title} className="rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400">{item.priority}</p>
-                  <p className="mt-2 text-sm font-semibold text-neutral-900">{item.title}</p>
-                  <p className="mt-1 text-sm leading-6 text-neutral-600">{item.detail}</p>
-                </div>
-              ))}
-            </div>
-          </Panel>
-        )}
 
         {rewrite && (
           <Panel className="p-6">
             <SectionEyebrow>AI polish</SectionEyebrow>
             <p className="mt-4 text-sm leading-6 text-neutral-600">
-              Review the polished draft before applying it back into your editable sections.
+              Review the proposed wording for this section before applying it back into the editor.
             </p>
-            <div className="mt-4 rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400">Summary</p>
-              <p className="mt-2 text-sm leading-6 text-neutral-700">{rewrite.summary}</p>
-              {rewrite.notes && rewrite.notes.length > 0 && (
-                <>
-                  <p className="mt-4 text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400">Notes</p>
-                  <ul className="mt-2 space-y-2 text-sm leading-6 text-neutral-600">
-                    {rewrite.notes.map((note) => (
-                      <li key={note}>{note}</li>
-                    ))}
-                  </ul>
-                </>
-              )}
-            </div>
+            {rewrite.notes && rewrite.notes.length > 0 && (
+              <div className="mt-4 rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400">Notes</p>
+                <ul className="mt-2 space-y-2 text-sm leading-6 text-neutral-600">
+                  {rewrite.notes.map((note) => (
+                    <li key={note}>{note}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
             {rewrittenSectionText && rewrittenSectionText !== currentSectionText && (
               <div className="mt-4 grid gap-4 lg:grid-cols-2">
                 <div className="rounded-2xl border border-neutral-200 bg-white p-4">
@@ -1340,16 +1528,6 @@ function Builder({
             : "Preview updates as you edit sections."}
         </p>
         <ResumePreview sections={deferredPreviewSections} missingKeywords={missingKeywords} />
-        <div className="mt-5 rounded-2xl border border-neutral-200 bg-white p-4">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400">What to do next</p>
-          <p className="mt-2 text-sm leading-6 text-neutral-700">
-            {sectionSummary.missing > 0
-              ? "Fill the missing required sections first so the generated draft has enough structure."
-              : sectionSummary.needsDetail > 0
-                ? "Tighten the sections marked as needing detail, then generate a new draft."
-                : "Generate a draft, review the suggestions, and use AI polish only if the wording needs help."}
-          </p>
-        </div>
       </Panel>
     </div>
   );
@@ -1413,6 +1591,117 @@ function ExportStep({
         <p className="mt-4 text-sm text-amber-700">Generate a draft before exporting.</p>
       )}
     </Panel>
+  );
+}
+
+function FinalReview({
+  sections,
+  analysis,
+  onBack,
+  onContinue
+}: {
+  sections: ResumeSection[];
+  analysis: AnalysisResult | null;
+  onBack: () => void;
+  onContinue: () => void;
+}) {
+  const validation = buildResumeValidation(sections);
+  const canExport = validation.blockingIssues.length === 0;
+
+  return (
+    <div className="grid gap-6 xl:grid-cols-[1fr_0.92fr]">
+      <div className="space-y-5">
+        <Panel className="p-8">
+          <SectionEyebrow>Final review</SectionEyebrow>
+          <h2 className="mt-4 text-3xl font-semibold tracking-[-0.04em] text-neutral-950">
+            Final Review
+          </h2>
+          <p className="mt-4 text-sm leading-7 text-neutral-600">
+            This is the only place where export readiness and ATS safety appear. Finish the quality pass here, then export.
+          </p>
+          {validation.blockingIssues.length > 0 && (
+            <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+              <p className="font-semibold">Fix these before export</p>
+              <ul className="mt-2 space-y-2">
+                {validation.blockingIssues.map((issue) => (
+                  <li key={issue.id}>{issue.message}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {validation.warnings.length > 0 && (
+            <div className="mt-6 rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
+              <p className="text-sm font-semibold text-neutral-900">Quality notes</p>
+              <ul className="mt-2 space-y-2 text-sm leading-6 text-neutral-600">
+                {validation.warnings.map((warning) => (
+                  <li key={warning.id}>{warning.message}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {analysis?.suggestions?.length ? (
+            <div className="mt-6 rounded-2xl border border-neutral-200 bg-white p-4">
+              <p className="text-sm font-semibold text-neutral-900">Final improvement priorities</p>
+              <div className="mt-3 space-y-3">
+                {analysis.suggestions.slice(0, 4).map((item) => (
+                  <div key={item.title} className="rounded-2xl border border-neutral-200 bg-neutral-50 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400">{item.priority}</p>
+                    <p className="mt-1 text-sm font-semibold text-neutral-900">{item.title}</p>
+                    <p className="mt-1 text-sm leading-6 text-neutral-600">{item.detail}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          <div className="mt-8 flex flex-wrap gap-3">
+            <button
+              onClick={onBack}
+              className="rounded-full border border-neutral-200 bg-white px-5 py-3 text-sm font-medium text-neutral-800 transition hover:bg-neutral-50"
+            >
+              Back to editing
+            </button>
+            <button
+              onClick={onContinue}
+              disabled={!canExport}
+              className="rounded-full bg-neutral-950 px-5 py-3 text-sm font-medium text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-300"
+            >
+              Continue to export
+            </button>
+          </div>
+        </Panel>
+      </div>
+
+      <div className="space-y-5">
+        <Panel className="p-6">
+          <SectionEyebrow>ATS Safety</SectionEyebrow>
+          <div className="mt-4 space-y-3">
+            {validation.atsChecks.map((check) => (
+              <div key={check.id} className="rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-semibold text-neutral-900">{check.label}</p>
+                  <span className={cn(
+                    "rounded-full px-3 py-1 text-xs font-medium",
+                    check.status === "pass"
+                      ? "bg-emerald-50 text-emerald-700"
+                      : check.status === "fail"
+                        ? "bg-amber-50 text-amber-800"
+                        : "bg-neutral-200 text-neutral-700"
+                  )}>
+                    {check.status}
+                  </span>
+                </div>
+                <p className="mt-2 text-sm leading-6 text-neutral-600">{check.detail}</p>
+              </div>
+            ))}
+          </div>
+        </Panel>
+
+        <Panel className="p-6">
+          <SectionEyebrow>Live preview</SectionEyebrow>
+          <ResumePreview sections={sections} missingKeywords={analysis?.extracted?.missingKeywords || []} />
+        </Panel>
+      </div>
+    </div>
   );
 }
 
@@ -1499,6 +1788,12 @@ export default function ResumeRefreshPrototype() {
     }
     setSections(deriveSections(profile, linkedinText, ""));
   }, [sourceMethod, profile, linkedinText, sections]);
+
+  useEffect(() => {
+    if (stage === "final-review" && buildResumeValidation(sections).blockingIssues.length > 0) {
+      setStage("builder");
+    }
+  }, [stage, sections]);
 
   function updateSection(id: SectionId, content: string) {
     setRewrite(null);
@@ -1628,6 +1923,7 @@ export default function ResumeRefreshPrototype() {
 
   function beginManual() {
     setSourceMethod("manual");
+    setActiveSection("header");
     setStage("builder");
   }
 
@@ -1642,7 +1938,7 @@ export default function ResumeRefreshPrototype() {
     setLinkedinUrl("");
     setRewriteStyle("balanced");
     setSections(sampleResumeSeed.sections);
-    setActiveSection("experience");
+    setActiveSection("header");
     setAnalysis(null);
     setRewrite(null);
     setStage("builder");
@@ -1710,7 +2006,10 @@ export default function ResumeRefreshPrototype() {
               <ImportReview
                 sections={sections}
                 onSectionChange={updateSection}
-                onContinue={() => setStage("builder")}
+                onContinue={() => {
+                  setActiveSection(normalizeText(sections.find((section) => section.id === "summary")?.content || "") ? "summary" : "header");
+                  setStage("builder");
+                }}
               />
             )}
 
@@ -1753,6 +2052,22 @@ export default function ResumeRefreshPrototype() {
                 isAnalyzing={isAnalyzing}
                 isRewriting={isRewriting}
                 canRewrite={Boolean(config?.openAiRewriteEnabled && currentDraft.trim())}
+                onContinue={() => {
+                  const nextSection = getNextGuidedSection(activeSection);
+                  if (nextSection) {
+                    setActiveSection(nextSection);
+                    return;
+                  }
+                  setStage("final-review");
+                }}
+              />
+            )}
+
+            {stage === "final-review" && (
+              <FinalReview
+                sections={sections}
+                analysis={analysis}
+                onBack={() => setStage("builder")}
                 onContinue={() => setStage("export")}
               />
             )}
@@ -1760,7 +2075,7 @@ export default function ResumeRefreshPrototype() {
             {stage === "export" && (
               <ExportStep
                 onDownload={handleDownload}
-                onBack={() => setStage("builder")}
+                onBack={() => setStage("final-review")}
                 hasDraft={Boolean(currentDraft.trim())}
                 resumeText={currentDraft}
               />

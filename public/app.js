@@ -1,841 +1,702 @@
-const form = document.querySelector("#analyze-form");
-const statusEl = document.querySelector("#status");
-const suggestionsEl = document.querySelector("#suggestions");
-const snapshotEl = document.querySelector("#snapshot");
-const draftEl = document.querySelector("#draft");
-const aiRewriteEl = document.querySelector("#ai-rewrite");
-const aiNotesEl = document.querySelector("#ai-notes");
-const loginLinkEl = document.querySelector("#linkedin-login");
-const logoutButtonEl = document.querySelector("#linkedin-logout");
-const authStateEl = document.querySelector("#auth-state");
-const profileCardEl = document.querySelector("#linkedin-profile-card");
-const profileEl = document.querySelector("#linkedin-profile");
-const rewriteButtonEl = document.querySelector("#rewrite-button");
-const generateDraftButtonEl = document.querySelector("#generate-draft-button");
-const downloadDraftDocxEl = document.querySelector("#download-draft-docx");
-const downloadDraftPdfEl = document.querySelector("#download-draft-pdf");
-const downloadRewriteDocxEl = document.querySelector("#download-rewrite-docx");
-const downloadRewritePdfEl = document.querySelector("#download-rewrite-pdf");
-const chatFeedEl = document.querySelector("#chat-feed");
-const chatFormEl = document.querySelector("#chat-form");
-const chatInputEl = document.querySelector("#chat-input");
-const chatPromptLabelEl = document.querySelector("#chat-prompt-label");
-const chatSkipEl = document.querySelector("#chat-skip");
-const progressLabelEl = document.querySelector("#progress-label");
-const progressBarEl = document.querySelector("#progress-bar");
-const wizardQuestionTitleEl = document.querySelector("#wizard-question-title");
-const wizardQuestionCopyEl = document.querySelector("#wizard-question-copy");
-const wizardAnswerEl = document.querySelector("#wizard-answer");
-const collectedSummaryEl = document.querySelector("#collected-summary");
-const resumeUploadCardEl = document.querySelector("#resume-upload-card");
-const resumeFileStateEl = document.querySelector("#resume-file-state");
-const stepPanes = [...document.querySelectorAll(".step-pane")];
-const stepChips = [...document.querySelectorAll(".step-chip")];
-const goStepButtons = [...document.querySelectorAll("[data-go-step], [data-next-step]")];
+// ── DOM refs ──────────────────────────────────────────────────────
+// Intake
+const intakeView    = document.querySelector('#view-intake');
+const intakeForm    = document.querySelector('#intake-form');
+const analyzeBtnEl  = document.querySelector('#analyze-btn');
+const analyzeLabelEl= document.querySelector('#analyze-label');
+const resumeFileEl  = document.querySelector('#resume-file');
+const resumeTextEl  = document.querySelector('#resume-text');
+const targetRoleEl  = document.querySelector('#target-role');
+const linkedinTextEl= document.querySelector('#linkedin-text');
+const fileStatusEl  = document.querySelector('#file-status');
+const formErrorEl   = document.querySelector('#form-error');
+const dropZoneEl    = document.querySelector('#drop-zone');
 
-const fieldEls = {
-  targetRole: document.querySelector("#target-role"),
-  linkedinUrl: document.querySelector("#linkedin-url"),
-  linkedinText: document.querySelector("#linkedin-text"),
-  resumeText: document.querySelector("#resume-text"),
-  rewriteStyle: document.querySelector("#rewrite-style"),
-  resumeFile: document.querySelector("#resume-file")
+// Editor
+const editorView      = document.querySelector('#view-editor');
+const editorBackBtn   = document.querySelector('#editor-back-btn');
+const stepCounterEl   = document.querySelector('#step-counter');
+const editorProgressEl= document.querySelector('#editor-progress');
+const editorLoadingEl = document.querySelector('#editor-loading');
+const editorLoadingMsg= document.querySelector('#editor-loading-msg');
+const editorPanelEl   = document.querySelector('#editor-panel');
+const editorActionsEl = document.querySelector('#editor-actions');
+const editorSkipBtn   = document.querySelector('#editor-skip');
+const editorContinueBtn= document.querySelector('#editor-continue');
+
+// Final
+const finalView        = document.querySelector('#view-final');
+const finalBackBtn     = document.querySelector('#final-back-btn');
+const finalDraftEl     = document.querySelector('#final-draft');
+const finalNotesEl     = document.querySelector('#final-notes');
+const downloadDocxEl   = document.querySelector('#download-docx');
+const downloadPdfEl    = document.querySelector('#download-pdf');
+const aiHintEl         = document.querySelector('#ai-hint');
+const aiIdleEl         = document.querySelector('#ai-idle');
+const aiActionsEl      = document.querySelector('#ai-actions');
+const aiResultEl       = document.querySelector('#ai-result');
+const aiResultLabelEl  = document.querySelector('#ai-result-label');
+const aiRewriteEl      = document.querySelector('#ai-rewrite');
+const aiNotesEl        = document.querySelector('#ai-notes');
+const dlRewriteDocxEl  = document.querySelector('#download-rewrite-docx');
+const dlRewritePdfEl   = document.querySelector('#download-rewrite-pdf');
+// #try-another-action removed — action buttons are now always visible
+const startOverBtn     = document.querySelector('#start-over');
+
+// Tabs
+const tabButtons   = document.querySelectorAll('.tab');
+const tabUploadEl  = document.querySelector('#tab-upload');
+const tabPasteEl   = document.querySelector('#tab-paste');
+
+// ── App state ─────────────────────────────────────────────────────
+const state = {
+  view:           'intake',  // 'intake' | 'editor' | 'final'
+  appConfig:      { openAiRewriteEnabled: false },
+  analysisResult: null,
+  sections:       [],        // array of {id, label, currentText, proposedText, critique, status}
+  sectionIndex:   0,
+  approved:       {},        // {sectionId: editedText}
+  candidateName:  '',
+  lastPayload:    null,
+  currentTab:     'upload',
+  rewriteInFlight: false,
 };
 
-let appConfig = {
-  linkedInAuthEnabled: false,
-  requiresAppSecret: false,
-  openAiRewriteEnabled: false
+// ── Section header labels for final resume assembly ───────────────
+const SECTION_HEADERS = {
+  heading:        null,         // no header — contact info goes at top
+  summary:        'SUMMARY',
+  experience:     'EXPERIENCE',
+  skills:         'SKILLS',
+  education:      'EDUCATION',
+  projects:       'PROJECTS',
+  certifications: 'CERTIFICATIONS',
+  awards:         'AWARDS',
+  volunteer:      'VOLUNTEER',
 };
 
-let sessionProfile = null;
-let analysisResult = null;
-let currentStep = 1;
-let activeChatField = "targetRole";
-let analysisInFlight = false;
-let rewriteInFlight = false;
+// ── Init ──────────────────────────────────────────────────────────
+async function init() {
+  try {
+    const res = await fetch('/api/config');
+    state.appConfig = await res.json();
+  } catch (_) { /* safe default: openAiRewriteEnabled: false */ }
 
-const sourceQuestions = [
-  {
-    field: "targetRole",
-    title: "Target role",
-    copy: "Tell me the role you want this resume tailored for.",
-    placeholder: "Example: Senior Product Manager"
-  },
-  {
-    field: "resumeText",
-    title: "Current resume",
-    copy: "Paste your resume here, or skip and upload a file instead.",
-    placeholder: "Paste your current resume"
-  },
-  {
-    field: "linkedinText",
-    title: "LinkedIn text",
-    copy: "Paste About, Experience, or Skills if you want stronger keyword matching. This is optional.",
-    placeholder: "Paste About, Experience, Skills"
-  },
-  {
-    field: "linkedinUrl",
-    title: "LinkedIn URL",
-    copy: "Paste your public LinkedIn URL if you want it included. This is optional.",
-    placeholder: "Paste your public LinkedIn URL"
-  }
-];
+  updateRewriteUI();
 
-function readLinkedInStatusFromUrl() {
+  // Clean LinkedIn OAuth query param
   const url = new URL(window.location.href);
-  const status = url.searchParams.get("linkedin");
-  if (!status) {
-    return null;
+  if (url.searchParams.has('linkedin')) {
+    url.searchParams.delete('linkedin');
+    window.history.replaceState({}, '', url);
   }
-  url.searchParams.delete("linkedin");
-  window.history.replaceState({}, "", url);
-  return status;
 }
 
-function setStatus(message, error = false) {
-  statusEl.textContent = message;
-  statusEl.dataset.error = error ? "true" : "false";
-}
-
-function addChatMessage({ role = "assistant", title = "", body = "", actions = [] }) {
-  const card = document.createElement("article");
-  card.className = `chat-bubble ${role}`;
-
-  if (title) {
-    const heading = document.createElement("p");
-    heading.className = "chat-title";
-    heading.textContent = title;
-    card.appendChild(heading);
-  }
-
-  const copy = document.createElement("p");
-  copy.className = "chat-body";
-  copy.textContent = body;
-  card.appendChild(copy);
-
-  if (actions.length) {
-    const row = document.createElement("div");
-    row.className = "chat-actions";
-    for (const action of actions) {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = action.secondary ? "button-secondary" : "button-link";
-      button.textContent = action.label;
-      button.addEventListener("click", action.onClick);
-      row.appendChild(button);
+// ── Tab switching ─────────────────────────────────────────────────
+for (const tab of tabButtons) {
+  tab.addEventListener('click', () => {
+    const target = tab.dataset.tab;
+    state.currentTab = target;
+    for (const t of tabButtons) {
+      t.classList.toggle('active', t.dataset.tab === target);
+      t.setAttribute('aria-selected', String(t.dataset.tab === target));
     }
-    card.appendChild(row);
-  }
-
-  chatFeedEl.appendChild(card);
-  chatFeedEl.scrollTop = chatFeedEl.scrollHeight;
-}
-
-function seedChat() {
-  chatFeedEl.replaceChildren();
-  addChatMessage({
-    title: "Start here",
-    body: "Connect LinkedIn if you want a name and email prefilled. Then answer one prompt at a time."
+    tabUploadEl.classList.toggle('hidden', target !== 'upload');
+    tabPasteEl.classList.toggle('hidden',  target !== 'paste');
   });
 }
 
-function focusChatField(fieldName) {
-  activeChatField = fieldName;
-  const prompt = sourceQuestions.find((item) => item.field === fieldName);
-  chatPromptLabelEl.textContent = prompt?.title || "Chat input";
-  chatInputEl.placeholder = prompt?.placeholder || "Type here";
-  chatInputEl.focus();
-  renderWizardStep();
-}
+// ── Drag & drop ───────────────────────────────────────────────────
+dropZoneEl.addEventListener('dragover', e => { e.preventDefault(); dropZoneEl.classList.add('drag-over'); });
+dropZoneEl.addEventListener('dragleave', () => dropZoneEl.classList.remove('drag-over'));
+dropZoneEl.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZoneEl.classList.remove('drag-over');
+  const file = e.dataTransfer?.files?.[0];
+  if (file) applyFile(file);
+});
 
-function getQuestionPrompt(fieldName) {
-  return sourceQuestions.find((item) => item.field === fieldName) || sourceQuestions[0];
-}
+resumeFileEl.addEventListener('change', () => {
+  if (resumeFileEl.files?.[0]) applyFile(resumeFileEl.files[0]);
+});
 
-function getFieldValue(fieldName) {
-  if (fieldName === "resumeText") {
-    return fieldEls.resumeText.value.trim() || (fieldEls.resumeFile.files[0]?.name || "");
+function applyFile(file) {
+  const name = file.name.toLowerCase();
+  if (!name.endsWith('.pdf') && !name.endsWith('.txt') && !name.endsWith('.md')) {
+    showFileStatus('Only PDF, TXT, or MD files are supported.', true);
+    return;
   }
-  return fieldEls[fieldName].value.trim();
-}
-
-function nextIncompleteField() {
-  for (const question of sourceQuestions) {
-    if (!getFieldValue(question.field) && !(question.field === "resumeText" && fieldEls.resumeFile.files[0])) {
-      return question.field;
-    }
+  if (file.size > 4.5 * 1024 * 1024) {
+    showFileStatus('File is too large. Keep it under 4.5 MB.', true);
+    return;
   }
-  return sourceQuestions[sourceQuestions.length - 1].field;
-}
-
-function renderWizardStep() {
-  const prompt = getQuestionPrompt(activeChatField);
-  wizardQuestionTitleEl.textContent = prompt.title;
-  wizardQuestionCopyEl.textContent = prompt.copy;
-  const currentValue = getFieldValue(activeChatField);
-  wizardAnswerEl.textContent = currentValue || "Nothing saved yet.";
-  const showUpload = activeChatField === "resumeText";
-  resumeUploadCardEl.classList.toggle("hidden", !showUpload);
-  resumeFileStateEl.textContent = fieldEls.resumeFile.files[0]?.name || "No file selected.";
-  generateDraftButtonEl.disabled = !isReadyForAnalysis() || analysisInFlight;
-  generateDraftButtonEl.textContent = analysisInFlight ? "Generating..." : "Generate draft";
-  renderCollectedSummary();
-}
-
-function renderCollectedSummary() {
-  collectedSummaryEl.replaceChildren();
-  const items = [
-    ["Target role", fieldEls.targetRole.value.trim() || "Skipped"],
-    ["Resume", fieldEls.resumeText.value.trim() ? "Pasted" : (fieldEls.resumeFile.files[0]?.name || "Skipped")],
-    ["LinkedIn text", fieldEls.linkedinText.value.trim() ? "Added" : "Skipped"],
-    ["LinkedIn URL", fieldEls.linkedinUrl.value.trim() || "Skipped"]
-  ];
-  for (const [label, value] of items) {
-    const row = document.createElement("div");
-    row.className = "summary-row";
-    const term = document.createElement("p");
-    term.className = "snapshot-label";
-    term.textContent = label;
-    const detail = document.createElement("p");
-    detail.className = "snapshot-value";
-    detail.textContent = value;
-    row.append(term, detail);
-    collectedSummaryEl.appendChild(row);
+  const ALLOWED_MIMES = ['application/pdf', 'text/plain', 'text/markdown', 'text/x-markdown', ''];
+  if (file.type && !ALLOWED_MIMES.includes(file.type)) {
+    showFileStatus('Only PDF, TXT, or MD files are supported.', true);
+    return;
   }
+  try {
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    resumeFileEl.files = dt.files;
+  } catch (_) { /* DataTransfer not in some browsers */ }
+  showFileStatus(`${file.name}  ·  ${(file.size / 1024).toFixed(0)} KB`);
 }
 
-function updateGuide(step) {
-  return step;
+function showFileStatus(msg, isError = false) {
+  fileStatusEl.textContent = msg;
+  fileStatusEl.classList.remove('hidden', 'error');
+  if (isError) fileStatusEl.classList.add('error');
 }
 
-function getChecklistItems() {
-  const hasResumeSource = Boolean(fieldEls.resumeText.value.trim() || fieldEls.resumeFile.files[0]);
-  return [
-    {
-      label: sessionProfile ? "LinkedIn connected" : "LinkedIn optional",
-      done: Boolean(sessionProfile)
-    },
-    {
-      label: "Resume source",
-      done: hasResumeSource
-    },
-    {
-      label: "LinkedIn text",
-      done: Boolean(fieldEls.linkedinText.value.trim())
-    },
-    {
-      label: "Target role",
-      done: Boolean(fieldEls.targetRole.value.trim())
-    }
-  ];
-}
+// ── Validation ────────────────────────────────────────────────────
+function validate() {
+  const hasFile  = state.currentTab === 'upload' && resumeFileEl.files?.[0];
+  const hasPaste = state.currentTab === 'paste'  && resumeTextEl.value.trim();
 
-function renderChecklist() {
-  renderWizardStep();
-}
-
-function setStep(step) {
-  currentStep = step;
-  for (const pane of stepPanes) {
-    pane.classList.toggle("hidden", Number(pane.dataset.step) !== step);
+  if (!hasFile && !hasPaste) {
+    showFormError(state.currentTab === 'upload'
+      ? 'Please upload a resume file (PDF, TXT, or MD).'
+      : 'Please paste your resume text.');
+    return false;
   }
-  for (const chip of stepChips) {
-    chip.classList.toggle("is-active", Number(chip.dataset.goStep) === step);
+  if (!targetRoleEl.value.trim()) {
+    showFormError("Tell us what you're targeting — it helps us tailor the feedback.");
+    return false;
   }
-
-  const stepMessages = {
-    1: "Connect LinkedIn, or continue without it.",
-    2: "Answer the current prompt, then move to the next one.",
-    3: "Review your first draft and the top fixes.",
-    4: "Review the polished version and export it."
-  };
-  const stepNames = {
-    1: "Connect",
-    2: "Sources",
-    3: "Review",
-    4: "Rewrite"
-  };
-  progressLabelEl.textContent = `Step ${step} of 4 · ${stepNames[step] || "Resume Refresh"}`;
-  progressBarEl.style.width = `${Math.max(25, step * 25)}%`;
-  updateGuide(step);
-  renderChecklist();
-  setStatus(stepMessages[step] || "");
+  return true;
 }
 
-for (const button of goStepButtons) {
-  button.addEventListener("click", () => {
-    const target = Number(button.dataset.goStep || button.dataset.nextStep);
-    if (target) {
-      setStep(target);
-    }
-  });
+function showFormError(msg) {
+  formErrorEl.textContent = msg;
+  formErrorEl.classList.remove('hidden');
 }
 
-async function fileToBase64(file) {
+function clearFormError() {
+  formErrorEl.classList.add('hidden');
+}
+
+// ── File → base64 ─────────────────────────────────────────────────
+function fileToBase64(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => {
-      const value = String(reader.result);
-      resolve(value.split(",")[1] || "");
-    };
+    reader.onload  = () => resolve(String(reader.result).split(',')[1] ?? '');
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
 }
 
-function getFormPayload() {
-  return {
-    targetRole: fieldEls.targetRole.value.trim(),
-    linkedinUrl: fieldEls.linkedinUrl.value.trim(),
-    linkedinText: fieldEls.linkedinText.value.trim(),
-    resumeText: fieldEls.resumeText.value.trim(),
-    style: fieldEls.rewriteStyle.value
+// ── Build payload for /api/analyze ───────────────────────────────
+async function buildPayload() {
+  const payload = {
+    targetRole:   targetRoleEl.value.trim(),
+    linkedinText: linkedinTextEl.value.trim()
   };
-}
-
-function hasResumeSource() {
-  return Boolean(fieldEls.resumeText.value.trim() || fieldEls.resumeFile.files[0]);
-}
-
-function isReadyForAnalysis() {
-  return Boolean(fieldEls.targetRole.value.trim() && hasResumeSource());
-}
-
-function resetAnalysisOutputs() {
-  analysisResult = null;
-  renderSnapshot(null);
-  suggestionsEl.textContent = "";
-  draftEl.textContent = "Run analysis to generate a draft.";
-  aiRewriteEl.textContent = "Run AI rewrite to see the polished version.";
-  aiNotesEl.textContent = "";
-  renderWizardStep();
-}
-
-function renderSuggestions(suggestions) {
-  suggestionsEl.replaceChildren();
-  if (!suggestions.length) {
-    suggestionsEl.textContent = "No obvious issues detected.";
-    return;
-  }
-
-  for (const suggestion of suggestions) {
-    const article = document.createElement("article");
-    article.className = "suggestion";
-    const priority = document.createElement("p");
-    priority.className = "priority";
-    priority.textContent = suggestion.priority;
-    const title = document.createElement("h3");
-    title.textContent = suggestion.title;
-    const detail = document.createElement("p");
-    detail.textContent = suggestion.detail;
-    article.append(priority, title, detail);
-    suggestionsEl.appendChild(article);
-  }
-}
-
-function renderSnapshot(result) {
-  snapshotEl.replaceChildren();
-
-  const items = [
-    ["Target role", result?.meta?.targetRole || fieldEls.targetRole.value.trim() || "Not set"],
-    ["LinkedIn connected", sessionProfile ? "Yes" : "No"],
-    ["Detected sections", result?.extracted?.sections?.join(", ") || "None yet"],
-    ["Bullet count", String(result?.extracted?.bullets ?? 0)],
-    ["Missing keywords", result?.extracted?.missingKeywords?.join(", ") || "None detected"],
-    ["LinkedIn URL", fieldEls.linkedinUrl.value.trim() || "Not provided"],
-    ["Source coverage", summarizeCoverage(result)]
-  ];
-
-  for (const [label, value] of items) {
-    const row = document.createElement("div");
-    row.className = "snapshot-row";
-    const term = document.createElement("p");
-    term.className = "snapshot-label";
-    term.textContent = label;
-    const detail = document.createElement("p");
-    detail.className = "snapshot-value";
-    detail.textContent = value;
-    row.append(term, detail);
-    snapshotEl.appendChild(row);
-  }
-}
-
-function summarizeCoverage(result) {
-  const parts = [];
-  if (sessionProfile) {
-    parts.push("LinkedIn identity");
-  }
-  if (fieldEls.linkedinText.value.trim()) {
-    parts.push("LinkedIn text");
-  }
-  if (fieldEls.resumeText.value.trim()) {
-    parts.push("Resume text");
-  }
-  if (fieldEls.resumeFile.files[0]) {
-    parts.push("Resume file");
-  }
-  if (!parts.length && result?.extractedResumeText) {
-    parts.push("Extracted resume text");
-  }
-  return parts.join(" + ") || "Waiting for source material";
-}
-
-function renderNotes(items) {
-  aiNotesEl.replaceChildren();
-  if (!items.length) {
-    aiNotesEl.textContent = "No extra notes.";
-    return;
-  }
-
-  for (const item of items) {
-    const row = document.createElement("p");
-    row.textContent = item;
-    aiNotesEl.appendChild(row);
-  }
-}
-
-function maybeAutofillFromProfile(profile) {
-  if (!profile) {
-    return;
-  }
-
-  if (!fieldEls.targetRole.value.trim() && profile.headline) {
-    fieldEls.targetRole.value = profile.headline;
-  }
-
-  if (!fieldEls.resumeText.value.trim()) {
-    const header = [profile.name, profile.email].filter(Boolean).join("\n");
-    if (header) {
-      fieldEls.resumeText.value = `${header}\n\n`;
+  if (state.currentTab === 'upload') {
+    const file = resumeFileEl.files?.[0];
+    if (file) {
+      payload.resumeFileName   = file.name;
+      payload.resumeFileBase64 = await fileToBase64(file);
     }
+  } else {
+    payload.resumeText = resumeTextEl.value.trim();
   }
-
-  if (!fieldEls.linkedinText.value.trim()) {
-    fieldEls.linkedinText.value = [profile.name ? `Name: ${profile.name}` : "", profile.email ? `Email: ${profile.email}` : ""]
-      .filter(Boolean)
-      .join("\n");
-  }
-
-  if (!fieldEls.linkedinUrl.value.trim()) {
-    fieldEls.linkedinUrl.placeholder = "LinkedIn does not expose your public profile URL here, so paste it if you want it included.";
-  }
-
-  renderChecklist();
-}
-
-function saveChatInput(value) {
-  const normalized = value.trim();
-  if (!normalized) {
-    return false;
-  }
-
-  resetAnalysisOutputs();
-
-  if (activeChatField === "linkedinUrl" || /^https?:\/\/(www\.)?linkedin\.com\//i.test(normalized)) {
-    fieldEls.linkedinUrl.value = normalized;
-    addChatMessage({ role: "user", body: normalized });
-    addChatMessage({
-      title: "Saved LinkedIn URL",
-      body: "Saved. Continue to the next prompt."
-    });
-    focusChatField(nextIncompleteField());
-    setStep(2);
-    renderSnapshot(analysisResult);
-    renderChecklist();
-    maybeAutoAnalyze();
-    return true;
-  }
-
-  if (activeChatField === "targetRole") {
-    fieldEls.targetRole.value = normalized;
-    addChatMessage({ role: "user", body: normalized });
-    addChatMessage({
-      title: "Saved target role",
-      body: "Saved. Next I need your current resume."
-    });
-    focusChatField(nextIncompleteField());
-    setStep(2);
-    renderSnapshot(analysisResult);
-    renderChecklist();
-    maybeAutoAnalyze();
-    return true;
-  }
-
-  if (activeChatField === "linkedinText") {
-    fieldEls.linkedinText.value = normalized;
-    addChatMessage({ role: "user", body: normalized.slice(0, 240) + (normalized.length > 240 ? "..." : "") });
-    addChatMessage({
-      title: "Saved LinkedIn text",
-      body: fieldEls.resumeText.value.trim() || fieldEls.resumeFile.files[0]
-        ? "Saved. You have enough to generate a draft."
-        : "Saved. Next I need your current resume."
-    });
-    focusChatField(nextIncompleteField());
-    renderSnapshot(analysisResult);
-    renderChecklist();
-    maybeAutoAnalyze();
-    return true;
-  }
-
-  fieldEls.resumeText.value = normalized;
-  addChatMessage({ role: "user", body: normalized.slice(0, 240) + (normalized.length > 240 ? "..." : "") });
-  addChatMessage({
-    title: "Saved resume text",
-    body: fieldEls.targetRole.value.trim()
-      ? "Saved. You can generate a draft now, or keep answering prompts."
-      : "Saved. Next I need the role you want this resume tailored for."
-  });
-  focusChatField(nextIncompleteField());
-  renderSnapshot(analysisResult);
-  renderChecklist();
-  maybeAutoAnalyze();
-  return true;
-}
-
-function renderProfile(profile) {
-  if (appConfig.requiresAppSecret) {
-    authStateEl.textContent = "APP_SECRET missing.";
-    loginLinkEl.classList.add("hidden");
-    logoutButtonEl.classList.add("hidden");
-    profileCardEl.classList.add("hidden");
-    return;
-  }
-
-  if (!appConfig.linkedInAuthEnabled) {
-    authStateEl.textContent = "LinkedIn unavailable.";
-    loginLinkEl.classList.add("hidden");
-    logoutButtonEl.classList.add("hidden");
-    profileCardEl.classList.add("hidden");
-    return;
-  }
-
-  if (!profile) {
-    authStateEl.textContent = "Not connected.";
-    loginLinkEl.classList.remove("hidden");
-    logoutButtonEl.classList.add("hidden");
-    profileCardEl.classList.add("hidden");
-    return;
-  }
-
-  authStateEl.textContent = `${profile.name || profile.email || "LinkedIn account"} connected`;
-  loginLinkEl.classList.add("hidden");
-  logoutButtonEl.classList.remove("hidden");
-  profileEl.replaceChildren();
-  const row = document.createElement("div");
-  row.className = "profile-row";
-  if (profile.picture) {
-    const image = document.createElement("img");
-    image.className = "avatar";
-    image.src = profile.picture;
-    image.alt = "";
-    row.appendChild(image);
-  }
-  const copy = document.createElement("div");
-  const name = document.createElement("h3");
-  name.textContent = profile.name || "LinkedIn account";
-  const email = document.createElement("p");
-  email.textContent = profile.email || "Email not shared";
-  copy.append(name, email);
-  row.appendChild(copy);
-  profileEl.appendChild(row);
-  profileCardEl.classList.remove("hidden");
-  renderChecklist();
-}
-
-function updateRewriteButton() {
-  if (!appConfig.openAiRewriteEnabled) {
-    rewriteButtonEl.disabled = true;
-    rewriteButtonEl.textContent = "AI rewrite unavailable";
-    return;
-  }
-  rewriteButtonEl.disabled = false;
-  rewriteButtonEl.textContent = "Polish with AI";
-}
-
-async function loadSession() {
-  const [configResponse, sessionResponse] = await Promise.all([
-    fetch("/api/config"),
-    fetch("/api/session")
-  ]);
-  appConfig = await configResponse.json();
-  const session = await sessionResponse.json();
-  sessionProfile = session.profile || null;
-  renderProfile(sessionProfile);
-  maybeAutofillFromProfile(sessionProfile);
-  renderSnapshot(analysisResult);
-  updateRewriteButton();
-  updateGuide(currentStep);
-  renderChecklist();
-}
-
-logoutButtonEl.addEventListener("click", async () => {
-  await fetch("/api/auth/logout", { method: "POST" });
-  sessionProfile = null;
-  await loadSession();
-  addChatMessage({
-    title: "LinkedIn disconnected",
-    body: "You can still paste LinkedIn text or upload a resume manually."
-  });
-  setStatus("LinkedIn disconnected.");
-});
-
-async function enrichPayloadWithFile(payload) {
-  const resumeFile = fieldEls.resumeFile.files[0];
-  if (!resumeFile) {
-    return payload;
-  }
-  payload.resumeFileName = resumeFile.name;
-  payload.resumeFileBase64 = await fileToBase64(resumeFile);
   return payload;
 }
 
-async function exportText(format, text) {
-  if (!text.trim()) {
-    setStatus("Nothing to export yet.", true);
+// ── View transitions ──────────────────────────────────────────────
+function setView(view) {
+  state.view = view;
+  intakeView.classList.toggle('hidden', view !== 'intake');
+  editorView.classList.toggle('hidden', view !== 'editor');
+  finalView.classList.toggle('hidden',  view !== 'final');
+  window.scrollTo({ top: 0 });
+}
+
+function showEditorLoading(msg = 'Analyzing your resume...') {
+  setView('editor');
+  editorLoadingEl.classList.remove('hidden');
+  editorPanelEl.classList.add('hidden');
+  editorActionsEl.classList.add('hidden');
+  editorLoadingMsg.textContent = msg;
+  stepCounterEl.textContent = '';
+  editorProgressEl.style.width = '0%';
+}
+
+function showEditorSection() {
+  editorLoadingEl.classList.add('hidden');
+  editorPanelEl.classList.remove('hidden');
+  editorActionsEl.classList.remove('hidden');
+
+  const total   = state.sections.length;
+  const current = state.sectionIndex + 1;
+  const section = state.sections[state.sectionIndex];
+
+  stepCounterEl.textContent = `${current} / ${total}`;
+  editorProgressEl.style.width = `${(current / total) * 100}%`;
+
+  // Update continue button label for last section
+  editorContinueBtn.textContent = current === total ? 'Finish →' : 'Continue →';
+
+  renderSectionPanel(section);
+}
+
+// ── Section panel renderer ────────────────────────────────────────
+function renderSectionPanel(section) {
+  editorPanelEl.replaceChildren();
+
+  // Header row: section name + status badge
+  const header = el('div', 'section-panel-header');
+  const title  = el('h2',  'section-panel-title', section.label);
+  const badge  = el('span', `status-badge ${section.status}`);
+  badge.textContent = {
+    ok:          'Looks good',
+    'needs-work':'Needs work',
+    missing:     'Not found',
+  }[section.status] ?? section.status;
+  header.append(title, badge);
+  editorPanelEl.appendChild(header);
+
+  // Parsing confidence warning (low-confidence parse signal)
+  if (section.parseWarning) {
+    const warn = el('div', 'parse-warning');
+    const warnIcon = el('span', 'parse-warning-icon', '⚠');
+    const warnText = el('p', 'parse-warning-text', section.parseWarning);
+    warn.append(warnIcon, warnText);
+    editorPanelEl.appendChild(warn);
+  }
+
+  // Current content (read-only) — only show if there's content
+  if (section.currentText) {
+    const block = el('div', 'current-block');
+    const lbl   = el('p',   'field-label', 'What we found');
+    const pre   = el('pre', 'current-text', section.currentText);
+    block.append(lbl, pre);
+    editorPanelEl.appendChild(block);
+  }
+
+  // Critique bar — what seems off
+  if (section.critique) {
+    const bar      = el('div', `critique-bar ${section.status}`);
+    const iconChar = section.status === 'ok' ? '✓' : section.status === 'missing' ? '+' : '!';
+    const icon     = el('span', `critique-icon ${section.status}`, iconChar);
+    const text     = el('p',   'critique-text', section.critique);
+    bar.append(icon, text);
+    editorPanelEl.appendChild(bar);
+  }
+
+  // Proposed / editable content — the suggested rewrite
+  const proposed = el('div', 'proposed-block');
+  let propLblText = section.currentText
+    ? 'Suggested rewrite — edit freely'
+    : 'Suggested content — edit to fit your background';
+  // For summary: when proposed === current (existing summary preserved), be explicit
+  if (section.id === 'summary' && section.summarySource && section.summarySource !== 'none'
+      && section.currentText && section.currentText.trim() === section.proposedText?.trim()) {
+    propLblText = 'Your existing summary — edit to refine it';
+  }
+  const propLbl  = el('p', 'field-label', propLblText);
+  const textarea = document.createElement('textarea');
+  textarea.id        = 'section-textarea';
+  textarea.className = 'editor-textarea';
+  textarea.value     = section.proposedText;
+  const lineCount = (section.proposedText.match(/\n/g) || []).length + 1;
+  textarea.rows = Math.max(6, Math.min(lineCount + 2, 22));
+  proposed.append(propLbl, textarea);
+  editorPanelEl.appendChild(proposed);
+
+  // Change log — per-bullet explanations (experience section)
+  if (section.changeLog?.length) {
+    const changeWrap = el('div', 'change-log');
+    const changeLbl  = el('p',  'field-label', `Why we changed ${section.changeLog.length} bullet${section.changeLog.length > 1 ? 's' : ''}`);
+    changeWrap.appendChild(changeLbl);
+
+    for (const change of section.changeLog.slice(0, 6)) {
+      const item = el('div', 'change-item');
+
+      const origRow  = el('div', 'change-row change-original');
+      const origBadge= el('span', 'change-badge before', 'Before');
+      const origText = el('span', 'change-text', change.original);
+      origRow.append(origBadge, origText);
+
+      const revRow   = el('div', 'change-row change-revised');
+      const revBadge = el('span', 'change-badge after', 'After');
+      const revText  = el('span', 'change-text', change.revised);
+      revRow.append(revBadge, revText);
+
+      const reason   = el('p', 'change-reason', `Why: ${change.reason}`);
+
+      item.append(origRow, revRow, reason);
+      changeWrap.appendChild(item);
+    }
+
+    editorPanelEl.appendChild(changeWrap);
+  }
+}
+
+// ── Section navigation ────────────────────────────────────────────
+function getCurrentTextareaValue() {
+  return document.querySelector('#section-textarea')?.value?.trim() ?? '';
+}
+
+function advanceSection(skipCurrent = false) {
+  if (!skipCurrent) {
+    const val = getCurrentTextareaValue();
+    const id  = state.sections[state.sectionIndex]?.id;
+    if (id && val) {
+      state.approved[id] = val;
+    }
+  }
+
+  state.sectionIndex++;
+
+  if (state.sectionIndex >= state.sections.length) {
+    buildFinalView();
     return;
   }
 
-  const response = await fetch("/api/export", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      format,
-      text,
-      fileName: fieldEls.targetRole.value || "resume-refresh"
-    })
-  });
+  showEditorSection();
+}
 
-  if (!response.ok) {
-    const payload = await response.json().catch(() => ({}));
-    throw new Error(payload.error || "Export failed");
+function goBackSection() {
+  if (state.sectionIndex === 0) {
+    // Back to intake
+    setView('intake');
+    analyzeLabelEl.textContent = 'Analyze my resume';
+    analyzeBtnEl.disabled = false;
+  } else {
+    state.sectionIndex--;
+    showEditorSection();
+  }
+}
+
+editorContinueBtn.addEventListener('click', () => advanceSection(false));
+editorSkipBtn.addEventListener('click',     () => advanceSection(true));
+editorBackBtn.addEventListener('click',     () => goBackSection());
+
+// ── Final view assembly ───────────────────────────────────────────
+function assembleFinalResume() {
+  const parts  = [];
+  const sOrder = state.sections.map(s => s.id);
+
+  for (const id of sOrder) {
+    const text = state.approved[id];
+    if (!text?.trim()) continue;
+
+    const header = SECTION_HEADERS[id];
+    if (header) {
+      parts.push(header);
+    }
+    parts.push(text.trim());
+    parts.push('');
   }
 
-  const blob = await response.blob();
-  const disposition = response.headers.get("content-disposition") || "";
-  const match = disposition.match(/filename="([^"]+)"/);
-  const fileName = match?.[1] || `resume-refresh.${format}`;
+  return parts.join('\n').trim();
+}
+
+function buildFinalView() {
+  const draft = assembleFinalResume();
+  finalDraftEl.textContent = draft;
+
+  renderFinalNotes();
+  updateRewriteUI();
+  setView('final');
+}
+
+function renderFinalNotes() {
+  finalNotesEl.replaceChildren();
+  const suggestions = state.analysisResult?.suggestions ?? [];
+  if (!suggestions.length) {
+    finalNotesEl.innerHTML = '<p style="font-size:0.8125rem;color:var(--muted)">No major issues detected.</p>';
+    return;
+  }
+  for (const s of suggestions.slice(0, 8)) {
+    const item   = el('div', 'note-item');
+    const pri    = el('p', `note-priority ${(s.priority ?? 'medium').toLowerCase()}`, s.priority ?? 'Note');
+    const title  = el('p', 'note-title', s.title ?? '');
+    const detail = el('p', 'note-detail', s.detail ?? '');
+    item.append(pri, title, detail);
+    finalNotesEl.appendChild(item);
+  }
+}
+
+// ── Final view navigation ─────────────────────────────────────────
+finalBackBtn.addEventListener('click', () => {
+  // Go back to last section in editor
+  state.sectionIndex = state.sections.length - 1;
+  setView('editor');
+  showEditorSection();
+});
+
+startOverBtn.addEventListener('click', () => {
+  // Reset all state and go to intake
+  state.analysisResult = null;
+  state.sections       = [];
+  state.sectionIndex   = 0;
+  state.approved       = {};
+  state.candidateName  = '';
+  state.lastPayload    = null;
+  aiResultEl.classList.add('hidden');
+  setView('intake');
+});
+
+// ── Main analysis flow ────────────────────────────────────────────
+intakeForm.addEventListener('submit', async e => {
+  e.preventDefault();
+  if (analyzeBtnEl.disabled) return;
+  clearFormError();
+
+  if (!validate()) return;
+
+  analyzeBtnEl.disabled = true;
+  analyzeLabelEl.textContent = 'Analyzing...';
+
+  showEditorLoading('Analyzing your resume...');
+
+  try {
+    const payload = await buildPayload();
+    state.lastPayload = payload;
+
+    const res    = await fetch('/api/analyze', {
+      method:  'POST',
+      headers: { 'content-type': 'application/json' },
+      body:    JSON.stringify(payload)
+    });
+    const result = await res.json();
+    if (!res.ok) throw new Error(result.error ?? 'Analysis failed. Please try again.');
+
+    state.analysisResult = result;
+    state.candidateName  = result.candidateName ?? '';
+
+    // Populate sections from sectionEditorData
+    const rawSections = result.sectionEditorData;
+    if (Array.isArray(rawSections) && rawSections.length > 0) {
+      state.sections = rawSections;
+    } else {
+      // Fallback: synthesize from rewrittenResume if editor data is missing
+      state.sections = synthesizeFallbackSections(result);
+    }
+
+    state.sectionIndex = 0;
+    state.approved     = {};
+
+    showEditorSection();
+  } catch (err) {
+    setView('intake');
+    analyzeBtnEl.disabled = false;
+    analyzeLabelEl.textContent = 'Analyze my resume';
+    showFormError(err.message ?? 'Something went wrong. Please try again.');
+  }
+});
+
+/** Emergency fallback: build a single-section flow from the full rewrite */
+function synthesizeFallbackSections(result) {
+  return [{
+    id:           'heading',
+    label:        'Your Resume',
+    currentText:  '',
+    proposedText: result.rewrittenResume ?? '',
+    critique:     'Review and edit the draft below.',
+    status:       'ok',
+  }];
+}
+
+const AI_ACTION_LABELS = {
+  'tighten':           'Tighten wording',
+  'ats':               'Improve ATS match',
+  'tailor':            'Tailor to target role',
+  'shorten':           'Shorten to one page',
+  'strengthen-bullets':'Strengthen bullets',
+};
+
+// ── Rewrite UI state ──────────────────────────────────────────────
+function updateRewriteUI() {
+  const enabled = state.appConfig.openAiRewriteEnabled;
+  for (const btn of document.querySelectorAll('.ai-action-btn')) {
+    btn.disabled = !enabled;
+  }
+  aiHintEl.textContent = enabled
+    ? ''
+    : 'Refinement requires a configured AI provider. Add your OPENAI_API_KEY to .env to enable.';
+}
+
+// ── AI Action handler ─────────────────────────────────────────────
+async function triggerAiAction(action) {
+  if (state.rewriteInFlight || !state.appConfig.openAiRewriteEnabled) return;
+
+  state.rewriteInFlight = true;
+
+  for (const btn of document.querySelectorAll('.ai-action-btn')) {
+    btn.disabled = true;
+    if (btn.dataset.action === action) {
+      btn.querySelector('.ai-action-label').textContent = 'Working…';
+    }
+  }
+  aiHintEl.textContent = '';
+
+  try {
+    const payload = { ...(state.lastPayload ?? {}) };
+    if (!payload.resumeText && state.analysisResult?.extractedResumeText) {
+      payload.resumeText = state.analysisResult.extractedResumeText;
+    }
+    // Use innerText so edits to the contenteditable pre are captured
+    const assembled = finalDraftEl.innerText?.trim();
+    if (assembled) payload.resumeText = assembled;
+    payload.action = action;
+
+    const controller = new AbortController();
+    const timeoutId  = setTimeout(() => controller.abort(), 120_000);
+    let res;
+    try {
+      res = await fetch('/api/rewrite', {
+        method:  'POST',
+        headers: { 'content-type': 'application/json' },
+        body:    JSON.stringify(payload),
+        signal:  controller.signal
+      });
+    } catch (fetchErr) {
+      if (fetchErr.name === 'AbortError') throw new Error('AI action timed out. Please try again.');
+      throw fetchErr;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+    const result = await res.json();
+    if (!res.ok) throw new Error(result.error ?? 'Action failed. Please try again.');
+
+    aiResultLabelEl.textContent = `${AI_ACTION_LABELS[action] ?? 'AI-revised'} version`;
+    // Set content on contenteditable pre via textContent (safe — no HTML)
+    aiRewriteEl.textContent = result.rewrittenResume ?? 'No result returned.';
+    renderAiNotes(result.summary, result.bulletImprovements ?? [], result.notes ?? []);
+
+    aiResultEl.classList.remove('hidden');
+    // Keep action buttons visible — just show the "Run another pass:" label
+    document.querySelector('#ai-next-label').classList.remove('hidden');
+    aiHintEl.textContent = '';
+
+    aiResultEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (err) {
+    aiHintEl.textContent = err.message ?? 'Action failed. Please try again.';
+  } finally {
+    state.rewriteInFlight = false;
+    for (const btn of document.querySelectorAll('.ai-action-btn')) {
+      const a = btn.dataset.action;
+      if (AI_ACTION_LABELS[a]) {
+        btn.querySelector('.ai-action-label').textContent = AI_ACTION_LABELS[a];
+      }
+      btn.disabled = !state.appConfig.openAiRewriteEnabled;
+    }
+  }
+}
+
+// Delegate click on all action buttons
+document.querySelector('#ai-actions').addEventListener('click', e => {
+  const btn = e.target.closest('.ai-action-btn');
+  if (btn && !btn.disabled) triggerAiAction(btn.dataset.action);
+});
+
+// ── AI notes — grouped rendering (Issue 6) ────────────────────────
+function renderAiNotes(summary = '', bulletImprovements = [], notes = []) {
+  aiNotesEl.replaceChildren();
+  if (!summary && !bulletImprovements.length && !notes.length) return;
+
+  // Group 1: What this pass did (summary)
+  if (summary) {
+    const group = makeNoteGroup('✦', 'What this pass did');
+    const item  = el('div', 'ai-note-item summary-item', summary);
+    group.appendChild(item);
+    aiNotesEl.appendChild(group);
+  }
+
+  // Group 2: Bullet improvements
+  const improvements = bulletImprovements.filter(Boolean);
+  if (improvements.length) {
+    const group = makeNoteGroup('↻', 'Bullet changes');
+    for (const imp of improvements.slice(0, 8)) {
+      const item = el('div', 'ai-note-item', imp);
+      group.appendChild(item);
+    }
+    aiNotesEl.appendChild(group);
+  }
+
+  // Group 3: Suggestions / caveats
+  const caveats = notes.filter(Boolean);
+  if (caveats.length) {
+    const group = makeNoteGroup('→', 'Review before sending');
+    for (const note of caveats) {
+      const item = el('div', 'ai-note-item muted', note);
+      group.appendChild(item);
+    }
+    aiNotesEl.appendChild(group);
+  }
+}
+
+function makeNoteGroup(icon, title) {
+  const group  = el('div', 'ai-note-group');
+  const header = el('div', 'ai-note-group-header');
+  const ico    = el('span', 'ai-note-group-icon', icon);
+  const lbl    = el('span', 'ai-note-group-title', title);
+  header.append(ico, lbl);
+  group.appendChild(header);
+  return group;
+}
+
+// ── Export ────────────────────────────────────────────────────────
+async function exportText(format, text) {
+  if (!text?.trim()) return;
+  const res = await fetch('/api/export', {
+    method:  'POST',
+    headers: { 'content-type': 'application/json' },
+    body:    JSON.stringify({
+      format,
+      text,
+      candidateName: state.candidateName   // used server-side for filename
+    })
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error ?? 'Export failed');
+  }
+  const blob = await res.blob();
+  const disposition = res.headers.get('content-disposition') ?? '';
+  const match    = disposition.match(/filename="([^"]+)"/);
+  const fileName = match?.[1] ?? `resume.${format}`;
   const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = fileName;
-  anchor.click();
+  const a   = document.createElement('a');
+  a.href     = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
 
-async function runAnalysis(payload) {
-  const response = await fetch("/api/analyze", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(payload)
-  });
-  const result = await response.json();
-  if (!response.ok) {
-    throw new Error(result.error || "Analysis failed");
-  }
-  analysisResult = result;
-  renderSuggestions(result.suggestions);
-  renderSnapshot(result);
-  draftEl.textContent = result.rewrittenResume || "No draft returned.";
-  return result;
-}
+// Use innerText so user edits to the contenteditable pre are captured
+downloadDocxEl.addEventListener('click',   () => exportText('docx', finalDraftEl.innerText).catch(console.error));
+downloadPdfEl.addEventListener('click',    () => exportText('pdf',  finalDraftEl.innerText).catch(console.error));
+dlRewriteDocxEl.addEventListener('click', () => exportText('docx', aiRewriteEl.innerText).catch(console.error));
+dlRewritePdfEl.addEventListener('click',  () => exportText('pdf',  aiRewriteEl.innerText).catch(console.error));
 
-async function executeAnalysis({ auto = false } = {}) {
-  if (analysisInFlight) {
-    return;
-  }
-  if (!isReadyForAnalysis()) {
-    if (!auto) {
-      setStatus("Add a target role and resume text or file first.", true);
-    }
-    return;
-  }
-
-  analysisInFlight = true;
-  renderWizardStep();
-  setStatus(auto ? "Analyzing from chat..." : "Analyzing...");
-
-  try {
-    const payload = await enrichPayloadWithFile(getFormPayload());
-    const result = await runAnalysis(payload);
-    if (!fieldEls.resumeText.value.trim() && result.extractedResumeText) {
-      fieldEls.resumeText.value = result.extractedResumeText;
-    }
-    addChatMessage({
-      title: auto ? "Analysis ran automatically" : "Analysis complete",
-      body: "Your first draft is ready. Review it, then export it or polish it with AI.",
-      actions: [
-        { label: "Open review", onClick: () => setStep(3) },
-        { label: "Polish with AI", onClick: () => rewriteButtonEl.click(), secondary: true }
-      ]
-    });
-    setStep(3);
-    renderChecklist();
-    setStatus("Review ready.");
-  } catch (error) {
-    setStatus(error.message || "Something went wrong.", true);
-  } finally {
-    analysisInFlight = false;
-    renderWizardStep();
-  }
-}
-
-function maybeAutoAnalyze() {
-  if (!isReadyForAnalysis()) {
-    return;
-  }
-  if (analysisResult) {
-    return;
-  }
-  executeAnalysis({ auto: true });
-}
-
-form.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  await executeAnalysis();
-});
-
-chatFormEl.addEventListener("submit", (event) => {
-  event.preventDefault();
-  const value = chatInputEl.value;
-  if (!saveChatInput(value)) {
-    setStatus("Add a response first.", true);
-    return;
-  }
-  chatInputEl.value = "";
-  setStatus("Saved.");
-});
-
-chatSkipEl.addEventListener("click", () => {
-  addChatMessage({
-    title: "Skipped",
-    body: "Skipped. Moving to the next prompt."
-  });
-  const currentIndex = sourceQuestions.findIndex((item) => item.field === activeChatField);
-  const nextField = sourceQuestions[currentIndex + 1]?.field || activeChatField;
-  focusChatField(nextField);
-  setStep(activeChatField === "targetRole" ? 2 : currentStep);
-  setStatus("Skipped.");
-});
-
-rewriteButtonEl.addEventListener("click", async () => {
-  if (rewriteInFlight) {
-    return;
-  }
-  if (!appConfig.openAiRewriteEnabled) {
-    setStatus("OpenAI rewrite is not configured.", true);
-    return;
-  }
-
-  rewriteInFlight = true;
-  setStatus("Rewriting...");
-  try {
-    const payload = await enrichPayloadWithFile(getFormPayload());
-    if (!analysisResult) {
-      const analyzed = await runAnalysis(payload);
-      if (!payload.resumeText && analyzed.extractedResumeText) {
-        payload.resumeText = analyzed.extractedResumeText;
-      }
-    } else if (!payload.resumeText && analysisResult.extractedResumeText) {
-      payload.resumeText = analysisResult.extractedResumeText;
-    }
-
-    const response = await fetch("/api/rewrite", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(payload)
-    });
-    const result = await response.json();
-    if (!response.ok) {
-      throw new Error(result.error || "Rewrite failed");
-    }
-
-    aiRewriteEl.textContent = result.rewrittenResume || "No rewrite returned.";
-    renderNotes([result.summary, ...result.bulletImprovements, ...result.notes].filter(Boolean));
-    addChatMessage({
-      title: "Rewrite ready",
-      body: "The polished version is ready. Export DOCX or PDF when you are done.",
-      actions: [
-        { label: "Open rewrite", onClick: () => setStep(4) }
-      ]
-    });
-    setStep(4);
-    setStatus("AI rewrite ready.");
-  } catch (error) {
-    setStatus(error.message || "Rewrite failed.", true);
-  } finally {
-    rewriteInFlight = false;
-  }
-});
-
-downloadDraftDocxEl.addEventListener("click", async () => {
-  try {
-    await exportText("docx", draftEl.textContent || "");
-    setStatus("DOCX downloaded.");
-  } catch (error) {
-    setStatus(error.message || "DOCX export failed.", true);
-  }
-});
-
-downloadDraftPdfEl.addEventListener("click", async () => {
-  try {
-    await exportText("pdf", draftEl.textContent || "");
-    setStatus("PDF downloaded.");
-  } catch (error) {
-    setStatus(error.message || "PDF export failed.", true);
-  }
-});
-
-downloadRewriteDocxEl.addEventListener("click", async () => {
-  try {
-    await exportText("docx", aiRewriteEl.textContent || "");
-    setStatus("DOCX downloaded.");
-  } catch (error) {
-    setStatus(error.message || "DOCX export failed.", true);
-  }
-});
-
-downloadRewritePdfEl.addEventListener("click", async () => {
-  try {
-    await exportText("pdf", aiRewriteEl.textContent || "");
-    setStatus("PDF downloaded.");
-  } catch (error) {
-    setStatus(error.message || "PDF export failed.", true);
-  }
-});
-
-for (const element of [fieldEls.targetRole, fieldEls.linkedinUrl, fieldEls.linkedinText, fieldEls.resumeText, fieldEls.resumeFile]) {
-  element.addEventListener("input", () => {
-    resetAnalysisOutputs();
-    renderChecklist();
-  });
-  element.addEventListener("change", () => {
-    resetAnalysisOutputs();
-    renderChecklist();
-    maybeAutoAnalyze();
+// Strip HTML formatting on paste into editable pres (keeps plain text only)
+for (const pre of [finalDraftEl, aiRewriteEl]) {
+  pre.addEventListener('paste', e => {
+    e.preventDefault();
+    const text = e.clipboardData?.getData('text/plain') ?? '';
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount) return;
+    sel.deleteFromDocument();
+    const range = sel.getRangeAt(0);
+    range.insertNode(document.createTextNode(text));
+    sel.collapseToEnd();
   });
 }
 
-seedChat();
-focusChatField("targetRole");
-const linkedInStatus = readLinkedInStatusFromUrl();
-if (linkedInStatus === "connected") {
-  addChatMessage({
-    title: "LinkedIn connected",
-    body: "Connected. I prefilled what LinkedIn shares here. If you want your public LinkedIn URL included, paste it later when asked."
-  });
-  focusChatField(nextIncompleteField());
-  setStatus("LinkedIn connected.");
-} else if (linkedInStatus === "failed" || linkedInStatus === "invalid" || linkedInStatus === "denied") {
-  addChatMessage({
-    title: "LinkedIn sign-in did not complete",
-    body: "No problem. You can continue manually."
-  });
-  setStatus("LinkedIn sign-in did not complete.", true);
+// ── DOM utility ───────────────────────────────────────────────────
+function el(tag, className, textContent) {
+  const node = document.createElement(tag);
+  if (className)   node.className   = className;
+  if (textContent !== undefined) node.textContent = textContent;
+  return node;
 }
 
-renderSnapshot(null);
-loadSession().catch((error) => {
-  setStatus(error.message || "Unable to load app state.", true);
-});
-setStep(1);
+// ── Boot ──────────────────────────────────────────────────────────
+init();

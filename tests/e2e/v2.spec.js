@@ -74,21 +74,19 @@ test("manual v2 flow runs end-to-end through draft, AI rewrite, and export", asy
   await page.getByTestId("section-editor").fill("Product leader with growth, onboarding, and experimentation experience.");
   await page.getByTestId("section-tab-experience").click();
   await page.getByTestId("section-editor").fill(
-    "Product Manager, Atlas\n- Led onboarding roadmap across signup and activation\n- Partnered with engineering and design to improve conversion"
+    "Product Manager, Atlas | 2022-2025\n- Led onboarding roadmap across signup and activation\n- Partnered with engineering and design to improve conversion"
   );
   await page.getByTestId("section-tab-skills").click();
   await page.getByTestId("section-editor").fill("Product Strategy\nAnalytics\nSQL\nExperimentation");
 
   await page.getByRole("button", { name: "Generate draft" }).click();
-  await expect(page.getByText("Top fixes")).toBeVisible();
+  await expect(page.getByText("Draft ready.")).toBeVisible();
   await expect(page.getByTestId("resume-preview")).toContainText("Summary");
 
-  await page.getByRole("button", { name: "Polish with AI" }).click();
-  await expect(page.getByRole("button", { name: "Apply AI polish to sections" })).toBeVisible();
-  await page.getByRole("button", { name: "Apply AI polish to sections" }).click();
-  await expect(page.getByText("AI polish applied back into editable sections.")).toBeVisible();
-
-  await page.getByRole("button", { name: "Export" }).click();
+  await page.getByRole("button", { name: "Save and Continue" }).click();
+  await page.getByRole("button", { name: "Save and Continue" }).click();
+  await expect(page.getByRole("heading", { name: "Final Review" })).toBeVisible();
+  await page.getByRole("button", { name: "Continue to export" }).click();
   await expect(page.getByRole("heading", { name: "Your refreshed resume is ready." })).toBeVisible();
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "Download DOCX" }).click();
@@ -234,4 +232,65 @@ test("mobile landing and builder do not introduce obvious horizontal overflow", 
 
   const hasOverflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1);
   expect(hasOverflow).toBe(false);
+});
+
+test("guided builder keeps ATS safety out of section editing and only unlocks final review after required sections", async ({ page }) => {
+  await page.goto("/v2.html");
+  await page.getByRole("button", { name: "Start Resume Refresh" }).click();
+  await page.getByRole("button", { name: "Build it step by step" }).click();
+
+  await expect(page.getByRole("heading", { name: "Make each section stronger." })).toBeVisible();
+  await expect(page.getByText("ATS Safety")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Final Review" })).toHaveCount(0);
+
+  await page.getByLabel("Target role").fill("Senior Product Manager");
+  await page.getByTestId("section-tab-header").click();
+  await page.getByTestId("section-editor").fill("Jane Doe\nSan Francisco, CA\njane@example.com");
+  await page.getByRole("button", { name: "Save and Continue" }).click();
+  await expect(page.getByRole("heading", { name: "Summary" })).toBeVisible();
+
+  await page.getByTestId("section-editor").fill("Senior product manager with growth and experimentation experience.");
+  await page.getByRole("button", { name: "Save and Continue" }).click();
+  await expect(page.getByRole("heading", { name: "Experience" })).toBeVisible();
+
+  await page.getByTestId("section-editor").fill("Senior Product Manager, Atlas | 2022-2025\n- Led onboarding roadmap across signup and activation");
+  await page.getByRole("button", { name: "Save and Continue" }).click();
+  await expect(page.getByRole("heading", { name: "Skills" })).toBeVisible();
+
+  await page.getByTestId("section-editor").fill("Product Strategy\nSQL\nExperimentation");
+  await page.getByRole("button", { name: "Save and Continue" }).click();
+  await expect(page.getByRole("heading", { name: "Education" })).toBeVisible();
+
+  await page.getByTestId("section-editor").fill("University of California, Berkeley\nB.A. Economics");
+  await page.getByRole("button", { name: "Save and Continue" }).click();
+
+  await expect(page.getByRole("heading", { name: "Final Review" })).toBeVisible();
+  await expect(page.getByText("ATS Safety", { exact: true })).toBeVisible();
+});
+
+test("skills actions operate on the current skills content instead of generic advice", async ({ page }) => {
+  await page.addInitScript((state) => {
+    window.sessionStorage.setItem("resume_refresh_v2_state", JSON.stringify(state));
+  }, {
+    ...reviewSeedState,
+    stage: "builder",
+    activeSection: "skills",
+    sections: reviewSeedState.sections.map((section) => section.id === "skills" ? {
+      ...section,
+      content: "Communication\nSQL\nStorytelling\nProduct Strategy\nRandom Problem Solving"
+    } : section)
+  });
+
+  await page.goto("/v2.html");
+  await expect(page.getByRole("heading", { name: "Skills" })).toBeVisible();
+  await expect(page.getByText("ATS Safety")).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Trim weak skills" }).click();
+  await expect(page.getByText("Suggested skills list")).toBeVisible();
+  await expect(page.getByText("Random Problem Solving — generic or trait-like")).toBeVisible();
+  await page.getByRole("button", { name: "Apply skills update" }).click();
+  await expect(page.getByTestId("section-editor")).not.toContainText("Random Problem Solving");
+
+  await page.getByRole("button", { name: "Align to Senior Product Manager" }).click();
+  await expect(page.locator("span").filter({ hasText: "Stakeholder Management" }).first()).toBeVisible();
 });

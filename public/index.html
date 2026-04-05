@@ -4,173 +4,218 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Resume Refresh</title>
-    <meta
-      name="description"
-      content="Import your resume or LinkedIn details, strengthen every bullet, and export a cleaner recruiter-ready resume."
-    />
-    <meta name="theme-color" content="#132126" />
+    <meta name="description" content="Paste your resume, tell us what you're targeting, and get a polished, ATS-ready draft section by section." />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <link rel="manifest" href="/site.webmanifest" />
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
-    <main class="shell">
-      <section class="app-header">
-        <p class="eyebrow">Resume Refresh</p>
-        <h1>Build a stronger resume one step at a time.</h1>
-        <p class="lede">Connect, answer prompts, review the draft, then export.</p>
-      </section>
 
-      <section class="progress-strip" aria-label="Progress">
-        <p id="progress-label" class="progress-label">Step 1 of 4 · Connect</p>
-        <div class="progress-track" aria-hidden="true">
-          <div id="progress-bar" class="progress-bar"></div>
+    <!-- ══════════════════════════════════════════════════════════════
+         VIEW 1: INTAKE
+    ══════════════════════════════════════════════════════════════ -->
+    <main id="view-intake" class="view">
+      <header class="site-header">
+        <div class="container">
+          <p class="wordmark">Resume Refresh</p>
+          <h1>A polished resume,<br>section by section.</h1>
+          <p class="lead">Upload or paste your resume, tell us what you're targeting, and we'll walk you through improving every section.</p>
         </div>
-      </section>
+      </header>
 
-      <section id="status" class="status" aria-live="polite"></section>
+      <div class="container">
+        <form id="intake-form" novalidate>
 
-      <section class="step-pane" data-step="1">
-        <div class="panel auth-panel">
-          <div>
-            <p class="section-kicker">Step 1</p>
-            <h2>Connect LinkedIn</h2>
-            <p class="panel-copy">We pull basic identity and use it to prefill what we can.</p>
-          </div>
-
-          <div class="auth-actions">
-            <div id="auth-state" class="auth-state">Checking LinkedIn configuration...</div>
-            <div class="auth-buttons">
-              <a id="linkedin-login" class="button-link" href="/api/auth/linkedin">Connect LinkedIn</a>
-              <button id="linkedin-logout" type="button" class="button-secondary hidden">Disconnect</button>
-              <button class="button-secondary" data-next-step="2" type="button">Continue</button>
+          <!-- Resume source -->
+          <div class="card">
+            <div class="card-header">
+              <h2>Your resume</h2>
+              <p class="card-hint">Upload a PDF, TXT, or MD file — or paste text. Works with messy drafts, LinkedIn pastes, or copied PDFs.</p>
             </div>
-          </div>
-        </div>
-
-        <section id="linkedin-profile-card" class="panel hidden">
-          <p class="section-kicker">Connected account</p>
-          <div id="linkedin-profile"></div>
-        </section>
-      </section>
-
-      <section class="step-pane hidden" data-step="2">
-        <section class="panel">
-          <div class="panel-head">
-            <div>
-              <p class="section-kicker">Step 2</p>
-              <h2>Answer one thing at a time</h2>
+            <div class="tab-bar" role="tablist">
+              <button class="tab active" type="button" data-tab="upload" role="tab" aria-selected="true">Upload file</button>
+              <button class="tab" type="button" data-tab="paste" role="tab" aria-selected="false">Paste text</button>
             </div>
-            <button class="button-secondary" data-next-step="3" type="button" id="skip-to-review">Skip to review</button>
-          </div>
-
-          <section class="chat-shell embedded">
-            <div id="chat-feed" class="chat-feed" aria-live="polite"></div>
-            <form id="chat-form" class="chat-composer">
-              <label class="chat-input-wrap">
-                <span id="chat-prompt-label" class="sr-only">Chat input</span>
-                <textarea
-                  id="chat-input"
-                  rows="3"
-                  placeholder="Type your answer here."
-                ></textarea>
+            <div id="tab-upload" class="tab-panel">
+              <label class="drop-zone" id="drop-zone" for="resume-file">
+                <input type="file" id="resume-file" name="resumeFile" accept=".pdf,.txt,.md" />
+                <div class="drop-zone-inner">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M12 15V3m0 0L8 7m4-4 4 4"/>
+                    <path d="M2 17l.621 2.485A2 2 0 0 0 4.561 21h14.878a2 2 0 0 0 1.94-1.515L22 17"/>
+                  </svg>
+                  <p class="drop-zone-label">Drag &amp; drop or click to upload</p>
+                  <p class="drop-zone-hint">PDF, TXT, or MD · max 6 MB</p>
+                </div>
               </label>
-              <div class="chat-composer-actions">
-                <button id="chat-skip" class="button-secondary" type="button">Skip</button>
-                <button id="chat-send" type="submit">Save answer</button>
+              <p id="file-status" class="file-status hidden" role="status"></p>
+            </div>
+            <div id="tab-paste" class="tab-panel hidden">
+              <textarea id="resume-text" name="resumeText" rows="12" placeholder="Paste your resume here. Messy text, LinkedIn pastes, or Discord notes all work — we'll clean it up."></textarea>
+            </div>
+          </div>
+
+          <!-- Targeting context -->
+          <div class="card">
+            <div class="card-header">
+              <h2>What are you targeting?</h2>
+              <p class="card-hint">Describe the roles you're applying to and your background. Are you a student, new grad, career switcher, or experienced hire? The more specific, the better the feedback.</p>
+            </div>
+            <textarea id="target-role" name="targetRole" rows="4" placeholder="Example: I'm a career switcher with 4 years in engineering applying to product management roles at Series B–D tech companies. Targeting IC roles first, eventually want to manage a team."></textarea>
+          </div>
+
+          <!-- LinkedIn (optional) -->
+          <details class="card collapsible" id="linkedin-section">
+            <summary class="collapsible-summary">
+              <div class="collapsible-summary-text">
+                <h2>LinkedIn text <span class="badge">optional</span></h2>
+                <p class="card-hint">Paste your About, Experience, or Skills sections to improve keyword matching.</p>
               </div>
-            </form>
-          </section>
-
-          <form id="analyze-form">
-            <section class="wizard-card">
-              <p class="section-kicker">Current prompt</p>
-              <h3 id="wizard-question-title">Target role</h3>
-              <p id="wizard-question-copy" class="panel-copy">Tell me the role you want this resume tailored for.</p>
-              <div id="wizard-answer" class="wizard-answer">Nothing saved yet.</div>
-            </section>
-
-            <section id="resume-upload-card" class="wizard-card hidden">
-              <p class="section-kicker">Resume file</p>
-              <label class="file-picker">
-                <span>Upload PDF, TXT, or MD</span>
-                <input id="resume-file" name="resumeFile" type="file" accept=".pdf,.txt,.md" />
-              </label>
-              <p id="resume-file-state" class="panel-copy">No file selected.</p>
-            </section>
-
-            <section class="wizard-card wizard-summary">
-              <p class="section-kicker">Collected</p>
-              <div id="collected-summary" class="collected-summary"></div>
-            </section>
-
-            <div class="wizard-hidden-fields">
-              <input id="target-role" name="targetRole" />
-              <input id="linkedin-url" name="linkedinUrl" />
-              <textarea id="linkedin-text" name="linkedinText" rows="10"></textarea>
-              <textarea id="resume-text" name="resumeText" rows="10"></textarea>
-              <label>
-                AI rewrite tone
-                <select id="rewrite-style" name="rewriteStyle">
-                  <option value="concise">Concise</option>
-                  <option value="executive">Executive</option>
-                  <option value="technical">Technical</option>
-                </select>
-              </label>
+              <svg class="chevron" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="m6 9 6 6 6-6"/>
+              </svg>
+            </summary>
+            <div class="collapsible-body">
+              <textarea id="linkedin-text" name="linkedinText" rows="6" placeholder="Paste your LinkedIn About, Experience, or Skills sections here..."></textarea>
             </div>
+          </details>
 
-            <div class="action-row">
-              <button id="generate-draft-button" type="submit">Generate draft</button>
-              <button class="button-secondary" data-go-step="1" type="button">Back</button>
+          <div id="form-error" class="form-error hidden" role="alert"></div>
+
+          <button type="submit" id="analyze-btn" class="btn-primary btn-block">
+            <span id="analyze-label">Analyze my resume</span>
+          </button>
+
+        </form>
+      </div>
+    </main>
+
+    <!-- ══════════════════════════════════════════════════════════════
+         VIEW 2: SECTION EDITOR  (guided, one section at a time)
+    ══════════════════════════════════════════════════════════════ -->
+    <main id="view-editor" class="view hidden">
+      <nav class="app-nav">
+        <div class="container app-nav-inner">
+          <button id="editor-back-btn" type="button" class="btn-ghost">← Back</button>
+          <span class="wordmark">Resume Refresh</span>
+          <span id="step-counter" class="step-counter" aria-live="polite"></span>
+        </div>
+      </nav>
+
+      <div class="container editor-body">
+
+        <!-- Progress bar -->
+        <div class="progress-wrap" aria-hidden="true">
+          <div id="editor-progress" class="progress-fill"></div>
+        </div>
+
+        <!-- Loading state (shown while API call is in flight) -->
+        <div id="editor-loading" class="loading-state">
+          <div class="spinner" aria-hidden="true"></div>
+          <p id="editor-loading-msg" class="loading-msg">Analyzing your resume...</p>
+        </div>
+
+        <!-- Section panel (populated dynamically after analysis) -->
+        <div id="editor-panel" class="editor-panel hidden">
+          <!-- injected by JS -->
+        </div>
+
+        <!-- Editor action buttons -->
+        <div id="editor-actions" class="editor-actions hidden">
+          <button id="editor-skip" type="button" class="btn-ghost">Skip section</button>
+          <button id="editor-continue" type="button" class="btn-primary">Continue →</button>
+        </div>
+
+      </div>
+    </main>
+
+    <!-- ══════════════════════════════════════════════════════════════
+         VIEW 3: FINAL REVIEW + EXPORT
+    ══════════════════════════════════════════════════════════════ -->
+    <main id="view-final" class="view hidden">
+      <nav class="app-nav">
+        <div class="container app-nav-inner">
+          <button id="final-back-btn" type="button" class="btn-ghost">← Edit sections</button>
+          <span class="wordmark">Resume Refresh</span>
+        </div>
+      </nav>
+
+      <div class="container final-body">
+
+        <!-- Assembled draft -->
+        <section class="final-block">
+          <div class="block-head">
+            <h2>Your resume</h2>
+            <div class="export-row">
+              <button id="download-docx" type="button" class="btn-secondary">DOCX</button>
+              <button id="download-pdf"  type="button" class="btn-secondary">PDF</button>
             </div>
-          </form>
+          </div>
+          <pre id="final-draft" class="resume-pre resume-pre-editable" contenteditable="true" spellcheck="false" role="textbox" aria-multiline="true" aria-label="Resume draft — editable"></pre>
         </section>
-      </section>
 
-      <section class="step-pane hidden" data-step="3">
-        <div class="results flow-stack">
-          <div class="card">
-            <h2>Snapshot</h2>
-            <div id="snapshot" class="snapshot-list"></div>
+        <!-- Improvement notes -->
+        <section class="final-block" id="notes-block">
+          <h2>Key improvements</h2>
+          <div id="final-notes" class="notes-list"></div>
+        </section>
+
+        <!-- AI Polish (optional) -->
+        <section class="final-block ai-block">
+          <div class="block-head">
+            <h2>Refine this draft</h2>
+            <p class="card-hint">Choose a focus area to polish your resume. Each pass is targeted and reversible.</p>
           </div>
 
-          <div class="card">
-            <h2>Top fixes</h2>
-            <div id="suggestions"></div>
+          <!-- Result (shown after AI runs — sits above the action buttons) -->
+          <div id="ai-result" class="hidden">
+            <div class="ai-result-header">
+              <div class="ai-result-header-left">
+                <p class="label-muted" id="ai-result-label">AI-revised version</p>
+              </div>
+              <div class="export-row">
+                <button id="download-rewrite-docx" type="button" class="btn-secondary">DOCX</button>
+                <button id="download-rewrite-pdf"  type="button" class="btn-secondary">PDF</button>
+              </div>
+            </div>
+            <pre id="ai-rewrite" class="resume-pre resume-pre-editable" contenteditable="true" spellcheck="false" role="textbox" aria-multiline="true" aria-label="AI-revised resume — editable"></pre>
+            <div id="ai-notes" class="ai-notes"></div>
           </div>
 
-          <div class="card">
-            <h2>Draft</h2>
-            <pre id="draft">Run analysis to generate a draft.</pre>
+          <!-- Action buttons (always visible) -->
+          <div id="ai-idle" class="ai-idle">
+            <p id="ai-hint" class="hint-text"></p>
+            <p id="ai-next-label" class="ai-next-label hidden">Run another pass:</p>
+            <div class="ai-actions" id="ai-actions">
+              <button class="btn-secondary ai-action-btn" data-action="tighten" type="button">
+                <span class="ai-action-label">Tighten wording</span>
+                <span class="ai-action-desc">Remove filler, reduce wordiness</span>
+              </button>
+              <button class="btn-secondary ai-action-btn" data-action="ats" type="button">
+                <span class="ai-action-label">Improve ATS match</span>
+                <span class="ai-action-desc">Add keywords from target role</span>
+              </button>
+              <button class="btn-secondary ai-action-btn" data-action="tailor" type="button">
+                <span class="ai-action-label">Tailor to target role</span>
+                <span class="ai-action-desc">Emphasize the most relevant experience</span>
+              </button>
+              <button class="btn-secondary ai-action-btn" data-action="shorten" type="button">
+                <span class="ai-action-label">Shorten to one page</span>
+                <span class="ai-action-desc">Cut low-signal content, keep impact</span>
+              </button>
+              <button class="btn-secondary ai-action-btn" data-action="strengthen-bullets" type="button">
+                <span class="ai-action-label">Strengthen bullets</span>
+                <span class="ai-action-desc">Better verbs, clearer scope, quantified results</span>
+              </button>
+            </div>
           </div>
+        </section>
+
+        <!-- Footer actions -->
+        <div class="final-footer">
+          <button id="start-over" type="button" class="btn-secondary">Start over</button>
         </div>
-        <div class="action-row action-bar">
-          <button class="button-secondary" data-go-step="2" type="button">Back</button>
-          <button id="rewrite-button" type="button">AI Rewrite</button>
-          <button id="download-draft-docx" class="button-secondary" type="button">Download DOCX</button>
-          <button id="download-draft-pdf" class="button-secondary" type="button">Download PDF</button>
-        </div>
-      </section>
 
-      <section class="step-pane hidden" data-step="4">
-        <div class="results flow-stack">
-          <div class="card">
-            <h2>AI Rewrite</h2>
-            <pre id="ai-rewrite">Run AI rewrite to see the polished version.</pre>
-          </div>
-
-          <div class="card">
-            <h2>AI Notes</h2>
-            <div id="ai-notes" class="notes-list"></div>
-          </div>
-        </div>
-        <div class="action-row action-bar">
-          <button class="button-secondary" data-go-step="3" type="button">Back</button>
-          <button class="button-secondary" data-go-step="2" type="button">Edit inputs</button>
-          <button id="download-rewrite-docx" class="button-secondary" type="button">Download DOCX</button>
-          <button id="download-rewrite-pdf" class="button-secondary" type="button">Download PDF</button>
-        </div>
-      </section>
+      </div>
     </main>
 
     <script src="/app.js" type="module"></script>

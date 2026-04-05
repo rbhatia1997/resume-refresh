@@ -109,3 +109,33 @@ EXPERIENCE
   assert.ok(Array.isArray(result.lint.failingBullets));
   assert.ok(result.lint.failingBullets.length >= 1);
 });
+
+test("analyzeResume returns section-scoped suggestions so guidance stays grounded", () => {
+  const result = analyzeResume({
+    linkedinText: "Product leader with growth, experimentation, SQL, and stakeholder management across B2B SaaS.",
+    resumeText: `
+Jane Doe
+
+SUMMARY
+Product leader with experience in growth, experimentation, onboarding, monetization, SQL, and stakeholder management across B2B SaaS.
+
+EXPERIENCE
+Product Manager, Atlas | 2022-2025
+- Led onboarding roadmap across signup and activation
+
+SKILLS
+Communication
+SQL
+Storytelling
+
+EDUCATION
+University of California, Berkeley
+`,
+    targetRole: "Senior Product Manager"
+  });
+
+  assert.ok(Array.isArray(result.sectionSuggestions.skills));
+  assert.ok(result.sectionSuggestions.skills.every((item) => item.sectionId === "skills"));
+  assert.ok(result.sectionSuggestions.education.every((item) => item.sectionId === "education"));
+  assert.ok(result.sectionSuggestions.education.every((item) => !item.detail.includes("stakeholder management across B2B SaaS")));
+});
