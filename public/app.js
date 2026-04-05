@@ -103,6 +103,7 @@ for (const tab of tabButtons) {
     }
     tabUploadEl.classList.toggle('hidden', target !== 'upload');
     tabPasteEl.classList.toggle('hidden',  target !== 'paste');
+    clearFormError();
   });
 }
 
@@ -436,7 +437,11 @@ startOverBtn.addEventListener('click', () => {
   state.approved       = {};
   state.candidateName  = '';
   state.lastPayload    = null;
+  state.rewriteInFlight = false;
   aiResultEl.classList.add('hidden');
+  analyzeBtnEl.disabled = false;
+  analyzeLabelEl.textContent = 'Analyze my resume';
+  clearFormError();
   setView('intake');
 });
 

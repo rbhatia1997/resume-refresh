@@ -181,11 +181,11 @@ export async function handleRequest(request, { serveStatic = true } = {}) {
       enforceSameOrigin(request);
       enforceRateLimit(request, "export", { limit: 12, windowMs: 60_000 });
       const body = await readJsonBody(request);
-      return exportResume(body);
+      return await exportResume(body);
     }
 
     if (serveStatic) {
-      return serveStaticAsset(url.pathname);
+      return await serveStaticAsset(url.pathname);
     }
 
     return textResponse("Not found", { status: 404 });
@@ -840,8 +840,25 @@ async function buildDocx(text) {
   return Packer.toBuffer(doc);
 }
 
+function sanitizeForWinAnsi(str) {
+  // pdf-lib's Standard fonts use WinAnsi encoding (Windows-1252).
+  // Replace common Unicode typography chars that AI output may include,
+  // then drop anything still outside the Latin-1 range.
+  return String(str)
+    .replace(/[→⇒⟶➜➡]/g, "->")
+    .replace(/[←⟵⬅]/g, "<-")
+    .replace(/[–—]/g, "-")
+    .replace(/[""]/g, '"')
+    .replace(/['']/g, "'")
+    .replace(/[…]/g, "...")
+    .replace(/[•·▪▸◦]/g, "-")
+    .replace(/[✓✔]/g, "v")
+    .replace(/[✗✘]/g, "x")
+    .replace(/[^\x00-\xFF]/g, " ");
+}
+
 async function buildPdf(text) {
-  const sections = parseResumeForExport(text);
+  const sections = parseResumeForExport(sanitizeForWinAnsi(text));
   const pdf = await PDFDocument.create();
   let page = pdf.addPage([612, 792]);
   const font = await pdf.embedFont(StandardFonts.Helvetica);
@@ -867,7 +884,7 @@ async function buildPdf(text) {
       color = rgb(0.07, 0.11, 0.13),
       indent = 0
     } = options;
-    const lines = wrapText(textValue, currentFont, size, maxWidth - indent);
+    const lines = wrapText(sanitizeForWinAnsi(textValue), currentFont, size, maxWidth - indent);
     for (const line of lines) {
       ensureSpace(lineHeight);
       page.drawText(line, {
