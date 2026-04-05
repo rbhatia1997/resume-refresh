@@ -32,6 +32,14 @@ if (process.env.NODE_ENV === "production" && !hasSecureAppSecret) {
   throw new Error("FATAL: APP_SECRET must be set to a strong random value in production. Do not use the default.");
 }
 
+class AppError extends Error {
+  constructor(message, { status = 400 } = {}) {
+    super(message);
+    this.name = "AppError";
+    this.status = status;
+  }
+}
+
 const mimeTypes = {
   ".html": "text/html; charset=utf-8",
   ".css": "text/css; charset=utf-8",
