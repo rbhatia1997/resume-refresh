@@ -5,9 +5,11 @@ import { promises as fs, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Document, Packer, Paragraph, TextRun } from "docx";
-import OpenAI from "openai";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { analyzeResume } from "./resume-analyzer.js";
+import { normalizeInputText } from "./text-normalizer.js";
+import { buildResumeValidationFromText } from "./resume-validator.js";
+import { callModel, isModelConfigured, getProviderLabel } from "./inference.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, "..");
@@ -24,9 +26,11 @@ const linkedInClientId = process.env.LINKEDIN_CLIENT_ID || process.env.LI_CLIENT
 const linkedInClientSecret = process.env.LINKEDIN_CLIENT_SECRET || process.env.LI_CLIENT_SECRET || "";
 const linkedInScopes = (process.env.LINKEDIN_SCOPES || "openid profile email").trim();
 const appSecret = process.env.APP_SECRET || process.env.SESSION_SECRET || "dev-only-secret-change-me";
-const openAiApiKey = process.env.OPENAI_API_KEY || "";
 const hasSecureAppSecret = process.env.NODE_ENV !== "production" || appSecret !== "dev-only-secret-change-me";
-const openai = openAiApiKey ? new OpenAI({ apiKey: openAiApiKey }) : null;
+
+if (process.env.NODE_ENV === "production" && !hasSecureAppSecret) {
+  throw new Error("FATAL: APP_SECRET must be set to a strong random value in production. Do not use the default.");
+}
 
 const mimeTypes = {
   ".html": "text/html; charset=utf-8",
@@ -50,9 +54,10 @@ export async function handleRequest(request, { serveStatic = true } = {}) {
 
     if (request.method === "GET" && url.pathname === "/api/config") {
       return jsonResponse({
-        linkedInAuthEnabled: Boolean(linkedInClientId && linkedInClientSecret && hasSecureAppSecret),
-        requiresAppSecret: !hasSecureAppSecret,
-        openAiRewriteEnabled: Boolean(openai)
+        linkedInAuthEnabled:  Boolean(linkedInClientId && linkedInClientSecret && hasSecureAppSecret),
+        requiresAppSecret:    !hasSecureAppSecret,
+        openAiRewriteEnabled: isModelConfigured(),
+        inferenceProvider:    getProviderLabel()
       });
     }
 
@@ -131,20 +136,34 @@ export async function handleRequest(request, { serveStatic = true } = {}) {
       enforceSameOrigin(request);
       enforceRateLimit(request, "analyze", { limit: 20, windowMs: 60_000 });
       const body = await readJsonBody(request);
-      const resolvedResumeText = await extractResumeText(body);
+      const rawResumeText = await extractResumeText(body);
+      const targetRoleInput = String(body.targetRole || "").trim();
+      const linkedinTextInput = String(body.linkedinText || "").trim();
+      if (targetRoleInput.length > 500) {
+        throw new Error("Target role is too long (max 500 characters).");
+      }
+      if (linkedinTextInput.length > 50_000) {
+        throw new Error("LinkedIn text is too long (max 50,000 characters).");
+      }
       const session = getSession(request);
       const linkedInProfileText = profileToText(session?.profile);
-      const linkedInText = [linkedInProfileText, body.linkedinText || ""].filter(Boolean).join("\n");
+
+      // Normalize messy pasted content before analysis
+      const cleanedResumeText  = normalizeInputText(rawResumeText);
+      const cleanedLinkedInText = normalizeInputText(
+        [linkedInProfileText, body.linkedinText || ""].filter(Boolean).join("\n")
+      );
+
       const result = analyzeResume({
-        linkedinText: linkedInText,
-        linkedinUrl: body.linkedinUrl || "",
-        resumeText: resolvedResumeText,
-        targetRole: body.targetRole || ""
+        linkedinText: cleanedLinkedInText,
+        linkedinUrl:  body.linkedinUrl || "",
+        resumeText:   cleanedResumeText,
+        targetRole:   body.targetRole || ""
       });
 
       return jsonResponse({
         ...result,
-        extractedResumeText: resolvedResumeText,
+        extractedResumeText: cleanedResumeText,
         linkedInProfile: session?.profile || null
       });
     }
@@ -152,7 +171,7 @@ export async function handleRequest(request, { serveStatic = true } = {}) {
     if (request.method === "POST" && url.pathname === "/api/rewrite") {
       enforceSameOrigin(request);
       enforceRateLimit(request, "rewrite", { limit: 8, windowMs: 60_000 });
-      assertOpenAiConfigured();
+      assertModelConfigured();
       const body = await readJsonBody(request);
       const rewritten = await rewriteWithOpenAI(body);
       return jsonResponse(rewritten);
@@ -201,15 +220,22 @@ function loadDotEnv() {
   }
 }
 
+function withTimeout(promise, ms, errorMsg) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(errorMsg)), ms))
+  ]);
+}
+
 function assertSecureAppSecret() {
   if (!hasSecureAppSecret) {
     throw new Error("APP_SECRET must be set in production.");
   }
 }
 
-function assertOpenAiConfigured() {
-  if (!openai) {
-    throw new Error("OPENAI_API_KEY is not configured.");
+function assertModelConfigured() {
+  if (!isModelConfigured()) {
+    throw new Error("No inference provider configured. Set OPENAI_API_KEY or configure Ollama.");
   }
 }
 
@@ -274,6 +300,7 @@ function getBaseUrl(request) {
 }
 
 function getSecurityHeaders(contentType = "text/plain; charset=utf-8") {
+  const isHttps = isSecureCookie();
   return {
     "content-type": contentType,
     "x-content-type-options": "nosniff",
@@ -281,7 +308,9 @@ function getSecurityHeaders(contentType = "text/plain; charset=utf-8") {
     "x-frame-options": "DENY",
     "permissions-policy": "camera=(), microphone=(), geolocation=()",
     "cache-control": contentType.includes("text/html") ? "public, max-age=0, must-revalidate" : "no-store",
-    "content-security-policy": "default-src 'self'; img-src 'self' https: data:; style-src 'self'; script-src 'self'; connect-src 'self'; base-uri 'self'; form-action 'self' https://www.linkedin.com; frame-ancestors 'none'"
+    "content-security-policy": "default-src 'self'; img-src 'self' https: data:; style-src 'self'; script-src 'self'; connect-src 'self'; base-uri 'self'; form-action 'self' https://www.linkedin.com; frame-ancestors 'none'",
+    // HSTS: only emit on HTTPS — prevents downgrade attacks in production
+    ...(isHttps ? { "strict-transport-security": "max-age=63072000; includeSubDomains" } : {})
   };
 }
 
@@ -441,7 +470,11 @@ async function extractResumeText({ resumeText = "", resumeFileName = "", resumeF
   const extension = path.extname(resumeFileName).toLowerCase();
   if (extension === ".pdf") {
     const pdfParse = require("pdf-parse");
-    const parsed = await pdfParse(buffer);
+    const parsed = await withTimeout(
+      pdfParse(buffer),
+      30_000,
+      "PDF parsing timed out. Try a smaller file or paste the text instead."
+    );
     return parsed.text.trim();
   }
 
@@ -452,11 +485,67 @@ async function extractResumeText({ resumeText = "", resumeFileName = "", resumeF
   throw new Error("Unsupported file type. Use PDF, TXT, or MD.");
 }
 
+const AI_ACTION_INSTRUCTIONS = {
+  tighten: [
+    "TASK: Tighten wording only. Remove filler words, redundant phrases, and padding.",
+    "Do not change the structure, order, or content of any section.",
+    "Keep every experience entry, every bullet, and every role.",
+    "Do not add new content. Only remove unnecessary words.",
+    "Target: each bullet should be scannable in under 2 seconds.",
+  ],
+  ats: [
+    "TASK: Improve ATS keyword match for the target role.",
+    "Identify 5-10 keywords from the target role context that are missing or underused.",
+    "Weave them naturally into existing bullets and the summary — do NOT stuff keywords.",
+    "Do not add fake experience. Only use skills/technologies already implied by the source.",
+    "Keep all original experience entries intact.",
+  ],
+  tailor: [
+    "TASK: Tailor the resume to the specific target role.",
+    "Move the most relevant experience to the front of the experience section.",
+    "Reorder bullets within each role to lead with the most relevant impact.",
+    "Adjust the summary to speak directly to the target role's priorities.",
+    "Do not remove roles — reorder and re-emphasize only.",
+  ],
+  shorten: [
+    "TASK: Shorten the resume to fit one page.",
+    "Remove the lowest-signal bullets (vague, redundant, or least relevant to the target role).",
+    "Tighten wording throughout.",
+    "Keep all roles and companies — only remove individual bullets, not entire jobs.",
+    "Aim for 400-550 words in the output. Note in 'notes' what was removed and why.",
+  ],
+  "strengthen-bullets": [
+    "TASK: Strengthen experience bullets only. Do not change the summary, skills, or education.",
+    "For each bullet: ensure it starts with a strong past-tense action verb.",
+    "Rewrite bullets that use 'helped', 'worked on', 'responsible for', 'assisted with'.",
+    "Where possible, add or clarify the outcome (business impact, metric, scope).",
+    "Do not invent metrics. Use 'X%' only if there is a basis in the original text.",
+    "Preserve all roles, companies, and dates exactly.",
+    "In 'bullet_improvements', list each changed bullet as 'Before → After: [reason]'.",
+  ],
+};
+
+const AI_ACTION_SYSTEM_BASE = [
+  "You are an expert resume editor. Follow these rules in ALL actions:",
+  "",
+  "CRITICAL: The 'Target role context' is for your understanding only.",
+  "NEVER copy it verbatim into the resume. NEVER output first-person sentences from it.",
+  "NEVER write 'I am applying to...' or 'I want...' in the resume output.",
+  "",
+  "Core rules:",
+  "- Never invent titles, companies, dates, or metrics",
+  "- Never delete a role or company silently",
+  "- Use past tense for past roles, present tense for current role",
+  "- No first-person pronouns in bullets",
+  "- ATS-safe section headings: SUMMARY, EXPERIENCE, SKILLS, EDUCATION",
+  "- No buzzwords: 'results-driven', 'passionate', 'innovative', 'synergy'",
+].join("\n");
+
 async function rewriteWithOpenAI(body) {
-  const resumeText = String(body.resumeText || "").trim();
+  const resumeText   = String(body.resumeText   || "").trim();
   const linkedinText = String(body.linkedinText || "").trim();
-  const targetRole = String(body.targetRole || "").trim();
-  const style = String(body.style || "concise").trim();
+  const targetRole   = String(body.targetRole   || "").trim();
+  const action       = String(body.action || body.style || "tighten").trim();
 
   if (!resumeText && !linkedinText) {
     throw new Error("Provide resume or LinkedIn text first.");
@@ -464,62 +553,34 @@ async function rewriteWithOpenAI(body) {
 
   const sourceText = [resumeText, linkedinText].filter(Boolean).join("\n\n");
   if (sourceText.length > maxRewriteChars) {
-    throw new Error("Input is too long for AI rewrite. Trim it below 18,000 characters.");
+    throw new Error("Input is too long for AI action. Trim it below 18,000 characters.");
   }
 
-  const response = await openai.responses.create({
-    model: "gpt-4.1-mini",
-    input: [
-      {
-        role: "system",
-        content: [
-          {
-            type: "input_text",
-            text: "You are an expert resume writer following strict career-center guidance. Every experience bullet must aim for: strong action verb -> activity or scope -> result. Use present tense for current work and past tense for past work when the source makes that clear. Avoid filler phrasing like 'helped with', 'worked on', 'responsible for', or 'assisted with'. Never invent facts, titles, dates, or metrics. If the source does not support a result, keep the bullet truthful and concise, then note the missing impact separately."
-          }
-        ]
-      },
-      {
-        role: "user",
-        content: [
-          {
-            type: "input_text",
-            text: `Target role: ${targetRole || "Not provided"}\nPreferred style: ${style}\n\nSource material:\n${sourceText}\n\nReturn JSON with keys: summary, rewritten_resume, bullet_improvements, notes.\n- summary: 1 short sentence.\n- rewritten_resume: plain text resume with sections in this order when present: SUMMARY, EXPERIENCE, SKILLS, EDUCATION.\n- Only include a section if the source actually supports it. Do not output placeholders like \"Not provided\", \"N/A\", or empty section shells.\n- EXPERIENCE bullets must be recruiter-friendly and compact. Each bullet should answer, in one line if possible: what the person owned or did, how they did it, and what changed.\n- Prefer credible wording over inflated wording.\n- Keep bullets scannable and avoid first person.\n- bullet_improvements: an array of short before/after style guidance focused on ownership, action, and impact.\n- notes: caveats where facts, metrics, dates, or scope are missing.\nDo not use fake metrics. Do not use fluff or generic buzzwords.`
-          }
-        ]
-      }
-    ],
-    text: {
-      format: {
-        type: "json_schema",
-        name: "resume_rewrite",
-        schema: {
-          type: "object",
-          additionalProperties: false,
-          properties: {
-            summary: { type: "string" },
-            rewritten_resume: { type: "string" },
-            bullet_improvements: {
-              type: "array",
-              items: { type: "string" }
-            },
-            notes: {
-              type: "array",
-              items: { type: "string" }
-            }
-          },
-          required: ["summary", "rewritten_resume", "bullet_improvements", "notes"]
-        }
-      }
-    }
-  });
+  const actionInstructions = (AI_ACTION_INSTRUCTIONS[action] || AI_ACTION_INSTRUCTIONS.tighten).join("\n");
 
-  const payload = JSON.parse(response.output_text || "{}");
+  const userPrompt = [
+    `Target role context (context only — do NOT copy verbatim): ${targetRole || "Not specified"}`,
+    "",
+    actionInstructions,
+    "",
+    "Source resume:",
+    sourceText,
+    "",
+    "Return JSON with keys: summary, rewritten_resume, bullet_improvements, notes.",
+    "- summary: 1 sentence describing what this action changed and why.",
+    "- rewritten_resume: the full revised plain text resume.",
+    "  Include ONLY sections present in the source. No placeholder text.",
+    "- bullet_improvements: array of strings explaining what changed (before → after + reason).",
+    "- notes: caveats, limitations, or suggestions for the user to review manually.",
+  ].join("\n");
+
+  const rawJson  = await callModel(AI_ACTION_SYSTEM_BASE, userPrompt);
+  const payload  = JSON.parse(rawJson || "{}");
   return {
-    summary: payload.summary || "",
-    rewrittenResume: payload.rewritten_resume || "",
+    summary:            payload.summary || "",
+    rewrittenResume:    payload.rewritten_resume || "",
     bulletImprovements: Array.isArray(payload.bullet_improvements) ? payload.bullet_improvements : [],
-    notes: Array.isArray(payload.notes) ? payload.notes : []
+    notes:              Array.isArray(payload.notes) ? payload.notes : []
   };
 }
 
@@ -558,11 +619,13 @@ function textResponse(text, { status = 200 } = {}) {
 }
 
 function binaryResponse(buffer, contentType, fileName) {
+  const asciiName = String(fileName).replace(/[^\x20-\x7E]/g, "_").replace(/"/g, "_");
+  const encodedName = encodeURIComponent(String(fileName));
   return new Response(buffer, {
     status: 200,
     headers: {
       ...getSecurityHeaders(contentType),
-      "content-disposition": `attachment; filename="${fileName}"`
+      "content-disposition": `attachment; filename="${asciiName}"; filename*=UTF-8''${encodedName}`
     }
   });
 }
@@ -601,12 +664,18 @@ function withCookies(response, cookies) {
 }
 
 async function exportResume(body) {
-  const text = String(body.text || "").trim();
-  const format = String(body.format || "").trim().toLowerCase();
-  const fileStem = sanitizeFileStem(String(body.fileName || "resume-refresh"));
+  const text          = String(body.text || "").trim();
+  const format        = String(body.format || "").trim().toLowerCase();
+  const candidateName = String(body.candidateName || "").trim();
+  const fileStem      = formatExportFileStem(candidateName);
 
   if (!text) {
     throw new Error("Nothing to export yet.");
+  }
+
+  // Only block truly empty-content issues; relaxed format checks are handled in editor
+  if (text.length < 20) {
+    throw new Error("Resume content is too short to export.");
   }
 
   if (format === "docx") {
@@ -622,8 +691,23 @@ async function exportResume(body) {
   throw new Error("Unsupported export format.");
 }
 
-function sanitizeFileStem(fileName) {
-  return fileName.toLowerCase().replace(/[^a-z0-9-_]+/g, "-").replace(/^-+|-+$/g, "") || "resume-refresh";
+/**
+ * Format a candidate name into a clean export filename.
+ * "Jane Smith" → "JaneSmith_Resume"
+ * Fallback: "resume-refresh_resume"
+ */
+function formatExportFileStem(candidateName = "") {
+  const name = String(candidateName || "").trim();
+  if (!name) return "resume-refresh_resume";
+
+  const parts = name
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(p => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase())
+    .filter(p => /^[A-Za-z]/.test(p)); // exclude numeric/symbol tokens
+
+  if (parts.length < 2) return "resume-refresh_resume";
+  return `${parts.join("")}_Resume`;
 }
 
 function parseResumeForExport(text) {
@@ -642,7 +726,14 @@ function parseResumeForExport(text) {
     ["skills", "skills"],
     ["core skills", "skills"],
     ["technical skills", "skills"],
-    ["education", "education"]
+    ["education", "education"],
+    ["projects", "projects"],
+    ["interests", "interests"],
+    ["certifications", "certifications"],
+    ["community", "community"],
+    ["leadership", "community"],
+    ["volunteer", "community"],
+    ["volunteering", "community"]
   ]);
 
   const sections = {
@@ -650,7 +741,11 @@ function parseResumeForExport(text) {
     summary: [],
     experience: [],
     skills: [],
-    education: []
+    education: [],
+    projects: [],
+    certifications: [],
+    community: [],
+    interests: []
   };
   let current = "header";
 
@@ -702,7 +797,11 @@ async function buildDocx(text) {
     ["Summary", "summary"],
     ["Experience", "experience"],
     ["Skills", "skills"],
-    ["Education", "education"]
+    ["Education", "education"],
+    ["Projects", "projects"],
+    ["Certifications", "certifications"],
+    ["Community", "community"],
+    ["Interests", "interests"]
   ]) {
     const lines = sections[key].filter((line) => line !== "");
     if (!lines.length) {
@@ -803,7 +902,11 @@ async function buildPdf(text) {
     ["SUMMARY", "summary"],
     ["EXPERIENCE", "experience"],
     ["SKILLS", "skills"],
-    ["EDUCATION", "education"]
+    ["EDUCATION", "education"],
+    ["PROJECTS", "projects"],
+    ["CERTIFICATIONS", "certifications"],
+    ["COMMUNITY", "community"],
+    ["INTERESTS", "interests"]
   ]) {
     const lines = sections[key].filter((line) => line !== "");
     if (!lines.length) {
