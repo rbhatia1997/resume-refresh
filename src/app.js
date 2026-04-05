@@ -16,7 +16,7 @@ const projectRoot = path.resolve(__dirname, "..");
 const publicDir = path.resolve(projectRoot, "public");
 const sessionCookieName = "resume_refresh_session";
 const maxBodyBytes = 6 * 1024 * 1024;
-const maxRewriteChars = 18000;
+const maxRewriteChars = 10000;
 const rateLimits = new Map();
 const require = createRequire(import.meta.url);
 
@@ -190,9 +190,10 @@ export async function handleRequest(request, { serveStatic = true } = {}) {
 
     return textResponse("Not found", { status: 404 });
   } catch (error) {
+    const status = (error instanceof AppError) ? error.status : 400;
     return jsonResponse({
       error: error instanceof Error ? error.message : "Unknown error"
-    }, { status: 400 });
+    }, { status });
   }
 }
 
@@ -271,7 +272,7 @@ function enforceRateLimit(request, action, { limit, windowMs }) {
   rateLimits.set(key, bucket);
 
   if (bucket.count > limit) {
-    throw new Error("Too many requests. Please wait a minute and try again.");
+    throw new AppError("Too many requests. Please wait a minute and try again.", { status: 429 });
   }
 }
 
@@ -441,14 +442,19 @@ async function fetchLinkedInUser(accessToken) {
 }
 
 async function readJsonBody(request) {
+  const ct = (request.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
+  if (ct !== "application/json") {
+    throw new AppError("Content-Type must be application/json.", { status: 415 });
+  }
+
   const contentLength = Number(request.headers.get("content-length") || 0);
   if (contentLength > maxBodyBytes) {
-    throw new Error("Payload too large. Keep uploads under 6 MB.");
+    throw new AppError("Payload too large. Keep uploads under 6 MB.", { status: 413 });
   }
 
   const raw = await request.text();
   if (raw.length > maxBodyBytes) {
-    throw new Error("Payload too large. Keep uploads under 6 MB.");
+    throw new AppError("Payload too large. Keep uploads under 6 MB.", { status: 413 });
   }
   return raw ? JSON.parse(raw) : {};
 }
@@ -556,7 +562,10 @@ async function rewriteWithOpenAI(body) {
     throw new Error("Input is too long for AI action. Trim it below 18,000 characters.");
   }
 
-  const actionInstructions = (AI_ACTION_INSTRUCTIONS[action] || AI_ACTION_INSTRUCTIONS.tighten).join("\n");
+  if (!AI_ACTION_INSTRUCTIONS[action]) {
+    throw new AppError(`Unknown action "${action}".`, { status: 400 });
+  }
+  const actionInstructions = AI_ACTION_INSTRUCTIONS[action].join("\n");
 
   const userPrompt = [
     `Target role context (context only — do NOT copy verbatim): ${targetRole || "Not specified"}`,
@@ -780,16 +789,16 @@ async function buildDocx(text) {
 
   if (sections.header[0]) {
     paragraphs.push(new Paragraph({
-      children: [new TextRun({ text: sections.header[0], bold: true, size: 30 })],
-      spacing: { after: 120 }
+      children: [new TextRun({ text: sections.header[0], bold: true, size: 26 })],
+      spacing: { after: 80 }
     }));
   }
 
   const headerMeta = sections.header.slice(1).join("  |  ");
   if (headerMeta) {
     paragraphs.push(new Paragraph({
-      children: [new TextRun({ text: headerMeta, color: "555555", size: 20 })],
-      spacing: { after: 240 }
+      children: [new TextRun({ text: headerMeta, color: "555555", size: 18 })],
+      spacing: { after: 160 }
     }));
   }
 
@@ -809,13 +818,13 @@ async function buildDocx(text) {
     }
 
     paragraphs.push(new Paragraph({
-      children: [new TextRun({ text: title.toUpperCase(), bold: true, size: 18, color: "6B5B4D" })],
-      spacing: { before: 180, after: 120 }
+      children: [new TextRun({ text: title.toUpperCase(), bold: true, size: 17, color: "6B5B4D" })],
+      spacing: { before: 120, after: 60 }
     }));
 
     for (const line of sections[key]) {
       if (!line) {
-        paragraphs.push(new Paragraph({ spacing: { after: 120 } }));
+        paragraphs.push(new Paragraph({ spacing: { after: 60 } }));
         continue;
       }
 
@@ -823,7 +832,7 @@ async function buildDocx(text) {
       paragraphs.push(new Paragraph({
         text: isBullet ? line.replace(/^[-*•]\s*/, "") : line,
         bullet: isBullet ? { level: 0 } : undefined,
-        spacing: { after: isBullet ? 80 : 120 }
+        spacing: { after: isBullet ? 40 : 60 }
       }));
     }
   }
@@ -831,7 +840,11 @@ async function buildDocx(text) {
   const doc = new Document({
     sections: [
       {
-        properties: {},
+        properties: {
+          page: {
+            margin: { top: 720, bottom: 720, left: 864, right: 864 }
+          }
+        },
         children: paragraphs
       }
     ]
@@ -860,23 +873,24 @@ function sanitizeForWinAnsi(str) {
 async function buildPdf(text) {
   const sections = parseResumeForExport(sanitizeForWinAnsi(text));
   const pdf = await PDFDocument.create();
-  let page = pdf.addPage([612, 792]);
+  const page = pdf.addPage([612, 792]);
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   const boldFont = await pdf.embedFont(StandardFonts.HelveticaBold);
-  const fontSize = 11;
-  const lineHeight = 16;
-  const margin = 54;
+  const fontSize = 10;
+  const lineHeight = 14;
+  const margin = 46;
   const maxWidth = page.getWidth() - margin * 2;
   let y = page.getHeight() - margin;
+  let clipped = false;
 
   const ensureSpace = (required = lineHeight) => {
     if (y < margin + required) {
-      page = pdf.addPage([612, 792]);
-      y = page.getHeight() - margin;
+      clipped = true;
     }
   };
 
   const drawWrapped = (textValue, options = {}) => {
+    if (clipped) return;
     const {
       x = margin,
       size = fontSize,
@@ -887,6 +901,7 @@ async function buildPdf(text) {
     const lines = wrapText(sanitizeForWinAnsi(textValue), currentFont, size, maxWidth - indent);
     for (const line of lines) {
       ensureSpace(lineHeight);
+      if (clipped) return;
       page.drawText(line, {
         x: x + indent,
         y,
@@ -931,35 +946,40 @@ async function buildPdf(text) {
     }
 
     ensureSpace(lineHeight * 2);
-    page.drawText(title, {
-      x: margin,
-      y,
-      size: 9,
-      font: boldFont,
-      color: rgb(0.42, 0.35, 0.28)
-    });
-    y -= lineHeight;
+    if (!clipped) {
+      page.drawText(title, {
+        x: margin,
+        y,
+        size: 9,
+        font: boldFont,
+        color: rgb(0.42, 0.35, 0.28)
+      });
+      y -= lineHeight;
+    }
 
     for (const line of sections[key]) {
+      if (clipped) break;
       if (!line) {
-        y -= 6;
+        y -= 4;
         continue;
       }
       if (/^[-*•]/.test(line)) {
         ensureSpace(lineHeight);
-        page.drawText("•", {
-          x: margin + 2,
-          y,
-          size: fontSize,
-          font: boldFont,
-          color: rgb(0.07, 0.11, 0.13)
-        });
-        drawWrapped(line.replace(/^[-*•]\s*/, ""), { indent: 14 });
+        if (!clipped) {
+          page.drawText("•", {
+            x: margin + 2,
+            y,
+            size: fontSize,
+            font: boldFont,
+            color: rgb(0.07, 0.11, 0.13)
+          });
+          drawWrapped(line.replace(/^[-*•]\s*/, ""), { indent: 14 });
+        }
       } else {
         drawWrapped(line);
       }
     }
-    y -= 8;
+    y -= 6;
   }
 
   return Buffer.from(await pdf.save());

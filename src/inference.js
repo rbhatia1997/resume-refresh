@@ -86,6 +86,8 @@ async function callOpenAI(systemPrompt, userPrompt) {
 
   const response = await client.responses.create({
     model: "gpt-4.1-mini",
+    max_output_tokens: 2048,
+    temperature: 0.2,
     input: [
       { role: "system", content: [{ type: "input_text", text: systemPrompt }] },
       { role: "user",   content: [{ type: "input_text", text: userPrompt   }] }
