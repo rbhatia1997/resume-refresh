@@ -83,7 +83,7 @@ EXPERIENCE
     targetRole: "Senior Product Manager"
   });
 
-  assert.match(result.rewrittenResume, /Executed onboarding improvements/);
+  assert.match(result.rewrittenResume, /Owned onboarding improvements/);
   assert.match(result.rewrittenResume, /Supported executive reporting/);
   assert.ok(result.suggestions.some((item) => item.title === "Replace weak bullet openers"));
   assert.ok(result.suggestions.some((item) => item.title === "Rewrite vague bullets into action and result bullets"));
