@@ -87,12 +87,14 @@ public/     Static frontend (HTML, CSS, JS)
 ## Security
 
 - Sessions signed with `APP_SECRET`
-- Rate-limited to 20 requests per hour per IP
+- Rate-limited per IP: 20 analyze / 8 rewrite / 12 export requests per minute
 - Security headers on all responses (CSP, X-Frame-Options, Referrer-Policy, Permissions-Policy, X-Content-Type-Options)
 - Request body and file upload size limits enforced
 - No resume data stored server-side
 
-## LinkedIn sign-in (optional)
+## LinkedIn sign-in (optional, not surfaced in the default UI)
+
+The server includes a LinkedIn OAuth flow, but the default UI uses paste-only for LinkedIn content. To enable sign-in:
 
 1. Create a LinkedIn app and enable `Sign In with LinkedIn using OpenID Connect`
 2. Fill in `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET`, and `PUBLIC_BASE_URL` in `.env`
