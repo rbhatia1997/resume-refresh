@@ -58,7 +58,7 @@ npm run test:e2e        # Playwright tests
 - Changes to `src/app.js` affect both local and Vercel deployments
 - The v1 frontend is in `public/app.js` (vanilla JS, no build step)
 - The v2 frontend is a React app in `prototype/` — run `npm run build:v2` to compile to `public/v2/`
-- Export logic (PDF and DOCX) lives in `src/app.js` around the `buildPDF` and `buildDOCX` functions
+- Export logic (PDF and DOCX) lives in `src/app.js` in `buildPdf` and `buildDocx`
 
 ## Environment
 
