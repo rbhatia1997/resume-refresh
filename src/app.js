@@ -4,7 +4,7 @@ import { createRequire } from "node:module";
 import { promises as fs, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { Document, Packer, Paragraph, TextRun, TabStopType, TabStopLeader } from "docx";
+import { Document, Packer, Paragraph, TextRun, TabStopType } from "docx";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { analyzeResume } from "./resume-analyzer.js";
 import { normalizeInputText } from "./text-normalizer.js";
@@ -888,7 +888,7 @@ async function buildDocx(text) {
         if (split) {
           // Job title line: role left, date right-aligned via tab stop
           paragraphs.push(new Paragraph({
-            tabStops: [{ type: TabStopType.RIGHT, position: 9360, leader: TabStopLeader.NONE }],
+            tabStops: [{ type: TabStopType.RIGHT, position: 9360 }],
             children: [
               new TextRun({ text: split.role, bold: false, size: 20 }),
               new TextRun({ text: "\t" }),
