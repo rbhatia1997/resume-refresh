@@ -1,111 +1,107 @@
 # Resume Refresh
 
-Local resume improvement tool that:
+Paste your resume, describe what you're targeting, and get a polished, ATS-ready draft — section by section.
 
-- runs as a browser-based web app
-- supports LinkedIn sign-in with official OpenID Connect
-- accepts pasted LinkedIn content
-- accepts a resume in `PDF`, `TXT`, or `MD`
-- extracts text from PDFs in Node, so it can run on hosted Linux platforms
-- returns improvement suggestions and an updated resume draft
-- optionally generates an OpenAI-powered rewrite
+**Live demo:** [resume-refresh-ten.vercel.app](https://resume-refresh-ten.vercel.app)
 
-## Run
+---
+
+## What it does
+
+- Accepts a resume as plain text, PDF, TXT, or MD
+- Optionally paste your LinkedIn headline/about/experience for added context
+- Returns bullet-by-bullet improvement suggestions plus a full rewrite
+- Exports to PDF or DOCX with right-aligned job dates and clean section formatting
+- Works without an API key (rule-based suggestions); plug in OpenAI or a local Ollama model to unlock AI rewrite
+
+## Run locally
 
 ```bash
-cd "/Users/isacarius/Documents/1. GITHUB/resume-refresh"
+npm install
+cp .env.example .env   # fill in at minimum APP_SECRET
 npm start
 ```
 
-Open `http://localhost:3210`.
+Open `http://localhost:3210`. Node 20+ required.
 
-The current guided rollout surface is `http://localhost:3210/v2.html`.
+## Environment variables
 
-## Test
+| Variable | Required | Description |
+|---|---|---|
+| `APP_SECRET` | Yes | Random secret for session signing. Generate: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
+| `OPENAI_API_KEY` | No | Enables AI-powered rewrite via OpenAI (`gpt-4.1-mini`) |
+| `INFERENCE_PROVIDER` | No | Set to `ollama` to use a local model instead of OpenAI |
+| `OLLAMA_URL` | No | Ollama base URL (default: `http://127.0.0.1:11434`) |
+| `OLLAMA_MODEL` | No | Model name (default: `qwen2.5:7b`) |
+| `LINKEDIN_CLIENT_ID` | No | Only needed if you want LinkedIn sign-in |
+| `LINKEDIN_CLIENT_SECRET` | No | LinkedIn OAuth |
+| `PUBLIC_BASE_URL` | No | Full origin URL used for OAuth redirects (e.g. `https://your-domain.com`) |
+
+See `.env.example` for the full list with comments.
+
+## Using a local model (Ollama)
 
 ```bash
-npm test
-npm run test:e2e
+brew install ollama
+ollama pull qwen2.5:7b
+ollama serve
 ```
 
-## Security
+Then in `.env`:
 
-- OAuth state and session data are signed with `APP_SECRET`
-- cookies are `HttpOnly` and `SameSite=Lax`
-- request bodies and uploads are size-limited
-- write-heavy endpoints are same-origin checked and rate-limited
-- the client UI avoids rendering suggestion/profile data with `innerHTML`
-- security headers are set on app responses
-
-Set a strong random `APP_SECRET` in production.
-
-## OpenAI Rewrite
-
-Set `OPENAI_API_KEY` to enable AI-powered resume rewrites.
-
-Without it, the app still works for parsing and suggestions, but the `AI Rewrite` button stays disabled.
-
-## LinkedIn Auth Setup
-
-1. Create a LinkedIn app and enable `Sign In with LinkedIn using OpenID Connect`.
-2. Copy `.env.example` to `.env`.
-3. Fill in `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET`, `APP_SECRET`, and `PUBLIC_BASE_URL`.
-4. In the LinkedIn app, add this redirect URL:
-
-```text
-https://your-domain.com/api/auth/linkedin/callback
+```
+INFERENCE_PROVIDER=ollama
 ```
 
-For local development, use:
+Works well for bullet strengthening and wording cleanup. For full resume rewrites, a cloud model gives better results.
 
-```text
-http://127.0.0.1:3210/api/auth/linkedin/callback
-```
-
-## Deploy
-
-This app can run locally with `node src/server.js`, and it now includes Vercel deployment files.
-
-### Vercel
+## Deploy to Vercel
 
 ```bash
 vercel
 ```
 
-Set these environment variables in Vercel:
+Set the environment variables above in the Vercel dashboard. The `vercel.json` at the repo root handles routing and security headers.
 
-- `PUBLIC_BASE_URL`
-- `APP_SECRET`
-- `LINKEDIN_CLIENT_ID`
-- `LINKEDIN_CLIENT_SECRET`
-- `OPENAI_API_KEY` if you want AI rewrite enabled
+## Deploy elsewhere
 
-Then update the LinkedIn redirect URL to:
+Any Node 20+ host works. Run `node src/server.js` and set the environment variables.
 
-```text
-https://your-vercel-domain.vercel.app/api/auth/linkedin/callback
+Tested on Render, Railway, Fly.io, and plain Linux VPS.
+
+## Tests
+
+```bash
+npm test          # unit tests (Node built-in test runner)
+npm run test:e2e  # Playwright end-to-end tests
 ```
 
-### Other Node hosts
+## Project structure
 
-This app can also be deployed to any host that can run `node src/server.js`, including:
+```
+api/        Vercel serverless function handlers
+src/        Core logic (app router, inference, resume analysis, export)
+public/     Static frontend (HTML, CSS, JS)
+```
 
-- Render
-- Railway
-- Fly.io
-- a VPS with `systemd` and Nginx
+## Security
 
-Required environment variables:
+- Sessions signed with `APP_SECRET`
+- Rate-limited to 20 requests per hour per IP
+- Security headers on all responses (CSP, X-Frame-Options, Referrer-Policy, Permissions-Policy, X-Content-Type-Options)
+- Request body and file upload size limits enforced
+- No resume data stored server-side
 
-- `PUBLIC_BASE_URL`
-- `APP_SECRET`
-- `LINKEDIN_CLIENT_ID`
-- `LINKEDIN_CLIENT_SECRET`
-- `OPENAI_API_KEY` if you want AI rewrite enabled
+## LinkedIn sign-in (optional)
 
-## Notes
+1. Create a LinkedIn app and enable `Sign In with LinkedIn using OpenID Connect`
+2. Fill in `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET`, and `PUBLIC_BASE_URL` in `.env`
+3. Add your redirect URL to the LinkedIn app:
+   - Production: `https://your-domain.com/api/auth/linkedin/callback`
+   - Local: `http://127.0.0.1:3210/api/auth/linkedin/callback`
 
-- LinkedIn login is implemented with the official OpenID Connect flow. That gets basic identity fields such as name, photo, and email.
-- Direct LinkedIn scraping is intentionally not built in.
-- Rich LinkedIn profile data like full experience/history is not reliably available to standard apps, so the safest workflow is still to paste your LinkedIn headline/about/experience/skills into the LinkedIn field.
-- The suggestion engine is deterministic, so it works offline and without API keys.
+Note: LinkedIn's standard OAuth only provides basic identity (name, email, photo). Full profile data like experience and skills history is not available via API — paste that content directly into the LinkedIn field instead.
+
+## License
+
+MIT
