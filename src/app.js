@@ -781,11 +781,40 @@ function parseResumeForExport(text) {
       continue;
     }
 
+    // Split pipe-separated header lines (e.g. "Name | City | email | phone") into
+    // individual header entries so name and contact render separately.
+    if (current === "header" && trimmed.includes(" | ")) {
+      const parts = trimmed.split(" | ").map(p => p.trim()).filter(Boolean);
+      for (const part of parts) sections.header.push(part);
+      continue;
+    }
+
     sections[current].push(trimmed);
   }
 
   for (const key of Object.keys(sections)) {
     sections[key] = sections[key].filter((line, index, list) => !(line === "" && list[index - 1] === ""));
+  }
+
+  // Merge AI-wrapped bullet continuations back into the preceding bullet.
+  // A continuation is a non-bullet, non-job-title line that immediately follows a bullet.
+  // Job-title lines are identified by containing " | " or a 4-digit year.
+  for (const key of ["experience", "summary", "education", "projects", "certifications", "community", "interests"]) {
+    const merged = [];
+    for (const line of sections[key]) {
+      if (line && merged.length > 0) {
+        const prev = merged[merged.length - 1];
+        const prevIsBullet = /^[-*•]/.test(prev);
+        const currIsBullet = /^[-*•]/.test(line);
+        const looksLikeJobLine = line.includes(" | ") || /\b(19|20)\d{2}\b/.test(line);
+        if (prevIsBullet && !currIsBullet && !looksLikeJobLine) {
+          merged[merged.length - 1] = prev + " " + line;
+          continue;
+        }
+      }
+      merged.push(line);
+    }
+    sections[key] = merged;
   }
 
   return sections;
@@ -907,10 +936,12 @@ async function buildPdf(text) {
       indent = 0
     } = options;
     const lines = wrapText(sanitizeForWinAnsi(textValue), currentFont, size, maxWidth - indent);
-    for (const line of lines) {
-      ensureSpace(lineHeight);
-      if (clipped) return;
-      page.drawText(line, {
+    // Compute how many complete lines fit before we run out of space.
+    const available = Math.max(0, Math.floor((y - margin) / lineHeight));
+    const toDraw = Math.min(lines.length, available);
+    if (toDraw < lines.length) clipped = true;
+    for (let i = 0; i < toDraw; i++) {
+      page.drawText(lines[i], {
         x: x + indent,
         y,
         size,
