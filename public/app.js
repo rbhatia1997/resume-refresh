@@ -467,7 +467,7 @@ intakeForm.addEventListener('submit', async e => {
       headers: { 'content-type': 'application/json' },
       body:    JSON.stringify(payload)
     });
-    const result = await res.json();
+    const result = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(result.error ?? 'Analysis failed. Please try again.');
 
     state.analysisResult = result;
@@ -565,7 +565,7 @@ async function triggerAiAction(action) {
     } finally {
       clearTimeout(timeoutId);
     }
-    const result = await res.json();
+    const result = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(result.error ?? 'Action failed. Please try again.');
 
     aiResultLabelEl.textContent = `${AI_ACTION_LABELS[action] ?? 'AI-revised'} version`;
