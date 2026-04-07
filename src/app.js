@@ -4,7 +4,7 @@ import { createRequire } from "node:module";
 import { promises as fs, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { Document, Packer, Paragraph, TextRun } from "docx";
+import { Document, Packer, Paragraph, TextRun, TabStopType, TabStopLeader } from "docx";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { analyzeResume } from "./resume-analyzer.js";
 import { normalizeInputText } from "./text-normalizer.js";
@@ -820,6 +820,23 @@ function parseResumeForExport(text) {
   return sections;
 }
 
+/**
+ * Detect and split a trailing date range from a job title line.
+ * "Software Engineer | Acme Corp Jan 2022 - Present"
+ *   → { role: "Software Engineer | Acme Corp", date: "Jan 2022 - Present" }
+ * Returns null if no date found (line is a bullet or plain text).
+ */
+function splitJobDate(line) {
+  if (/^[-*•]/.test(line)) return null;
+  const DATE_RE = /\s+((?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?|Spring|Summer|Fall|Winter)\s+\d{4}(?:\s*[-–]\s*(?:Present|Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)(?:\s+\d{4})?)?)$/;
+  const match = line.match(DATE_RE);
+  if (!match) return null;
+  return {
+    role: line.slice(0, match.index).trim(),
+    date: match[1].trim()
+  };
+}
+
 async function buildDocx(text) {
   const sections = parseResumeForExport(text);
   const paragraphs = [];
@@ -866,11 +883,32 @@ async function buildDocx(text) {
       }
 
       const isBullet = /^[-*•]/.test(line);
-      paragraphs.push(new Paragraph({
-        text: isBullet ? line.replace(/^[-*•]\s*/, "") : line,
-        bullet: isBullet ? { level: 0 } : undefined,
-        spacing: { after: isBullet ? 40 : 60 }
-      }));
+      if (!isBullet) {
+        const split = splitJobDate(line);
+        if (split) {
+          // Job title line: role left, date right-aligned via tab stop
+          paragraphs.push(new Paragraph({
+            tabStops: [{ type: TabStopType.RIGHT, position: 9360, leader: TabStopLeader.NONE }],
+            children: [
+              new TextRun({ text: split.role, bold: false, size: 20 }),
+              new TextRun({ text: "\t" }),
+              new TextRun({ text: split.date, color: "555555", size: 20 })
+            ],
+            spacing: { after: 60 }
+          }));
+        } else {
+          paragraphs.push(new Paragraph({
+            text: line,
+            spacing: { after: 60 }
+          }));
+        }
+      } else {
+        paragraphs.push(new Paragraph({
+          text: line.replace(/^[-*•]\s*/, ""),
+          bullet: { level: 0 },
+          spacing: { after: 40 }
+        }));
+      }
     }
   }
 
@@ -1015,7 +1053,21 @@ async function buildPdf(text) {
           drawWrapped(line.replace(/^[-*•]\s*/, ""), { indent: 14 });
         }
       } else {
-        drawWrapped(line);
+        const split = splitJobDate(sanitizeForWinAnsi(line));
+        if (split) {
+          ensureSpace(lineHeight);
+          if (!clipped) {
+            // Role: left-aligned
+            const roleLines = wrapText(split.role, font, fontSize, maxWidth * 0.72);
+            page.drawText(roleLines[0] || split.role, { x: margin, y, size: fontSize, font, color: rgb(0.07, 0.11, 0.13) });
+            // Date: right-aligned on the same baseline
+            const dateWidth = font.widthOfTextAtSize(split.date, fontSize);
+            page.drawText(split.date, { x: margin + maxWidth - dateWidth, y, size: fontSize, font, color: rgb(0.33, 0.33, 0.33) });
+            y -= lineHeight;
+          }
+        } else {
+          drawWrapped(line);
+        }
       }
     }
     y -= 6;
