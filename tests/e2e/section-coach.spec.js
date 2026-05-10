@@ -115,7 +115,10 @@ Hardware Support
   await expect(page.getByRole("heading", { name: "Your resume" })).toBeVisible();
   await expect(page.getByText("Tighten wording")).toHaveCount(0);
   await expect(page.getByText("Improve ATS match")).toHaveCount(0);
-  await expect(page.locator("#final-draft")).toContainText("SKILLS\nPOS Systems | Networking | Hardware Support");
+  await expect(page.locator("#final-draft")).toHaveClass(/resume-preview/);
+  const experienceRow = page.locator(".resume-final-experience-entry", { hasText: "IT Support Specialist - Safeway, Northern California" });
+  await expect(experienceRow.locator(".resume-final-experience-date")).toHaveText("2022 - Present");
+  await expect(page.locator(".resume-final-compact-list")).toContainText("POS Systems | Networking | Hardware Support");
   await expect(page.locator("#final-draft")).not.toContainText("SKILLS\nPOS Systems\nNetworking\nHardware Support");
 });
 

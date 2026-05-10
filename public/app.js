@@ -55,6 +55,7 @@ const state = {
   candidateName:  '',
   lastPayload:    null,
   currentTab:     'upload',
+  finalDraftText:  '',
 };
 
 // ── Section header labels for final resume assembly ───────────────
@@ -629,6 +630,232 @@ function formatSectionForFinal(id, text) {
   return cleaned;
 }
 
+const FINAL_MONTH_OR_SEASON_RE = String.raw`(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?|Spring|Summer|Fall|Autumn|Winter)`;
+const FINAL_DATE_POINT_RE = String.raw`(?:(?:${FINAL_MONTH_OR_SEASON_RE})\s+)?(?:19|20)\d{2}`;
+const FINAL_DATE_RANGE_RE = new RegExp(String.raw`(?:${FINAL_DATE_POINT_RE}\s*[-–—/]\s*(?:Present|Current|Now|${FINAL_DATE_POINT_RE})|${FINAL_MONTH_OR_SEASON_RE}\s+(?:19|20)\d{2})`, 'i');
+const FINAL_TRAILING_DATE_RE = new RegExp(String.raw`\s*(?:[|,]\s*)?(${FINAL_DATE_RANGE_RE.source})$`, 'i');
+
+function splitFinalTrailingDate(line = '') {
+  const text = String(line || '').trim();
+  const match = text.match(FINAL_TRAILING_DATE_RE);
+  if (!match) return null;
+  return {
+    role: text.slice(0, match.index).replace(/\s*[|,–—-]\s*$/, '').trim(),
+    date: match[1].trim()
+  };
+}
+
+function isStandaloneFinalDate(line = '') {
+  const text = String(line || '').trim();
+  if (!text || /^[-*•]/.test(text)) return false;
+  const withoutDate = text.replace(FINAL_DATE_RANGE_RE, '').replace(/[()[\]–—\-\/\s|,]/g, '').trim();
+  return FINAL_DATE_RANGE_RE.test(text) && withoutDate.length < 8;
+}
+
+function parseFinalResumeDraft(draft = '') {
+  const headingToId = new Map(
+    Object.entries(SECTION_HEADERS)
+      .filter(([, heading]) => heading)
+      .map(([id, heading]) => [heading, id])
+  );
+  const sections = [];
+  let current = { id: 'heading', heading: null, lines: [] };
+
+  for (const rawLine of String(draft || '').replace(/\r/g, '').split('\n')) {
+    const line = rawLine.trimEnd();
+    const normalized = line.trim().toUpperCase();
+    if (headingToId.has(normalized)) {
+      if (current.lines.some((entry) => entry.trim())) sections.push(current);
+      current = { id: headingToId.get(normalized), heading: normalized, lines: [] };
+      continue;
+    }
+    current.lines.push(line);
+  }
+
+  if (current.lines.some((entry) => entry.trim())) sections.push(current);
+  return sections;
+}
+
+function parseFinalExperienceEntries(lines = []) {
+  const entries = [];
+  let current = null;
+
+  function flush() {
+    if (current && (current.role || current.date || current.bullets.length || current.details.length)) {
+      entries.push(current);
+    }
+    current = null;
+  }
+
+  function start(role = '', date = '') {
+    flush();
+    current = { role: role.trim(), date: date.trim(), bullets: [], details: [] };
+  }
+
+  const compact = lines.map((line) => String(line || '').trim()).filter(Boolean);
+  for (let index = 0; index < compact.length; index += 1) {
+    const line = compact[index];
+    const bulletMatch = line.match(/^[-*•]\s*(.+)$/);
+    if (bulletMatch) {
+      if (!current) start();
+      current.bullets.push(bulletMatch[1].trim());
+      continue;
+    }
+
+    const split = splitFinalTrailingDate(line);
+    if (split?.role) {
+      start(split.role, split.date);
+      continue;
+    }
+
+    if (isStandaloneFinalDate(line)) {
+      if (!current) start();
+      current.date = line;
+      continue;
+    }
+
+    if (index + 1 < compact.length && isStandaloneFinalDate(compact[index + 1])) {
+      start(line, compact[index + 1]);
+      index += 1;
+      continue;
+    }
+
+    if (!current || current.bullets.length || current.date) {
+      start(line, '');
+    } else {
+      current.details.push(line);
+    }
+  }
+
+  flush();
+  return entries;
+}
+
+function appendFinalPlainLines(parent, lines = []) {
+  const list = [];
+  let paragraph = [];
+
+  function flushParagraph() {
+    if (!paragraph.length) return;
+    parent.appendChild(el('p', 'resume-final-text', paragraph.join(' ')));
+    paragraph = [];
+  }
+
+  for (const rawLine of lines) {
+    const line = String(rawLine || '').trim();
+    if (!line) {
+      flushParagraph();
+      continue;
+    }
+
+    const bulletMatch = line.match(/^[-*•]\s*(.+)$/);
+    if (bulletMatch) {
+      flushParagraph();
+      list.push(bulletMatch[1].trim());
+      continue;
+    }
+
+    if (list.length) {
+      const ul = el('ul', 'resume-final-bullets');
+      for (const item of list.splice(0)) ul.appendChild(el('li', '', item));
+      parent.appendChild(ul);
+    }
+    paragraph.push(line);
+  }
+
+  flushParagraph();
+  if (list.length) {
+    const ul = el('ul', 'resume-final-bullets');
+    for (const item of list) ul.appendChild(el('li', '', item));
+    parent.appendChild(ul);
+  }
+}
+
+function appendFinalHeader(section) {
+  const lines = section.lines.map((line) => line.trim()).filter(Boolean);
+  if (!lines.length) return;
+
+  const header = el('header', 'resume-final-header');
+  header.appendChild(el('h1', '', lines[0]));
+
+  const contact = lines.slice(1).join(' | ');
+  if (contact) header.appendChild(el('p', 'resume-final-contact', contact));
+
+  finalDraftEl.appendChild(header);
+}
+
+function appendFinalExperience(section) {
+  const entries = parseFinalExperienceEntries(section.lines);
+  const sectionEl = el('section', 'resume-final-section resume-final-experience');
+  sectionEl.appendChild(el('h3', '', section.heading));
+
+  if (!entries.length) {
+    appendFinalPlainLines(sectionEl, section.lines);
+    finalDraftEl.appendChild(sectionEl);
+    return;
+  }
+
+  for (const entry of entries) {
+    const item = el('div', 'resume-final-experience-entry');
+    if (entry.role || entry.date) {
+      const heading = el('div', 'resume-final-experience-heading');
+      heading.append(
+        el('strong', 'resume-final-experience-role', entry.role || 'Experience'),
+        el('span', 'resume-final-experience-date', entry.date || '')
+      );
+      item.appendChild(heading);
+    }
+    for (const detail of entry.details) {
+      item.appendChild(el('p', 'resume-final-text', detail));
+    }
+    if (entry.bullets.length) {
+      const ul = el('ul', 'resume-final-bullets');
+      for (const bullet of entry.bullets) ul.appendChild(el('li', '', bullet));
+      item.appendChild(ul);
+    }
+    sectionEl.appendChild(item);
+  }
+
+  finalDraftEl.appendChild(sectionEl);
+}
+
+function appendFinalCompactList(section) {
+  const sectionEl = el('section', 'resume-final-section resume-final-compact-list');
+  sectionEl.appendChild(el('h3', '', section.heading));
+
+  for (const rawLine of section.lines) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    if (isListSubheading(line)) {
+      sectionEl.appendChild(el('p', 'resume-final-subheading', line.replace(/:$/, '').toUpperCase()));
+    } else {
+      sectionEl.appendChild(el('p', 'resume-final-list-row', line));
+    }
+  }
+
+  finalDraftEl.appendChild(sectionEl);
+}
+
+function renderFinalResumePreview(draft = '') {
+  finalDraftEl.replaceChildren();
+  const sections = parseFinalResumeDraft(draft);
+
+  for (const section of sections) {
+    if (section.id === 'heading') {
+      appendFinalHeader(section);
+    } else if (section.id === 'experience') {
+      appendFinalExperience(section);
+    } else if (COMPACT_LIST_SECTION_IDS.has(section.id)) {
+      appendFinalCompactList(section);
+    } else {
+      const sectionEl = el('section', 'resume-final-section');
+      sectionEl.appendChild(el('h3', '', section.heading));
+      appendFinalPlainLines(sectionEl, section.lines);
+      finalDraftEl.appendChild(sectionEl);
+    }
+  }
+}
+
 function assembleFinalResume() {
   const parts  = [];
 
@@ -650,7 +877,8 @@ function assembleFinalResume() {
 
 function buildFinalView() {
   const draft = assembleFinalResume();
-  finalDraftEl.textContent = draft;
+  state.finalDraftText = draft;
+  renderFinalResumePreview(draft);
 
   renderFinalNotes();
   setView('final');
@@ -730,6 +958,7 @@ startOverBtn.addEventListener('click', () => {
   state.editingSuggestionId = null;
   state.candidateName  = '';
   state.lastPayload    = null;
+  state.finalDraftText = '';
   analyzeBtnEl.disabled = false;
   analyzeLabelEl.textContent = 'Analyze my resume';
   clearFormError();
@@ -846,23 +1075,8 @@ async function exportText(format, text) {
   }
 }
 
-// Use innerText so user edits to the contenteditable pre are captured
-downloadDocxEl.addEventListener('click',   () => exportText('docx', finalDraftEl.innerText));
-downloadPdfEl.addEventListener('click',    () => exportText('pdf',  finalDraftEl.innerText));
-
-// Strip HTML formatting on paste into editable pres (keeps plain text only)
-for (const pre of [finalDraftEl]) {
-  pre.addEventListener('paste', e => {
-    e.preventDefault();
-    const text = e.clipboardData?.getData('text/plain') ?? '';
-    const sel = window.getSelection();
-    if (!sel || !sel.rangeCount) return;
-    sel.deleteFromDocument();
-    const range = sel.getRangeAt(0);
-    range.insertNode(document.createTextNode(text));
-    sel.collapseToEnd();
-  });
-}
+downloadDocxEl.addEventListener('click',   () => exportText('docx', state.finalDraftText || finalDraftEl.innerText));
+downloadPdfEl.addEventListener('click',    () => exportText('pdf',  state.finalDraftText || finalDraftEl.innerText));
 
 // ── DOM utility ───────────────────────────────────────────────────
 function el(tag, className, textContent) {

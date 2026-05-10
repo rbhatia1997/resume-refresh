@@ -6,6 +6,15 @@ Format: `MAJOR.MINOR.PATCH.MICRO`
 
 ---
 
+## [0.1.1.1] - 2026-05-10
+
+### Changed
+
+- **Final resume preview now renders like a resume** — replaced the raw monospace final draft block with a structured preview that uses centered contact info, section rules, compact skills, and right-aligned experience dates on desktop.
+- **Mobile final preview spacing tightened** — experience dates now collapse below role/company text on small screens so long date ranges do not crowd or overflow.
+
+---
+
 ## [0.1.1.0] - 2026-04-06
 
 ### Fixed
