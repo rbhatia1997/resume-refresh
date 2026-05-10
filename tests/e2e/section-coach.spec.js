@@ -168,6 +168,70 @@ DJing
   await expect(page.getByText("Add scope or result").first()).toBeVisible();
 });
 
+test("experience coach stays compact and addressed suggestions disappear", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("tab", { name: "Paste text" }).click();
+  await page.locator("#resume-text").fill(`
+Jane Doe
+jane@example.com
+(415) 555-1212
+
+SUMMARY
+IT support specialist with retail systems experience.
+
+EXPERIENCE
+Service & Delivery Technician -
+Example Retail, Northern California
+July 2025 - Present
+Troubleshoot and resolve hardware
+and software issues for retail store
+systems and devices
+Support installation, replacement,
+and configuration of IT equipment
+Sushi Chef - Example Restaurant, Davis
+September 2021 - June 2025
+Delivered customer service in fast-
+paced restaurant environment
+Managed order accuracy and
+multitasking under pressure
+Assisted with kitchen preparation and
+team coordination
+
+SKILLS
+Hardware Troubleshooting
+Software Troubleshooting
+Device Deployment
+
+EDUCATION
+Example High School
+2022
+`);
+  await page.locator("#target-role").fill("IT Support Specialist");
+  await page.getByRole("button", { name: "Analyze my resume" }).click();
+
+  await page.getByRole("button", { name: /Continue/ }).click();
+  await page.getByRole("button", { name: /Continue/ }).click();
+
+  const cards = page.locator(".suggestion-card");
+  await expect(page.getByText(/Showing 3 of \d+ suggestions/)).toBeVisible();
+  await expect(cards).toHaveCount(3);
+  await expect(page.getByRole("button", { name: /Show \d+ more/ })).toBeVisible();
+
+  const trimCard = page.locator(".suggestion-card", { hasText: "Trim filler wording" }).first();
+  await trimCard.getByRole("button", { name: "Apply" }).click();
+  await expect(page.locator("#section-textarea")).toHaveValue(/Delivered customer service in a fast-paced restaurant/);
+  await expect(page.getByText("Before: Delivered customer service in fast-paced restaurant environment")).toHaveCount(0);
+  await expect(cards).toHaveCount(3);
+
+  await cards.first().getByRole("button", { name: "Mark addressed" }).click();
+  await expect(page.getByText(/Showing 3 of \d+ suggestions/)).toBeVisible();
+  await expect(cards).toHaveCount(3);
+
+  await page.getByRole("button", { name: /Show \d+ more/ }).click();
+  await expect(page.getByRole("button", { name: "Show fewer" })).toBeVisible();
+  await expect.poll(() => cards.count()).toBeGreaterThan(3);
+});
+
 test("export buttons show progress and completion feedback", async ({ page }) => {
   await page.route("**/api/export", async (route) => {
     await new Promise((resolve) => setTimeout(resolve, 300));
