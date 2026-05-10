@@ -45,6 +45,15 @@ const SKILL_VOCABULARY = [
   { canonical: "Kafka",           aliases: ["kafka", "event streaming", "message queue"] },
   { canonical: "Machine Learning", aliases: ["machine learning", "ml", "deep learning", "neural networks"] },
   { canonical: "Data Engineering", aliases: ["data engineering", "data pipeline", "etl", "data warehouse"] },
+  { canonical: "POS Systems",      aliases: ["pos systems", "point of sale", "point-of-sale", "pos"] },
+  { canonical: "Networking",       aliases: ["networking", "network support", "network troubleshooting", "routers", "switches"] },
+  { canonical: "Hardware Support", aliases: ["hardware support", "hardware troubleshooting", "computer hardware", "hardware"] },
+  { canonical: "Technical Troubleshooting", aliases: ["technical troubleshooting", "troubleshooting", "diagnostics", "technical support"] },
+  { canonical: "Windows",          aliases: ["windows", "windows support", "microsoft windows"] },
+  { canonical: "macOS",            aliases: ["macos", "mac os", "apple support"] },
+  { canonical: "Printers",         aliases: ["printers", "printer support", "peripherals"] },
+  { canonical: "Mobile Devices",   aliases: ["mobile devices", "handheld devices", "mobile device support"] },
+  { canonical: "Ticketing Systems", aliases: ["ticketing systems", "ticketing", "service desk tickets", "help desk tickets"] },
 
   // ── Data & Analytics ────────────────────────────────────────────────
   { canonical: "SQL",             aliases: ["sql"] },   // shared alias, deduped by Set
@@ -119,6 +128,13 @@ const ROLE_SKILL_PRIORITIES = [
     preferred: [
       "Python", "JavaScript", "TypeScript", "Node.js", "React", "SQL",
       "AWS", "Docker", "Kubernetes", "CI/CD", "REST APIs", "Git"
+    ]
+  },
+  {
+    pattern: /it support|help.?desk|desktop support|technical support|field technician/i,
+    preferred: [
+      "Technical Troubleshooting", "POS Systems", "Networking", "Hardware Support",
+      "Windows", "Printers", "Mobile Devices", "Ticketing Systems", "Git"
     ]
   },
   {

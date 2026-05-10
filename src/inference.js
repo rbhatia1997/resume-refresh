@@ -24,6 +24,8 @@ import OpenAI from "openai";
 
 const PROVIDER     = (process.env.INFERENCE_PROVIDER || "openai").toLowerCase().trim();
 const OPENAI_KEY   = process.env.OPENAI_API_KEY || "";
+const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4.1-mini";
+const OPENAI_VISION_MODEL = process.env.OPENAI_VISION_MODEL || OPENAI_MODEL;
 const OLLAMA_URL   = (process.env.OLLAMA_URL  || "http://127.0.0.1:11434").replace(/\/$/, "");
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "qwen2.5:7b";
 
@@ -63,7 +65,7 @@ export function isModelConfigured() {
 export function getProviderLabel() {
   return PROVIDER === "ollama"
     ? `local/${OLLAMA_MODEL}`
-    : "openai/gpt-4.1-mini";
+    : `openai/${OPENAI_MODEL}`;
 }
 
 /**
@@ -85,7 +87,7 @@ async function callOpenAI(systemPrompt, userPrompt) {
   const client = getOpenAIClient();
 
   const response = await client.responses.create({
-    model: "gpt-4.1-mini",
+    model: OPENAI_MODEL,
     max_output_tokens: 2048,
     temperature: 0.2,
     input: [
@@ -102,6 +104,43 @@ async function callOpenAI(systemPrompt, userPrompt) {
   });
 
   return response.output_text || "{}";
+}
+
+export async function extractTextFromResumeImage({ imageBase64 = "", mimeType = "" } = {}) {
+  if (PROVIDER !== "openai") {
+    throw new Error("Photo resume parsing requires OpenAI vision. Use PDF, TXT, or MD with the local provider.");
+  }
+  if (!imageBase64) {
+    throw new Error("No resume image provided.");
+  }
+
+  const client = getOpenAIClient();
+  const safeMime = mimeType || "image/jpeg";
+  const response = await client.responses.create({
+    model: OPENAI_VISION_MODEL,
+    max_output_tokens: 4096,
+    temperature: 0,
+    input: [{
+      role: "user",
+      content: [
+        {
+          type: "input_text",
+          text: [
+            "Extract the resume text from this image.",
+            "Preserve headings, line breaks, bullet markers, dates, email, phone, links, and names.",
+            "Return plain text only. Do not summarize or critique."
+          ].join(" ")
+        },
+        {
+          type: "input_image",
+          image_url: `data:${safeMime};base64,${imageBase64}`,
+          detail: "high"
+        }
+      ]
+    }]
+  });
+
+  return (response.output_text || "").trim();
 }
 
 // ── Ollama (local) ────────────────────────────────────────────────

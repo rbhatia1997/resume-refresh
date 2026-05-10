@@ -31,16 +31,6 @@ const finalDraftEl     = document.querySelector('#final-draft');
 const finalNotesEl     = document.querySelector('#final-notes');
 const downloadDocxEl   = document.querySelector('#download-docx');
 const downloadPdfEl    = document.querySelector('#download-pdf');
-const aiHintEl         = document.querySelector('#ai-hint');
-const aiIdleEl         = document.querySelector('#ai-idle');
-const aiActionsEl      = document.querySelector('#ai-actions');
-const aiResultEl       = document.querySelector('#ai-result');
-const aiResultLabelEl  = document.querySelector('#ai-result-label');
-const aiRewriteEl      = document.querySelector('#ai-rewrite');
-const aiNotesEl        = document.querySelector('#ai-notes');
-const dlRewriteDocxEl  = document.querySelector('#download-rewrite-docx');
-const dlRewritePdfEl   = document.querySelector('#download-rewrite-pdf');
-// #try-another-action removed — action buttons are now always visible
 const startOverBtn     = document.querySelector('#start-over');
 
 // Tabs
@@ -51,15 +41,15 @@ const tabPasteEl   = document.querySelector('#tab-paste');
 // ── App state ─────────────────────────────────────────────────────
 const state = {
   view:           'intake',  // 'intake' | 'editor' | 'final'
-  appConfig:      { openAiRewriteEnabled: false },
   analysisResult: null,
   sections:       [],        // array of {id, label, currentText, proposedText, critique, status}
   sectionIndex:   0,
   approved:       {},        // {sectionId: editedText}
+  skippedSuggestions: {},
+  editingSuggestionId: null,
   candidateName:  '',
   lastPayload:    null,
   currentTab:     'upload',
-  rewriteInFlight: false,
 };
 
 // ── Section header labels for final resume assembly ───────────────
@@ -77,13 +67,6 @@ const SECTION_HEADERS = {
 
 // ── Init ──────────────────────────────────────────────────────────
 async function init() {
-  try {
-    const res = await fetch('/api/config');
-    state.appConfig = await res.json();
-  } catch (_) { /* safe default: openAiRewriteEnabled: false */ }
-
-  updateRewriteUI();
-
   // Clean LinkedIn OAuth query param
   const url = new URL(window.location.href);
   if (url.searchParams.has('linkedin')) {
@@ -123,17 +106,17 @@ resumeFileEl.addEventListener('change', () => {
 
 function applyFile(file) {
   const name = file.name.toLowerCase();
-  if (!name.endsWith('.pdf') && !name.endsWith('.txt') && !name.endsWith('.md')) {
-    showFileStatus('Only PDF, TXT, or MD files are supported.', true);
+  if (!isSupportedResumeFile(name)) {
+    showFileStatus('Only PDF, TXT, MD, JPG, PNG, or WEBP files are supported.', true);
     return;
   }
   if (file.size > 4.5 * 1024 * 1024) {
     showFileStatus('File is too large. Keep it under 4.5 MB.', true);
     return;
   }
-  const ALLOWED_MIMES = ['application/pdf', 'text/plain', 'text/markdown', 'text/x-markdown', ''];
+  const ALLOWED_MIMES = ['application/pdf', 'text/plain', 'text/markdown', 'text/x-markdown', 'image/jpeg', 'image/png', 'image/webp', ''];
   if (file.type && !ALLOWED_MIMES.includes(file.type)) {
-    showFileStatus('Only PDF, TXT, or MD files are supported.', true);
+    showFileStatus('Only PDF, TXT, MD, JPG, PNG, or WEBP files are supported.', true);
     return;
   }
   try {
@@ -142,6 +125,21 @@ function applyFile(file) {
     resumeFileEl.files = dt.files;
   } catch (_) { /* DataTransfer not in some browsers */ }
   showFileStatus(`${file.name}  ·  ${(file.size / 1024).toFixed(0)} KB`);
+}
+
+function isSupportedResumeFile(name = '') {
+  return ['.pdf', '.txt', '.md', '.jpg', '.jpeg', '.png', '.webp'].some((ext) => name.endsWith(ext));
+}
+
+function inferMimeFromFileName(name = '') {
+  const lower = name.toLowerCase();
+  if (lower.endsWith('.pdf')) return 'application/pdf';
+  if (lower.endsWith('.txt')) return 'text/plain';
+  if (lower.endsWith('.md')) return 'text/markdown';
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+  if (lower.endsWith('.png')) return 'image/png';
+  if (lower.endsWith('.webp')) return 'image/webp';
+  return '';
 }
 
 function showFileStatus(msg, isError = false) {
@@ -198,6 +196,7 @@ async function buildPayload() {
     if (file) {
       payload.resumeFileName   = file.name;
       payload.resumeFileBase64 = await fileToBase64(file);
+      payload.resumeFileType   = file.type || inferMimeFromFileName(file.name);
     }
   } else {
     payload.resumeText = resumeTextEl.value.trim();
@@ -267,72 +266,152 @@ function renderSectionPanel(section) {
     editorPanelEl.appendChild(warn);
   }
 
-  // Current content (read-only) — only show if there's content
-  if (section.currentText) {
-    const block = el('div', 'current-block');
-    const lbl   = el('p',   'field-label', 'What we found');
-    const pre   = el('pre', 'current-text', section.currentText);
-    block.append(lbl, pre);
-    editorPanelEl.appendChild(block);
-  }
+  const workspace = el('div', 'section-workspace');
+  const editorCol = el('div', 'section-editor-column');
+  const coachCol  = el('div', 'section-coach-column');
 
-  // Critique bar — what seems off
-  if (section.critique) {
-    const bar      = el('div', `critique-bar ${section.status}`);
-    const iconChar = section.status === 'ok' ? '✓' : section.status === 'missing' ? '+' : '!';
-    const icon     = el('span', `critique-icon ${section.status}`, iconChar);
-    const text     = el('p',   'critique-text', section.critique);
-    bar.append(icon, text);
-    editorPanelEl.appendChild(bar);
-  }
-
-  // Proposed / editable content — the suggested rewrite
+  // Editable content starts from the parsed original. Suggested rewrites stay optional.
   const proposed = el('div', 'proposed-block');
-  let propLblText = section.currentText
-    ? 'Suggested rewrite — edit freely'
-    : 'Suggested content — edit to fit your background';
-  // For summary: when proposed === current (existing summary preserved), be explicit
-  if (section.id === 'summary' && section.summarySource && section.summarySource !== 'none'
-      && section.currentText && section.currentText.trim() === section.proposedText?.trim()) {
-    propLblText = 'Your existing summary — edit to refine it';
-  }
-  const propLbl  = el('p', 'field-label', propLblText);
+  const propLbl  = el('p', 'field-label', section.currentText ? 'Edit this section' : 'Add this section');
   const textarea = document.createElement('textarea');
   textarea.id        = 'section-textarea';
   textarea.className = 'editor-textarea';
-  textarea.value     = section.proposedText;
-  const lineCount = (section.proposedText.match(/\n/g) || []).length + 1;
+  textarea.value     = section.currentText || section.proposedText || '';
+  const lineCount = (textarea.value.match(/\n/g) || []).length + 1;
   textarea.rows = Math.max(6, Math.min(lineCount + 2, 22));
   proposed.append(propLbl, textarea);
-  editorPanelEl.appendChild(proposed);
+  editorCol.appendChild(proposed);
 
-  // Change log — per-bullet explanations (experience section)
-  if (section.changeLog?.length) {
-    const changeWrap = el('div', 'change-log');
-    const changeLbl  = el('p',  'field-label', `Why we changed ${section.changeLog.length} bullet${section.changeLog.length > 1 ? 's' : ''}`);
-    changeWrap.appendChild(changeLbl);
+  renderCoachPanel(coachCol, section, textarea);
 
-    for (const change of section.changeLog.slice(0, 6)) {
-      const item = el('div', 'change-item');
+  workspace.append(editorCol, coachCol);
+  editorPanelEl.appendChild(workspace);
+}
 
-      const origRow  = el('div', 'change-row change-original');
-      const origBadge= el('span', 'change-badge before', 'Before');
-      const origText = el('span', 'change-text', change.original);
-      origRow.append(origBadge, origText);
+function renderCoachPanel(container, section, textarea) {
+  const label = el('p', 'field-label', 'Section coach');
+  container.appendChild(label);
 
-      const revRow   = el('div', 'change-row change-revised');
-      const revBadge = el('span', 'change-badge after', 'After');
-      const revText  = el('span', 'change-text', change.revised);
-      revRow.append(revBadge, revText);
+  const skipped = state.skippedSuggestions[section.id] || {};
+  const suggestions = (section.suggestions || []).filter((item) => !skipped[item.id]);
 
-      const reason   = el('p', 'change-reason', `Why: ${change.reason}`);
-
-      item.append(origRow, revRow, reason);
-      changeWrap.appendChild(item);
-    }
-
-    editorPanelEl.appendChild(changeWrap);
+  if (!suggestions.length) {
+    const empty = el('div', 'suggestion-card suggestion-card-ok');
+    empty.append(
+      el('p', 'suggestion-card-title', 'No major issues detected'),
+      el('p', 'suggestion-card-detail', 'You can keep editing manually or continue to the next section.')
+    );
+    container.appendChild(empty);
+    return;
   }
+
+  for (const suggestion of suggestions) {
+    container.appendChild(renderSuggestionCard(section, suggestion, textarea));
+  }
+}
+
+function renderSuggestionCard(section, suggestion, textarea) {
+  const card = el('div', `suggestion-card severity-${suggestion.severity || 'medium'}`);
+  card.appendChild(el('p', 'suggestion-card-title', suggestion.title || 'Suggestion'));
+  if (suggestion.detail) {
+    card.appendChild(el('p', 'suggestion-card-detail', suggestion.detail));
+  }
+  if (suggestion.type === 'skills-list' && suggestion.suggestedText) {
+    const chips = el('div', 'skill-chip-list');
+    for (const skill of suggestion.suggestedText.split(/\n|\|/).map(s => s.trim()).filter(Boolean)) {
+      chips.appendChild(el('span', 'skill-chip', skill));
+    }
+    card.appendChild(chips);
+  } else if (suggestion.originalText && suggestion.suggestedText) {
+    const diff = el('div', 'suggestion-diff');
+    diff.append(
+      el('p', 'suggestion-before', `Before: ${suggestion.originalText}`),
+      el('p', 'suggestion-after', `After: ${suggestion.suggestedText}`)
+    );
+    card.appendChild(diff);
+  } else if (suggestion.suggestedText) {
+    card.appendChild(el('p', 'suggestion-after', suggestion.suggestedText));
+  }
+  if (suggestion.rationale) {
+    card.appendChild(el('p', 'suggestion-card-rationale', suggestion.rationale));
+  }
+
+  if (state.editingSuggestionId === suggestion.id && suggestion.suggestedText) {
+    const edit = document.createElement('textarea');
+    edit.className = 'suggestion-edit';
+    edit.value = suggestion.suggestedText;
+    edit.rows = Math.max(3, Math.min((suggestion.suggestedText.match(/\n/g) || []).length + 2, 8));
+    card.appendChild(edit);
+  }
+
+  const actions = el('div', 'suggestion-actions');
+  if (suggestion.applyMode && suggestion.applyMode !== 'informational') {
+    const apply = el('button', 'btn-secondary suggestion-apply', 'Apply');
+    apply.type = 'button';
+    apply.addEventListener('click', () => {
+      const editValue = card.querySelector('.suggestion-edit')?.value;
+      applySuggestionToTextarea(textarea, suggestion, editValue);
+      markSuggestionResolved(section.id, suggestion.id);
+    });
+    actions.appendChild(apply);
+  }
+  if (suggestion.suggestedText) {
+    const editBtn = el('button', 'btn-secondary suggestion-edit-btn', 'Edit');
+    editBtn.type = 'button';
+    editBtn.addEventListener('click', () => {
+      state.editingSuggestionId = state.editingSuggestionId === suggestion.id ? null : suggestion.id;
+      renderSectionPanel(section);
+    });
+    actions.appendChild(editBtn);
+  }
+  const skip = el('button', 'btn-ghost suggestion-skip', 'Skip');
+  skip.type = 'button';
+  skip.addEventListener('click', () => {
+    state.skippedSuggestions[section.id] = {
+      ...(state.skippedSuggestions[section.id] || {}),
+      [suggestion.id]: true
+    };
+    renderSectionPanel(section);
+  });
+  actions.appendChild(skip);
+  card.appendChild(actions);
+  return card;
+}
+
+function markSuggestionResolved(sectionId, suggestionId) {
+  if (!sectionId || !suggestionId) return;
+  state.skippedSuggestions[sectionId] = {
+    ...(state.skippedSuggestions[sectionId] || {}),
+    [suggestionId]: true
+  };
+}
+
+function applySuggestionToTextarea(textarea, suggestion, overrideText) {
+  const suggestedText = (overrideText ?? suggestion.suggestedText ?? '').trim();
+  if (!suggestedText && suggestion.applyMode !== 'insert-field') return;
+
+  if (suggestion.applyMode === 'replace-section') {
+    textarea.value = suggestedText;
+  } else if (suggestion.applyMode === 'replace-line') {
+    const original = suggestion.originalText || '';
+    const replacement = suggestedText;
+    if (original && textarea.value.includes(original)) {
+      textarea.value = textarea.value.replace(original, replacement);
+    } else if (original && textarea.value.includes(`- ${original}`)) {
+      textarea.value = textarea.value.replace(`- ${original}`, `- ${replacement}`);
+    }
+  } else if (suggestion.applyMode === 'insert-field') {
+    const label = {
+      name: 'Name',
+      email: 'Email',
+      phone: 'Phone'
+    }[suggestion.field] || 'Field';
+    const prefix = textarea.value.trim() ? `${textarea.value.trim()}\n` : '';
+    textarea.value = `${prefix}${label}: `;
+  }
+
+  state.editingSuggestionId = null;
+  textarea.focus();
 }
 
 // ── Section navigation ────────────────────────────────────────────
@@ -400,22 +479,25 @@ function buildFinalView() {
   finalDraftEl.textContent = draft;
 
   renderFinalNotes();
-  updateRewriteUI();
   setView('final');
 }
 
 function renderFinalNotes() {
   finalNotesEl.replaceChildren();
-  const suggestions = state.analysisResult?.suggestions ?? [];
-  if (!suggestions.length) {
-    finalNotesEl.innerHTML = '<p style="font-size:0.8125rem;color:var(--muted)">No major issues detected.</p>';
+  const unresolved = state.sections
+    .flatMap(section => (section.suggestions || []).map(suggestion => ({ section, suggestion })))
+    .filter(({ section, suggestion }) => suggestion.severity === 'high' && !state.skippedSuggestions[section.id]?.[suggestion.id])
+    .slice(0, 4);
+
+  if (!unresolved.length) {
+    finalNotesEl.appendChild(el('p', 'note-empty', 'No major issues detected.'));
     return;
   }
-  for (const s of suggestions.slice(0, 8)) {
+  for (const { section, suggestion } of unresolved) {
     const item   = el('div', 'note-item');
-    const pri    = el('p', `note-priority ${(s.priority ?? 'medium').toLowerCase()}`, s.priority ?? 'Note');
-    const title  = el('p', 'note-title', s.title ?? '');
-    const detail = el('p', 'note-detail', s.detail ?? '');
+    const pri    = el('p', 'note-priority high', section.label ?? 'Review');
+    const title  = el('p', 'note-title', suggestion.title ?? '');
+    const detail = el('p', 'note-detail', suggestion.detail ?? '');
     item.append(pri, title, detail);
     finalNotesEl.appendChild(item);
   }
@@ -435,10 +517,10 @@ startOverBtn.addEventListener('click', () => {
   state.sections       = [];
   state.sectionIndex   = 0;
   state.approved       = {};
+  state.skippedSuggestions = {};
+  state.editingSuggestionId = null;
   state.candidateName  = '';
   state.lastPayload    = null;
-  state.rewriteInFlight = false;
-  aiResultEl.classList.add('hidden');
   analyzeBtnEl.disabled = false;
   analyzeLabelEl.textContent = 'Analyze my resume';
   clearFormError();
@@ -484,6 +566,8 @@ intakeForm.addEventListener('submit', async e => {
 
     state.sectionIndex = 0;
     state.approved     = {};
+    state.skippedSuggestions = {};
+    state.editingSuggestionId = null;
 
     showEditorSection();
   } catch (err) {
@@ -504,145 +588,6 @@ function synthesizeFallbackSections(result) {
     critique:     'Review and edit the draft below.',
     status:       'ok',
   }];
-}
-
-const AI_ACTION_LABELS = {
-  'tighten':           'Tighten wording',
-  'ats':               'Improve ATS match',
-  'tailor':            'Tailor to target role',
-  'shorten':           'Shorten to one page',
-  'strengthen-bullets':'Strengthen bullets',
-};
-
-// ── Rewrite UI state ──────────────────────────────────────────────
-function updateRewriteUI() {
-  const enabled = state.appConfig.openAiRewriteEnabled;
-  for (const btn of document.querySelectorAll('.ai-action-btn')) {
-    btn.disabled = !enabled;
-  }
-  aiHintEl.textContent = enabled
-    ? ''
-    : 'Refinement requires a configured AI provider. Add your OPENAI_API_KEY to .env to enable.';
-}
-
-// ── AI Action handler ─────────────────────────────────────────────
-async function triggerAiAction(action) {
-  if (state.rewriteInFlight || !state.appConfig.openAiRewriteEnabled) return;
-
-  state.rewriteInFlight = true;
-
-  for (const btn of document.querySelectorAll('.ai-action-btn')) {
-    btn.disabled = true;
-    if (btn.dataset.action === action) {
-      btn.querySelector('.ai-action-label').textContent = 'Working…';
-    }
-  }
-  aiHintEl.textContent = '';
-
-  try {
-    const payload = { ...(state.lastPayload ?? {}) };
-    if (!payload.resumeText && state.analysisResult?.extractedResumeText) {
-      payload.resumeText = state.analysisResult.extractedResumeText;
-    }
-    // Use innerText so edits to the contenteditable pre are captured
-    const assembled = finalDraftEl.innerText?.trim();
-    if (assembled) payload.resumeText = assembled;
-    payload.action = action;
-
-    const controller = new AbortController();
-    const timeoutId  = setTimeout(() => controller.abort(), 120_000);
-    let res;
-    try {
-      res = await fetch('/api/rewrite', {
-        method:  'POST',
-        headers: { 'content-type': 'application/json' },
-        body:    JSON.stringify(payload),
-        signal:  controller.signal
-      });
-    } catch (fetchErr) {
-      if (fetchErr.name === 'AbortError') throw new Error('AI action timed out. Please try again.');
-      throw fetchErr;
-    } finally {
-      clearTimeout(timeoutId);
-    }
-    const result = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(result.error ?? 'Action failed. Please try again.');
-
-    aiResultLabelEl.textContent = `${AI_ACTION_LABELS[action] ?? 'AI-revised'} version`;
-    // Set content on contenteditable pre via textContent (safe — no HTML)
-    aiRewriteEl.textContent = result.rewrittenResume ?? 'No result returned.';
-    renderAiNotes(result.summary, result.bulletImprovements ?? [], result.notes ?? []);
-
-    aiResultEl.classList.remove('hidden');
-    // Keep action buttons visible — just show the "Run another pass:" label
-    document.querySelector('#ai-next-label').classList.remove('hidden');
-    aiHintEl.textContent = '';
-
-    aiResultEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  } catch (err) {
-    aiHintEl.textContent = err.message ?? 'Action failed. Please try again.';
-  } finally {
-    state.rewriteInFlight = false;
-    for (const btn of document.querySelectorAll('.ai-action-btn')) {
-      const a = btn.dataset.action;
-      if (AI_ACTION_LABELS[a]) {
-        btn.querySelector('.ai-action-label').textContent = AI_ACTION_LABELS[a];
-      }
-      btn.disabled = !state.appConfig.openAiRewriteEnabled;
-    }
-  }
-}
-
-// Delegate click on all action buttons
-document.querySelector('#ai-actions').addEventListener('click', e => {
-  const btn = e.target.closest('.ai-action-btn');
-  if (btn && !btn.disabled) triggerAiAction(btn.dataset.action);
-});
-
-// ── AI notes — grouped rendering (Issue 6) ────────────────────────
-function renderAiNotes(summary = '', bulletImprovements = [], notes = []) {
-  aiNotesEl.replaceChildren();
-  if (!summary && !bulletImprovements.length && !notes.length) return;
-
-  // Group 1: What this pass did (summary)
-  if (summary) {
-    const group = makeNoteGroup('✦', 'What this pass did');
-    const item  = el('div', 'ai-note-item summary-item', summary);
-    group.appendChild(item);
-    aiNotesEl.appendChild(group);
-  }
-
-  // Group 2: Bullet improvements
-  const improvements = bulletImprovements.filter(Boolean);
-  if (improvements.length) {
-    const group = makeNoteGroup('↻', 'Bullet changes');
-    for (const imp of improvements.slice(0, 8)) {
-      const item = el('div', 'ai-note-item', imp);
-      group.appendChild(item);
-    }
-    aiNotesEl.appendChild(group);
-  }
-
-  // Group 3: Suggestions / caveats
-  const caveats = notes.filter(Boolean);
-  if (caveats.length) {
-    const group = makeNoteGroup('→', 'Review before sending');
-    for (const note of caveats) {
-      const item = el('div', 'ai-note-item muted', note);
-      group.appendChild(item);
-    }
-    aiNotesEl.appendChild(group);
-  }
-}
-
-function makeNoteGroup(icon, title) {
-  const group  = el('div', 'ai-note-group');
-  const header = el('div', 'ai-note-group-header');
-  const ico    = el('span', 'ai-note-group-icon', icon);
-  const lbl    = el('span', 'ai-note-group-title', title);
-  header.append(ico, lbl);
-  group.appendChild(header);
-  return group;
 }
 
 // ── Export ────────────────────────────────────────────────────────
@@ -678,11 +623,9 @@ async function exportText(format, text) {
 // Use innerText so user edits to the contenteditable pre are captured
 downloadDocxEl.addEventListener('click',   () => exportText('docx', finalDraftEl.innerText).catch(console.error));
 downloadPdfEl.addEventListener('click',    () => exportText('pdf',  finalDraftEl.innerText).catch(console.error));
-dlRewriteDocxEl.addEventListener('click', () => exportText('docx', aiRewriteEl.innerText).catch(console.error));
-dlRewritePdfEl.addEventListener('click',  () => exportText('pdf',  aiRewriteEl.innerText).catch(console.error));
 
 // Strip HTML formatting on paste into editable pres (keeps plain text only)
-for (const pre of [finalDraftEl, aiRewriteEl]) {
+for (const pre of [finalDraftEl]) {
   pre.addEventListener('paste', e => {
     e.preventDefault();
     const text = e.clipboardData?.getData('text/plain') ?? '';
