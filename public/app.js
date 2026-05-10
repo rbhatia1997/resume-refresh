@@ -39,6 +39,8 @@ const tabButtons   = document.querySelectorAll('.tab');
 const tabUploadEl  = document.querySelector('#tab-upload');
 const tabPasteEl   = document.querySelector('#tab-paste');
 
+const COACH_VISIBLE_LIMIT = 3;
+
 // ── App state ─────────────────────────────────────────────────────
 const state = {
   view:           'intake',  // 'intake' | 'editor' | 'final'
@@ -47,6 +49,7 @@ const state = {
   sectionIndex:   0,
   approved:       {},        // {sectionId: editedText}
   skippedSuggestions: {},
+  expandedCoachSections: {},
   editingSuggestionId: null,
   candidateName:  '',
   lastPayload:    null,
@@ -362,9 +365,36 @@ function renderCoachPanel(container, section, textarea) {
     return;
   }
 
-  for (const suggestion of suggestions) {
+  if (suggestions.length > COACH_VISIBLE_LIMIT) {
+    container.appendChild(renderCoachSummary(section, textarea, suggestions.length));
+  }
+
+  const isExpanded = Boolean(state.expandedCoachSections[section.id]);
+  const visibleSuggestions = isExpanded
+    ? suggestions
+    : suggestions.slice(0, COACH_VISIBLE_LIMIT);
+
+  for (const suggestion of visibleSuggestions) {
     container.appendChild(renderSuggestionCard(section, suggestion, textarea));
   }
+}
+
+function renderCoachSummary(section, textarea, totalCount) {
+  const isExpanded = Boolean(state.expandedCoachSections[section.id]);
+  const visibleCount = isExpanded ? totalCount : Math.min(totalCount, COACH_VISIBLE_LIMIT);
+  const hiddenCount = Math.max(0, totalCount - COACH_VISIBLE_LIMIT);
+  const summary = el('div', 'coach-summary');
+  summary.appendChild(el('p', 'coach-summary-text', `Showing ${visibleCount} of ${totalCount} suggestions`));
+
+  const toggle = el('button', 'btn-ghost coach-summary-toggle', isExpanded ? 'Show fewer' : `Show ${hiddenCount} more`);
+  toggle.type = 'button';
+  toggle.addEventListener('click', () => {
+    persistSectionEdit(section, textarea);
+    state.expandedCoachSections[section.id] = !isExpanded;
+    renderSectionPanel(section);
+  });
+  summary.appendChild(toggle);
+  return summary;
 }
 
 function renderSuggestionCard(section, suggestion, textarea) {
@@ -408,7 +438,7 @@ function renderSuggestionCard(section, suggestion, textarea) {
     apply.addEventListener('click', () => {
       const editValue = card.querySelector('.suggestion-edit')?.value;
       applySuggestionToTextarea(textarea, suggestion, editValue);
-      markSuggestionResolved(section.id, suggestion.id);
+      resolveSuggestion(section, textarea, suggestion.id);
     });
     actions.appendChild(apply);
   }
@@ -416,23 +446,35 @@ function renderSuggestionCard(section, suggestion, textarea) {
     const editBtn = el('button', 'btn-secondary suggestion-edit-btn', 'Edit');
     editBtn.type = 'button';
     editBtn.addEventListener('click', () => {
+      persistSectionEdit(section, textarea);
       state.editingSuggestionId = state.editingSuggestionId === suggestion.id ? null : suggestion.id;
       renderSectionPanel(section);
     });
     actions.appendChild(editBtn);
   }
-  const skip = el('button', 'btn-ghost suggestion-skip', 'Skip');
+  const skip = el('button', 'btn-ghost suggestion-skip', 'Mark addressed');
   skip.type = 'button';
   skip.addEventListener('click', () => {
-    state.skippedSuggestions[section.id] = {
-      ...(state.skippedSuggestions[section.id] || {}),
-      [suggestion.id]: true
-    };
-    renderSectionPanel(section);
+    resolveSuggestion(section, textarea, suggestion.id);
   });
   actions.appendChild(skip);
   card.appendChild(actions);
   return card;
+}
+
+function persistSectionEdit(section, textarea) {
+  if (!section || !textarea) return;
+  section.currentText = textarea.value;
+  if (textarea.value.trim()) {
+    state.approved[section.id] = textarea.value.trim();
+  }
+}
+
+function resolveSuggestion(section, textarea, suggestionId) {
+  persistSectionEdit(section, textarea);
+  markSuggestionResolved(section.id, suggestionId);
+  state.editingSuggestionId = null;
+  renderSectionPanel(section);
 }
 
 function markSuggestionResolved(sectionId, suggestionId) {

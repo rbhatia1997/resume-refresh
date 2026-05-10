@@ -609,6 +609,25 @@ button { cursor: pointer; font: inherit; }
   border-color: var(--success-border);
 }
 
+.coach-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 0 2px;
+}
+
+.coach-summary-text {
+  color: var(--muted);
+  font-size: 0.8125rem;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.coach-summary-toggle {
+  flex-shrink: 0;
+}
+
 .suggestion-card-title {
   font-size: 0.875rem;
   font-weight: 700;
