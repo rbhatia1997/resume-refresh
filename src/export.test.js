@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import JSZip from "jszip";
 import { PDFDocument } from "pdf-lib";
 import { handleRequest, parseResumeForExport } from "./app.js";
 
@@ -35,6 +36,30 @@ EDUCATION
 Example High School
 2022
 `;
+
+const previewStyledResume = `
+ALEX RIVERA
+Austin, TX | alex@example.com | linkedin.com/in/alexrivera | 555-010-2200
+
+SUMMARY
+Product manager with 5+ years of experience delivering AI infrastructure systems.
+
+EXPERIENCE
+Product Manager - Example Hardware Co Aug 2023 - Present
+- Enable $100M+ in sales through direct customer engagement.
+
+SKILLS
+Product Strategy | AI Infrastructure | Stakeholder Management
+
+EDUCATION
+Example University
+`;
+
+async function readDocxDocumentXml(response) {
+  assert.equal(response.status, 200);
+  const zip = await JSZip.loadAsync(Buffer.from(await response.arrayBuffer()));
+  return zip.file("word/document.xml").async("string");
+}
 
 function longResume() {
   const bullets = Array.from({ length: 95 }, (_, index) => (
@@ -72,6 +97,20 @@ test("export formatting compacts skills into grouped rows", () => {
   assert.deepEqual(sections.skills, [
     "Hardware Troubleshooting | POS Systems | Device Deployment"
   ]);
+});
+
+test("DOCX export matches the final preview hierarchy", async () => {
+  const response = await handleRequest(exportRequest({
+    format: "docx",
+    candidateName: "Alex Rivera",
+    text: previewStyledResume
+  }, "203.0.113.13"), { serveStatic: false });
+
+  const xml = await readDocxDocumentXml(response);
+  assert.match(xml, /<w:jc w:val="center"\/>/);
+  assert.match(xml, /<w:pBdr><w:bottom w:val="single"/);
+  assert.match(xml, /<w:b\/>.*?<w:sz w:val="21"\/>.*?<w:t[^>]*>Product Manager - Example Hardware Co<\/w:t>/);
+  assert.match(xml, /<w:tabs><w:tab w:val="right"/);
 });
 
 test("PDF and DOCX export reject resumes that exceed the one-page budget", async () => {

@@ -4,7 +4,7 @@ import { createRequire } from "node:module";
 import { promises as fs, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { Document, Packer, Paragraph, TextRun, TabStopType } from "docx";
+import { AlignmentType, BorderStyle, Document, Packer, Paragraph, TextRun, TabStopType } from "docx";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { analyzeResume } from "./resume-analyzer.js";
 import { normalizeInputText } from "./text-normalizer.js";
@@ -24,6 +24,14 @@ export const MAX_BODY_BYTES = 6 * 1024 * 1024;
 const maxRewriteChars = 10000;
 const maxOnePageExportLines = 64;
 const compactListSectionKeys = new Set(["skills", "languages", "hobbies", "interests"]);
+const exportRuleColor = "D7DDE6";
+const exportInkColor = "111827";
+const exportMutedColor = "64748B";
+const exportHeadingColor = "334155";
+const docxPageWidthTwips = 12240;
+const docxPageHeightTwips = 15840;
+const docxMarginTwips = 720;
+const docxRightTabTwips = docxPageWidthTwips - docxMarginTwips * 2;
 const dailyEditLimit = parsePositiveInteger(process.env.DAILY_EDIT_LIMIT, 10);
 const dailyEditWindowMs = 24 * 60 * 60 * 1000;
 const maxRateLimitBuckets = 5000;
@@ -1067,23 +1075,39 @@ function assertOnePageExportBudget(sections) {
   }
 }
 
+function docxDividerBorder() {
+  return {
+    bottom: {
+      style: BorderStyle.SINGLE,
+      color: exportRuleColor,
+      size: 4,
+      space: 4
+    }
+  };
+}
+
 async function buildDocx(text) {
   const sections = parseResumeForExport(text);
   assertOnePageExportBudget(sections);
   const paragraphs = [];
 
+  const headerMeta = sections.header.slice(1).join(" | ");
+
   if (sections.header[0]) {
     paragraphs.push(new Paragraph({
-      children: [new TextRun({ text: sections.header[0], bold: true, size: 26 })],
-      spacing: { after: 70 }
+      alignment: AlignmentType.CENTER,
+      children: [new TextRun({ text: sections.header[0], bold: true, size: 32, color: exportInkColor })],
+      spacing: { after: headerMeta ? 35 : 75 },
+      border: headerMeta ? undefined : docxDividerBorder()
     }));
   }
 
-  const headerMeta = sections.header.slice(1).join("  |  ");
   if (headerMeta) {
     paragraphs.push(new Paragraph({
-      children: [new TextRun({ text: headerMeta, color: "555555", size: 18 })],
-      spacing: { after: 130 }
+      alignment: AlignmentType.CENTER,
+      children: [new TextRun({ text: headerMeta, color: exportMutedColor, size: 18 })],
+      spacing: { after: 95 },
+      border: docxDividerBorder()
     }));
   }
 
@@ -1094,13 +1118,14 @@ async function buildDocx(text) {
     }
 
     paragraphs.push(new Paragraph({
-      children: [new TextRun({ text: title.toUpperCase(), bold: true, size: 17, color: "6B5B4D" })],
-      spacing: { before: 95, after: 45 }
+      children: [new TextRun({ text: title.toUpperCase(), bold: true, size: 16, color: exportHeadingColor })],
+      spacing: { before: 105, after: 45 },
+      border: docxDividerBorder()
     }));
 
     for (const line of sections[key]) {
       if (!line) {
-        paragraphs.push(new Paragraph({ spacing: { after: 60 } }));
+        paragraphs.push(new Paragraph({ spacing: { after: 40 } }));
         continue;
       }
 
@@ -1110,25 +1135,25 @@ async function buildDocx(text) {
         if (split) {
           // Job title line: role left, date right-aligned via tab stop
           paragraphs.push(new Paragraph({
-            tabStops: [{ type: TabStopType.RIGHT, position: 9360 }],
+            tabStops: [{ type: TabStopType.RIGHT, position: docxRightTabTwips }],
             children: [
-              new TextRun({ text: split.role, bold: false, size: 20 }),
+              new TextRun({ text: split.role, bold: true, size: 21, color: exportInkColor }),
               new TextRun({ text: "\t" }),
-              new TextRun({ text: split.date, color: "555555", size: 20 })
+              new TextRun({ text: split.date, color: exportMutedColor, size: 19 })
             ],
-            spacing: { after: 50 }
+            spacing: { before: 35, after: 35 }
           }));
         } else {
           paragraphs.push(new Paragraph({
-            text: line,
-            spacing: { after: 45 }
+            children: [new TextRun({ text: line, color: exportInkColor, size: 20 })],
+            spacing: { after: 35 }
           }));
         }
       } else {
         paragraphs.push(new Paragraph({
-          text: line.replace(/^[-*•]\s*/, ""),
+          children: [new TextRun({ text: line.replace(/^[-*•]\s*/, ""), color: exportInkColor, size: 20 })],
           bullet: { level: 0 },
-          spacing: { after: 32 }
+          spacing: { after: 24 }
         }));
       }
     }
@@ -1139,7 +1164,13 @@ async function buildDocx(text) {
       {
         properties: {
           page: {
-            margin: { top: 720, bottom: 720, left: 864, right: 864 }
+            size: { width: docxPageWidthTwips, height: docxPageHeightTwips },
+            margin: {
+              top: 576,
+              bottom: 576,
+              left: docxMarginTwips,
+              right: docxMarginTwips
+            }
           }
         },
         children: paragraphs
@@ -1174,10 +1205,14 @@ async function buildPdf(text) {
   const page = pdf.addPage([612, 792]);
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   const boldFont = await pdf.embedFont(StandardFonts.HelveticaBold);
-  const fontSize = 10;
-  const lineHeight = 13;
-  const margin = 46;
+  const fontSize = 10.4;
+  const lineHeight = 14;
+  const margin = 36;
   const maxWidth = page.getWidth() - margin * 2;
+  const ink = rgb(0.07, 0.09, 0.15);
+  const muted = rgb(0.39, 0.45, 0.55);
+  const heading = rgb(0.2, 0.25, 0.33);
+  const rule = rgb(0.84, 0.87, 0.9);
   let y = page.getHeight() - margin;
   let clipped = false;
 
@@ -1193,7 +1228,7 @@ async function buildPdf(text) {
       x = margin,
       size = fontSize,
       currentFont = font,
-      color = rgb(0.07, 0.11, 0.13),
+      color = ink,
       indent = 0
     } = options;
     const lines = wrapText(sanitizeForWinAnsi(textValue), currentFont, size, maxWidth - indent);
@@ -1213,21 +1248,58 @@ async function buildPdf(text) {
     }
   };
 
-  if (sections.header[0]) {
-    drawWrapped(sections.header[0], {
-      size: 18,
-      currentFont: boldFont
+  const drawCenteredWrapped = (textValue, options = {}) => {
+    if (clipped) return;
+    const {
+      size = fontSize,
+      currentFont = font,
+      color = ink
+    } = options;
+    const lines = wrapText(sanitizeForWinAnsi(textValue), currentFont, size, maxWidth);
+    for (const line of lines) {
+      ensureSpace(lineHeight);
+      if (clipped) return;
+      const textWidth = currentFont.widthOfTextAtSize(line, size);
+      page.drawText(line, {
+        x: margin + (maxWidth - textWidth) / 2,
+        y,
+        size,
+        font: currentFont,
+        color
+      });
+      y -= lineHeight;
+    }
+  };
+
+  const drawDivider = (offset = 3) => {
+    if (clipped) return;
+    page.drawLine({
+      start: { x: margin, y: y - offset },
+      end: { x: margin + maxWidth, y: y - offset },
+      thickness: 0.6,
+      color: rule
     });
-    y -= 3;
+  };
+
+  if (sections.header[0]) {
+    drawCenteredWrapped(sections.header[0], {
+      size: 16,
+      currentFont: boldFont,
+      color: ink
+    });
+    y -= 1;
   }
 
   const headerMeta = sections.header.slice(1).join("  |  ");
   if (headerMeta) {
-    drawWrapped(headerMeta, {
-      size: 10,
-      color: rgb(0.33, 0.33, 0.33)
+    drawCenteredWrapped(headerMeta, {
+      size: 9,
+      color: muted
     });
-    y -= 8;
+  }
+  if (sections.header[0] || headerMeta) {
+    drawDivider(2);
+    y -= 14;
   }
 
   for (const [title, key] of exportSectionEntries(sections)) {
@@ -1241,11 +1313,12 @@ async function buildPdf(text) {
       page.drawText(title.toUpperCase(), {
         x: margin,
         y,
-        size: 9,
+        size: 8.2,
         font: boldFont,
-        color: rgb(0.42, 0.35, 0.28)
+        color: heading
       });
-      y -= lineHeight;
+      drawDivider(4);
+      y -= 13;
     }
 
     for (const line of sections[key]) {
@@ -1262,7 +1335,7 @@ async function buildPdf(text) {
             y,
             size: fontSize,
             font: boldFont,
-            color: rgb(0.07, 0.11, 0.13)
+            color: ink
           });
           drawWrapped(line.replace(/^[-*•]\s*/, ""), { indent: 14 });
         }
@@ -1271,13 +1344,18 @@ async function buildPdf(text) {
         if (split) {
           ensureSpace(lineHeight);
           if (!clipped) {
-            // Role: left-aligned
-            const roleLines = wrapText(split.role, font, fontSize, maxWidth * 0.72);
-            page.drawText(roleLines[0] || split.role, { x: margin, y, size: fontSize, font, color: rgb(0.07, 0.11, 0.13) });
-            // Date: right-aligned on the same baseline
-            const dateWidth = font.widthOfTextAtSize(split.date, fontSize);
-            page.drawText(split.date, { x: margin + maxWidth - dateWidth, y, size: fontSize, font, color: rgb(0.33, 0.33, 0.33) });
+            const dateSize = 9.8;
+            const dateWidth = font.widthOfTextAtSize(split.date, dateSize);
+            const roleLines = wrapText(split.role, boldFont, fontSize, Math.max(220, maxWidth - dateWidth - 24));
+            page.drawText(roleLines[0] || split.role, { x: margin, y, size: fontSize, font: boldFont, color: ink });
+            page.drawText(split.date, { x: margin + maxWidth - dateWidth, y, size: dateSize, font, color: muted });
             y -= lineHeight;
+            for (const roleLine of roleLines.slice(1)) {
+              ensureSpace(lineHeight);
+              if (clipped) break;
+              page.drawText(roleLine, { x: margin, y, size: fontSize, font: boldFont, color: ink });
+              y -= lineHeight;
+            }
           }
         } else {
           drawWrapped(line);
