@@ -132,6 +132,7 @@ EDUCATION
 Example High School, Example City
 2017 - 2022
 PROJECTS / HOBBIES
+
 Building Computers
 DJing
 `);
@@ -232,7 +233,7 @@ Example High School
   await expect.poll(() => cards.count()).toBeGreaterThan(3);
 });
 
-test("unknown heading-like resume sections are preserved as editable additional sections", async ({ page }) => {
+test("common optional resume sections are preserved as editable steps", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("tab", { name: "Paste text" }).click();
   await page.locator("#resume-text").fill(`

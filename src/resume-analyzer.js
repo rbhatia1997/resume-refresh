@@ -28,7 +28,20 @@ const SECTION_HEADERS = [
   "volunteer",
   "hobbies",
   "interests",
-  "languages"
+  "languages",
+  "publications",
+  "research",
+  "coursework",
+  "licenses",
+  "licensure",
+  "community",
+  "community involvement",
+  "extracurriculars",
+  "activities",
+  "military service",
+  "professional development",
+  "training",
+  "portfolio"
 ];
 
 const STOPWORDS = new Set([
@@ -179,7 +192,16 @@ const SECTION_ALIASES = {
   volunteer: ["volunteer"],
   hobbies: ["hobbies", "hobbies interests"],
   interests: ["interests"],
-  languages: ["languages"]
+  languages: ["languages"],
+  publications: ["publications"],
+  research: ["research"],
+  coursework: ["coursework", "relevant coursework"],
+  licenses: ["licenses", "licensure"],
+  community: ["community", "community involvement"],
+  extracurriculars: ["extracurriculars", "activities"],
+  military: ["military service"],
+  development: ["professional development", "training"],
+  portfolio: ["portfolio"]
 };
 
 function normalizeWhitespace(text = "") {
@@ -192,18 +214,6 @@ function splitLines(text = "") {
 
 function normalizeHeadingValue(line = "") {
   return String(line || "").toLowerCase().replace(/[^a-z ]/g, " ").replace(/\s+/g, " ").trim();
-}
-
-function customSectionSlug(line = "") {
-  return normalizeHeadingValue(line).replace(/\s+/g, "-");
-}
-
-function displaySectionLabel(line = "") {
-  const words = normalizeHeadingValue(line).split(/\s+/).filter(Boolean);
-  return words.map((word) => {
-    if (word.length <= 3 && word === word.toUpperCase()) return word;
-    return word.charAt(0).toUpperCase() + word.slice(1);
-  }).join(" ");
 }
 
 function isHeading(line) {
@@ -227,62 +237,6 @@ function resolveCanonicalHeading(value) {
   return "";
 }
 
-function looksLikeCustomHeading(line = "", { current = "", previous = "", next = "" } = {}) {
-  const raw = String(line || "").trim();
-  if (!raw || isHeading(raw)) return false;
-  if (current === "header") return false;
-  if (/^[-*•]/.test(raw)) return false;
-  if (/@|https?:|www\.|linkedin\.com/i.test(raw)) return false;
-  if (/\b(19|20)\d{2}\b/.test(raw)) return false;
-  if (/[.,:;!?|]/.test(raw)) return false;
-
-  const normalized = normalizeHeadingValue(raw);
-  const words = normalized.split(/\s+/).filter(Boolean);
-  if (words.length < 1 || words.length > 5) return false;
-  if (normalized.length < 3 || normalized.length > 48) return false;
-
-  const letters = raw.replace(/[^A-Za-z]/g, "");
-  if (letters.length < 3) return false;
-
-  const previousBlank = !String(previous || "").trim();
-  const nextHasContent = Boolean(String(next || "").trim());
-  if (!previousBlank || !nextHasContent) return false;
-
-  const isAllCaps = letters === letters.toUpperCase();
-  if (isAllCaps) return true;
-
-  const titleLikeWords = raw
-    .split(/\s+/)
-    .filter(Boolean)
-    .every((word) => /^(and|or|of|for|in|on|&|\/)$/.test(word.toLowerCase()) || /^[A-Z][A-Za-z&/-]*$/.test(word));
-
-  return titleLikeWords;
-}
-
-function getOrCreateCustomSection(sections, label) {
-  if (!sections._customSections) sections._customSections = [];
-  const base = customSectionSlug(label) || "additional-section";
-  const existing = sections._customSections.find((section) => section.slug === base);
-  if (existing) return existing;
-
-  let id = `custom:${base}`;
-  let suffix = 2;
-  while (sections[id]) {
-    id = `custom:${base}-${suffix}`;
-    suffix += 1;
-  }
-
-  const section = {
-    id,
-    slug: base,
-    label: displaySectionLabel(label),
-    exportHeader: displaySectionLabel(label).toUpperCase()
-  };
-  sections._customSections.push(section);
-  sections[id] = [];
-  return section;
-}
-
 function parseSections(text = "") {
   // Split preserving blank lines so experience entry boundaries survive intact.
   // normalizeWhitespace() has already been applied upstream — just split on \n.
@@ -303,14 +257,6 @@ function parseSections(text = "") {
       if (!sections[current]) {
         sections[current] = [];
       }
-      continue;
-    }
-    if (line && looksLikeCustomHeading(line, {
-      current,
-      previous: lines[index - 1] || "",
-      next: lines[index + 1] || ""
-    })) {
-      current = getOrCreateCustomSection(sections, line).id;
       continue;
     }
     sections[current].push(line); // blank strings preserved — they are entry separators
@@ -1189,6 +1135,15 @@ const SECTION_DISPLAY_LABELS = {
   hobbies:        "Hobbies",
   interests:      "Interests",
   languages:      "Languages",
+  publications:   "Publications",
+  research:       "Research",
+  coursework:     "Coursework",
+  licenses:       "Licenses",
+  community:      "Community Involvement",
+  extracurriculars: "Extracurriculars",
+  military:       "Military Service",
+  development:    "Professional Development",
+  portfolio:      "Portfolio",
 };
 
 // Common non-name words that can appear in resume headers
@@ -1263,15 +1218,26 @@ function determineSectionOrder(sections, candidateLevel) {
   }
 
   // Append optional sections only if they have content
-  for (const id of ["projects", "certifications", "awards", "volunteer", "hobbies", "interests", "languages"]) {
+  for (const id of [
+    "projects",
+    "certifications",
+    "licenses",
+    "publications",
+    "research",
+    "coursework",
+    "portfolio",
+    "awards",
+    "volunteer",
+    "community",
+    "extracurriculars",
+    "military",
+    "development",
+    "hobbies",
+    "interests",
+    "languages"
+  ]) {
     if (!base.includes(id) && (sections[id] || []).filter(l => l.trim()).length > 0) {
       base.push(id);
-    }
-  }
-
-  for (const custom of sections._customSections || []) {
-    if (!base.includes(custom.id) && (sections[custom.id] || []).filter(l => l.trim()).length > 0) {
-      base.push(custom.id);
     }
   }
 
@@ -1342,11 +1308,9 @@ function buildSectionEditorData({
     : formatExperienceWithAnnotations(rawExpLines);
 
   const order = determineSectionOrder(sections, candidateLevel);
-  const customSectionMap = new Map((sections._customSections || []).map((section) => [section.id, section]));
 
   return order.map(id => {
     const internalId = id === "heading" ? "header" : id;
-    const customSection = customSectionMap.get(id);
 
     const currentLines  = (sections[internalId] || []).filter(l => l.trim());
     const proposedLines = (rewrittenSections[internalId] || []).filter(l => l.trim());
@@ -1448,7 +1412,7 @@ function buildSectionEditorData({
 
     const sectionResult = {
       id,
-      label:      customSection?.label || SECTION_DISPLAY_LABELS[id] || id,
+      label:      SECTION_DISPLAY_LABELS[id] || id,
       currentText,
       proposedText,
       critique:   buildSectionCritique(id, sectionIssues, effectiveStatus),
@@ -1458,11 +1422,6 @@ function buildSectionEditorData({
       parsedFields: id === "heading" ? contactInfo : id === "experience" ? { entries: expEntries } : {},
       parseWarning,
     };
-
-    if (customSection?.exportHeader) {
-      sectionResult.exportHeader = customSection.exportHeader;
-      sectionResult.sectionKind = "additional";
-    }
 
     if (id === "summary") {
       sectionResult.summarySource = sections._summarySource || "none";

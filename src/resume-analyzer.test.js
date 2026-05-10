@@ -183,6 +183,7 @@ EDUCATION
 Example High School, Example City
 2017 - 2022
 PROJECTS / HOBBIES
+
 Building Computers
 Modding consoles / Applications
 Running Community Events
@@ -236,7 +237,7 @@ multitasking under pressure
   assert.notEqual(experience.status, "ok");
 });
 
-test("analyzeResume preserves unknown heading-like sections as additional sections", () => {
+test("analyzeResume preserves common optional sections", () => {
   const result = analyzeResume({
     linkedinText: "",
     resumeText: `
@@ -265,18 +266,56 @@ COMMUNITY INVOLVEMENT
   });
 
   const education = result.sectionEditorData.find((section) => section.id === "education");
-  const publications = result.sectionEditorData.find((section) => section.label === "Publications");
-  const community = result.sectionEditorData.find((section) => section.label === "Community Involvement");
+  const publications = result.sectionEditorData.find((section) => section.id === "publications");
+  const community = result.sectionEditorData.find((section) => section.id === "community");
 
   assert.ok(publications);
+  assert.equal(publications.label, "Publications");
   assert.match(publications.currentText, /Retail Systems Troubleshooting Notes/);
-  assert.equal(publications.exportHeader, "PUBLICATIONS");
   assert.ok(community);
+  assert.equal(community.label, "Community Involvement");
   assert.match(community.currentText, /Hosted local computer-building workshops/);
   assert.doesNotMatch(education.currentText, /PUBLICATIONS|COMMUNITY INVOLVEMENT|Retail Systems/i);
 });
 
-test("analyzeResume does not treat all-caps skills as custom section headings", () => {
+test("analyzeResume does not promote project or hobby items into section headings", () => {
+  const result = analyzeResume({
+    linkedinText: "",
+    resumeText: `
+Jane Doe
+jane@example.com
+
+SUMMARY
+IT support specialist with retail systems experience.
+
+EXPERIENCE
+IT Support Specialist - Example Retail, California
+2022 - Present
+- Resolved POS and device issues.
+
+EDUCATION
+Example High School
+2022
+
+PROJECTS / HOBBIES
+Building Computers
+Modding consoles / Applications
+Running Community Events
+DJing
+`,
+    targetRole: "IT Support Specialist"
+  });
+
+  const projects = result.sectionEditorData.find((section) => section.id === "projects");
+
+  assert.ok(projects);
+  assert.equal(projects.label, "Projects");
+  assert.match(projects.currentText, /Building Computers/);
+  assert.match(projects.currentText, /Modding consoles \/ Applications/);
+  assert.ok(!result.sectionEditorData.some((section) => section.label === "Building Computers"));
+});
+
+test("analyzeResume does not treat all-caps skills as optional section headings", () => {
   const result = analyzeResume({
     linkedinText: "",
     resumeText: `
