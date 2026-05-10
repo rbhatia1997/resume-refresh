@@ -6,6 +6,15 @@ Format: `MAJOR.MINOR.PATCH.MICRO`
 
 ---
 
+## [0.1.1.7] - 2026-05-10
+
+### Fixed
+
+- **Exports now better match the final preview** — PDF and DOCX exports include the same subtle dividers between experience entries that users see in the final review card.
+- **Repository fixtures are anonymized** — replaced user-specific sample resume details in tests and docs with synthetic `example.com` fixtures.
+
+---
+
 ## [0.1.1.6] - 2026-05-10
 
 ### Fixed

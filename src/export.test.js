@@ -146,11 +146,35 @@ test("DOCX export only right-aligns dates for experience rows", async () => {
   }, "203.0.113.14"), { serveStatic: false });
 
   const xml = await readDocxDocumentXml(response);
-  assert.match(xml, /<w:t[^>]*>Co-Founder - Example Events LLC \(example-events.com\)<\/w:t>/);
+  assert.match(xml, /<w:t[^>]*>Co-Founder - Example Events LLC \(example-events\.com\)<\/w:t>/);
   assert.match(xml, /<w:t[^>]*>Jan 2022 - Present<\/w:t>/);
-  assert.doesNotMatch(xml, /Co-Founder - Example Events LLC \(example-events.com\) Jun 2022/);
+  assert.doesNotMatch(xml, /Co-Founder - Example Events LLC \(example-events\.com\) Jun 2022/);
   assert.equal((xml.match(/<w:tabs>/g) || []).length, 1);
   assert.match(xml, /<w:t[^>]*>M\.S\. Computer Science \| Example Graduate University \| 3\.95 GPA Dec 2024<\/w:t>/);
+});
+
+test("DOCX export adds preview-style dividers between experience entries", async () => {
+  const response = await handleRequest(exportRequest({
+    format: "docx",
+    candidateName: "Alex Rivera",
+    text: `
+Alex Rivera
+alex@example.com
+
+SUMMARY
+Product manager with AI infrastructure experience.
+
+EXPERIENCE
+Product Manager - Example Hardware Co Aug 2023 - Present
+- Built AI infrastructure products.
+
+Co-Founder - Example Events LLC (example-events.com) Jun 2022 - Aug 2022
+- Created event operations software.
+`
+  }, "203.0.113.15"), { serveStatic: false });
+
+  const xml = await readDocxDocumentXml(response);
+  assert.match(xml, /<w:top w:val="single"/);
 });
 
 test("PDF and DOCX export reject resumes that exceed the one-page budget", async () => {

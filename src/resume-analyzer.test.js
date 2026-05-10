@@ -376,9 +376,9 @@ Example University
   const experience = result.sectionEditorData.find((section) => section.id === "experience");
 
   assert.ok(experience);
-  assert.doesNotMatch(experience.currentText, /Example Events LLC \(example-events.com\) Jun 2022/);
-  assert.match(experience.currentText, /Co-Founder - Example Events LLC \(example-events.com\)\s+Jan 2022 - Present/);
-  assert.doesNotMatch(experience.proposedText, /Example Events LLC \(example-events.com\) Jun 2022/);
+  assert.doesNotMatch(experience.currentText, /Example Events LLC \(example-events\.com\) Jun 2022/);
+  assert.match(experience.currentText, /Co-Founder - Example Events LLC \(example-events\.com\)\s+Jan 2022 - Present/);
+  assert.doesNotMatch(experience.proposedText, /Example Events LLC \(example-events\.com\) Jun 2022/);
 });
 
 test("analyzeResume uses LinkedIn-backed skills instead of low-signal product tools", () => {
