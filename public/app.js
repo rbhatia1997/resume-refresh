@@ -771,14 +771,46 @@ function appendFinalPlainLines(parent, lines = []) {
   }
 }
 
+function looksLikeContactToken(value = '') {
+  const text = String(value || '').trim();
+  if (!text) return false;
+  if (/@/.test(text)) return true;
+  if (/\b(?:https?:\/\/|www\.|linkedin\.com|github\.com|portfolio|behance\.net|dribbble\.com)\b/i.test(text)) return true;
+  if (/(?:\+?1[-.\s]?)?(?:\(?\d{3}\)?[-.\s]?)\d{3}[-.\s]?\d{4}/.test(text)) return true;
+  return false;
+}
+
+function splitFinalHeaderLines(lines = []) {
+  const compact = lines.map((line) => String(line || '').trim()).filter(Boolean);
+  if (!compact.length) return { name: '', contact: '' };
+
+  const firstParts = compact[0].split(/\s*[|•·]\s*/).map((part) => part.trim()).filter(Boolean);
+  if (firstParts.length > 1) {
+    const firstPartIsName = !looksLikeContactToken(firstParts[0]);
+    const name = firstPartIsName ? firstParts[0] : '';
+    const contacts = firstPartIsName ? firstParts.slice(1) : firstParts;
+    contacts.push(...compact.slice(1));
+    return { name, contact: contacts.join(' | ') };
+  }
+
+  if (looksLikeContactToken(compact[0])) {
+    return { name: '', contact: compact.join(' | ') };
+  }
+
+  return {
+    name: compact[0],
+    contact: compact.slice(1).join(' | ')
+  };
+}
+
 function appendFinalHeader(section) {
   const lines = section.lines.map((line) => line.trim()).filter(Boolean);
   if (!lines.length) return;
+  const { name, contact } = splitFinalHeaderLines(lines);
 
   const header = el('header', 'resume-final-header');
-  header.appendChild(el('h1', '', lines[0]));
+  if (name) header.appendChild(el('h1', '', name));
 
-  const contact = lines.slice(1).join(' | ');
   if (contact) header.appendChild(el('p', 'resume-final-contact', contact));
 
   finalDraftEl.appendChild(header);
@@ -854,6 +886,68 @@ function renderFinalResumePreview(draft = '') {
       finalDraftEl.appendChild(sectionEl);
     }
   }
+}
+
+function finalText(node) {
+  return String(node?.innerText || node?.textContent || '').replace(/\s+/g, ' ').trim();
+}
+
+function appendSerializedSectionLines(lines, sectionEl) {
+  for (const node of Array.from(sectionEl.children)) {
+    if (node.matches('h3')) continue;
+
+    if (node.matches('ul')) {
+      for (const item of Array.from(node.querySelectorAll(':scope > li'))) {
+        const text = finalText(item);
+        if (text) lines.push(`- ${text}`);
+      }
+      continue;
+    }
+
+    if (node.matches('.resume-final-experience-entry')) {
+      const role = finalText(node.querySelector('.resume-final-experience-role'));
+      const date = finalText(node.querySelector('.resume-final-experience-date'));
+      const heading = [role, date].filter(Boolean).join(' ');
+      if (heading) lines.push(heading);
+
+      for (const detail of Array.from(node.querySelectorAll(':scope > .resume-final-text'))) {
+        const text = finalText(detail);
+        if (text) lines.push(text);
+      }
+
+      for (const item of Array.from(node.querySelectorAll(':scope > ul > li'))) {
+        const text = finalText(item);
+        if (text) lines.push(`- ${text}`);
+      }
+      lines.push('');
+      continue;
+    }
+
+    const text = finalText(node);
+    if (text) lines.push(text);
+  }
+}
+
+function serializeFinalPreviewForExport() {
+  const lines = [];
+  const header = finalDraftEl.querySelector('.resume-final-header');
+
+  if (header) {
+    const name = finalText(header.querySelector('h1'));
+    const contact = finalText(header.querySelector('.resume-final-contact'));
+    if (name) lines.push(name);
+    if (contact) lines.push(contact);
+    if (name || contact) lines.push('');
+  }
+
+  for (const sectionEl of Array.from(finalDraftEl.querySelectorAll(':scope > .resume-final-section'))) {
+    const heading = finalText(sectionEl.querySelector(':scope > h3'));
+    if (heading) lines.push(heading);
+    appendSerializedSectionLines(lines, sectionEl);
+    lines.push('');
+  }
+
+  return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
 function assembleFinalResume() {
@@ -1075,8 +1169,24 @@ async function exportText(format, text) {
   }
 }
 
-downloadDocxEl.addEventListener('click',   () => exportText('docx', state.finalDraftText || finalDraftEl.innerText));
-downloadPdfEl.addEventListener('click',    () => exportText('pdf',  state.finalDraftText || finalDraftEl.innerText));
+downloadDocxEl.addEventListener('click',   () => exportText('docx', serializeFinalPreviewForExport() || state.finalDraftText || finalDraftEl.innerText));
+downloadPdfEl.addEventListener('click',    () => exportText('pdf',  serializeFinalPreviewForExport() || state.finalDraftText || finalDraftEl.innerText));
+
+finalDraftEl.addEventListener('input', () => {
+  state.finalDraftText = serializeFinalPreviewForExport();
+});
+
+finalDraftEl.addEventListener('paste', e => {
+  e.preventDefault();
+  const text = e.clipboardData?.getData('text/plain') ?? '';
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) return;
+  sel.deleteFromDocument();
+  const range = sel.getRangeAt(0);
+  range.insertNode(document.createTextNode(text));
+  sel.collapseToEnd();
+  state.finalDraftText = serializeFinalPreviewForExport();
+});
 
 // ── DOM utility ───────────────────────────────────────────────────
 function el(tag, className, textContent) {

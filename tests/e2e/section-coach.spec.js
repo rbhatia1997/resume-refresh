@@ -122,6 +122,91 @@ Hardware Support
   await expect(page.locator("#final-draft")).not.toContainText("SKILLS\nPOS Systems\nNetworking\nHardware Support");
 });
 
+test("final preview splits contact metadata, allows inline edits, and exports edited structure", async ({ page }) => {
+  let exportPayload;
+
+  await page.route("**/api/analyze", async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        candidateName: "RONAK BHATIA",
+        sectionEditorData: [
+          {
+            id: "heading",
+            label: "Contact Info",
+            proposedText: "RONAK BHATIA | Spring, TX | ronak@lyoko.com | linkedin.com/in/ronakbhatia | 805-428-7218",
+            status: "ok",
+            suggestions: []
+          },
+          {
+            id: "summary",
+            label: "Summary",
+            proposedText: "Product manager with 5+ years of experience delivering AI infrastructure systems.",
+            status: "ok",
+            suggestions: []
+          },
+          {
+            id: "experience",
+            label: "Experience",
+            proposedText: "Product Manager - Hewlett Packard Enterprise | Aug 2023 - Present\n- Enable $100M+ in sales through direct customer engagement.",
+            status: "ok",
+            suggestions: []
+          },
+          {
+            id: "skills",
+            label: "Skills",
+            proposedText: "Product Strategy\nAI Infrastructure\nStakeholder Management",
+            status: "ok",
+            suggestions: []
+          },
+          {
+            id: "education",
+            label: "Education",
+            proposedText: "Example University",
+            status: "ok",
+            suggestions: []
+          }
+        ]
+      })
+    });
+  });
+
+  await page.route("**/api/export", async (route) => {
+    exportPayload = route.request().postDataJSON();
+    await route.fulfill({
+      status: 200,
+      headers: {
+        "content-type": "application/pdf",
+        "content-disposition": 'attachment; filename="resume.pdf"'
+      },
+      body: "fake-pdf"
+    });
+  });
+
+  await page.goto("/");
+  await page.getByRole("tab", { name: "Paste text" }).click();
+  await page.locator("#resume-text").fill("RONAK BHATIA");
+  await page.locator("#target-role").fill("Product Manager");
+  await page.getByRole("button", { name: "Analyze my resume" }).click();
+
+  for (let i = 0; i < 5; i += 1) {
+    await page.getByRole("button", { name: /Continue|Finish/ }).click();
+  }
+
+  await expect(page.locator(".resume-final-header h1")).toHaveText("RONAK BHATIA");
+  await expect(page.locator(".resume-final-contact")).toHaveText("Spring, TX | ronak@lyoko.com | linkedin.com/in/ronakbhatia | 805-428-7218");
+  await expect(page.locator("#final-draft")).toHaveAttribute("contenteditable", "true");
+
+  await page.locator(".resume-final-section", { hasText: "SUMMARY" }).locator(".resume-final-text").evaluate((node) => {
+    node.textContent = "Edited product leader summary.";
+  });
+  await page.getByRole("button", { name: "PDF" }).click();
+
+  await expect.poll(() => exportPayload?.text).toContain("Edited product leader summary.");
+  await expect.poll(() => exportPayload?.text).toContain("- Enable $100M+ in sales through direct customer engagement.");
+});
+
 test("OCR-style pasted resume gets structured experience, skills coaching, and final notes", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("tab", { name: "Paste text" }).click();

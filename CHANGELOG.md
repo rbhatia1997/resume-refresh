@@ -6,6 +6,15 @@ Format: `MAJOR.MINOR.PATCH.MICRO`
 
 ---
 
+## [0.1.1.2] - 2026-05-10
+
+### Fixed
+
+- **Final preview is editable again** — restored inline editing on the structured resume preview and export now serializes the edited preview so user changes are included in DOCX/PDF downloads.
+- **Contact info no longer becomes the resume title** — pipe-separated headers like `Name | Location | Email | LinkedIn | Phone` now render the name as the H1 and move contact metadata to the smaller contact line.
+
+---
+
 ## [0.1.1.1] - 2026-05-10
 
 ### Changed
