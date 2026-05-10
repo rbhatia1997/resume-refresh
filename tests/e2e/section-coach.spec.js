@@ -29,6 +29,31 @@ IT Support Specialist - Example Retail, Northern California
   await expect(page.getByRole("heading", { name: "Professional Summary" })).toBeVisible();
 });
 
+test("contact step can add optional LinkedIn and GitHub profile fields", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("tab", { name: "Paste text" }).click();
+  await page.locator("#resume-text").fill(`
+Jane Doe
+jane@example.com
+(415) 555-1212
+
+SUMMARY
+IT support specialist with retail systems experience.
+
+EXPERIENCE
+IT Support Specialist - Example Retail, Northern California | Summer 2022
+- Installed equipment across store locations
+`);
+  await page.locator("#target-role").fill("IT Support Specialist");
+  await page.getByRole("button", { name: "Analyze my resume" }).click();
+
+  await expect(page.getByRole("heading", { name: "Contact Info" })).toBeVisible();
+  await expect(page.getByText("Add LinkedIn", { exact: true })).toBeVisible();
+  await expect(page.getByText("Add GitHub", { exact: true })).toBeVisible();
+  await page.locator(".suggestion-card").filter({ hasText: "Add GitHub" }).getByRole("button", { name: "Apply" }).click();
+  await expect(page.locator("#section-textarea")).toHaveValue(/GitHub: https:\/\/github\.com\/your-handle/);
+});
+
 test("summary and bullet suggestions can be applied without replacing unrelated sections", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("tab", { name: "Paste text" }).click();

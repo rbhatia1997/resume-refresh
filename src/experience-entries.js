@@ -1,4 +1,8 @@
-export const DATE_RANGE_RE = /(?:(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+)?(?:19|20)\d{2}\s*[-–—/]\s*(?:(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+)?(?:(?:19|20)\d{2}|present|current|now)/i;
+const MONTH_OR_SEASON_RE = String.raw`(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?|spring|summer|fall|autumn|winter)`;
+const YEAR_RE = String.raw`(?:19|20)\d{2}`;
+const DATE_POINT_RE = String.raw`(?:(?:${MONTH_OR_SEASON_RE})\s+)?${YEAR_RE}`;
+const SEASON_DATE_POINT_RE = String.raw`(?:${MONTH_OR_SEASON_RE})\s+${YEAR_RE}`;
+export const DATE_RANGE_RE = new RegExp(String.raw`(?:${DATE_POINT_RE}\s*[-–—/]\s*(?:${DATE_POINT_RE}|present|current|now)|${SEASON_DATE_POINT_RE})`, "i");
 
 const TITLE_WORD_RE = /\b(engineer|manager|analyst|designer|developer|director|specialist|associate|lead|senior|junior|consultant|coordinator|intern|founder|president|officer|strategist|scientist|architect|technician|chef)\b/i;
 const ACTION_START_RE = /^(troubleshoot|resolve|diagnose|support|install|replace|configure|configured|deploy|deployed|maintain|maintained|document|documented|deliver|delivered|manage|managed|assist|assisted|prepare|prepared|coordinate|coordinated|operate|operated|repair|repaired|image|imaged|build|built|lead|led|own|owned|provide|provided)\b/i;

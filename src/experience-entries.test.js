@@ -68,6 +68,30 @@ test("parseExperienceEntries recovers OCR-style roles and wrapped unbulleted bul
   ]);
 });
 
+test("parseExperienceEntries treats seasonal dates as editable date ranges", () => {
+  const entries = parseExperienceEntries([
+    "Software Engineering Intern - Example Co, Remote",
+    "Summer 2022",
+    "- Built internal tooling for support workflows",
+    "Research Assistant - Example Lab | Fall 2021 - Spring 2022",
+    "- Coordinated participant scheduling and data cleanup"
+  ]);
+
+  assert.equal(entries.length, 2);
+  assert.equal(entries[0].title, "Software Engineering Intern");
+  assert.equal(entries[0].company, "Example Co");
+  assert.equal(entries[0].location, "Remote");
+  assert.equal(entries[0].dateRange, "Summer 2022");
+  assert.equal(entries[0].confidence, "high");
+  assert.equal(entries[1].title, "Research Assistant");
+  assert.equal(entries[1].company, "Example Lab");
+  assert.equal(entries[1].dateRange, "Fall 2021 - Spring 2022");
+  assert.equal(
+    formatExperienceEntryHeading(entries[1]),
+    "Research Assistant - Example Lab Fall 2021 - Spring 2022"
+  );
+});
+
 test("formatExperienceEntryHeading can pad dates for monospace editor previews", () => {
   const heading = formatExperienceEntryHeading({
     title: "Sushi Chef",
