@@ -1,5 +1,4 @@
-import { Readable } from "node:stream";
-import { handleRequest } from "../src/app.js";
+import { buildErrorResponse, handleRequest, MAX_BODY_BYTES } from "../src/app.js";
 
 export const config = {
   runtime: "nodejs"
@@ -23,7 +22,7 @@ export async function toFetchRequest(req) {
 
   const body = ["GET", "HEAD"].includes(req.method || "GET")
     ? undefined
-    : Readable.toWeb(req);
+    : Buffer.concat(await readChunks(req));
 
   return new Request(url, {
     method: req.method,
@@ -31,6 +30,24 @@ export async function toFetchRequest(req) {
     body,
     duplex: body ? "half" : undefined
   });
+}
+
+async function readChunks(req) {
+  const chunks = [];
+  let received = 0;
+
+  for await (const chunk of req) {
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    received += buffer.byteLength;
+    if (received > MAX_BODY_BYTES) {
+      const error = new Error("Payload too large. Keep uploads under 6 MB.");
+      error.status = 413;
+      throw error;
+    }
+    chunks.push(buffer);
+  }
+
+  return chunks;
 }
 
 export async function sendNodeResponse(res, response) {
@@ -49,7 +66,12 @@ export async function sendNodeResponse(res, response) {
 }
 
 export async function nodeHandler(req, res) {
-  const request = await toFetchRequest(req);
-  const response = await handleRequest(request, { serveStatic: false });
+  let response;
+  try {
+    const request = await toFetchRequest(req);
+    response = await handleRequest(request, { serveStatic: false });
+  } catch (error) {
+    response = buildErrorResponse(error);
+  }
   await sendNodeResponse(res, response);
 }

@@ -217,11 +217,15 @@ export async function handleRequest(request, { serveStatic = true } = {}) {
 
     return textResponse("Not found", { status: 404 });
   } catch (error) {
-    const status = (error instanceof AppError) ? error.status : 400;
-    return jsonResponse({
-      error: error instanceof Error ? error.message : "Unknown error"
-    }, { status });
+    return buildErrorResponse(error);
   }
+}
+
+export function buildErrorResponse(error) {
+  const status = error instanceof AppError ? error.status : Number(error?.status || 400);
+  return jsonResponse({
+    error: error instanceof Error ? error.message : "Unknown error"
+  }, { status: status >= 400 && status < 600 ? status : 400 });
 }
 
 function loadDotEnv() {
