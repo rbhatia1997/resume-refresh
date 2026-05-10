@@ -6,6 +6,15 @@ Format: `MAJOR.MINOR.PATCH.MICRO`
 
 ---
 
+## [0.1.1.3] - 2026-05-10
+
+### Fixed
+
+- **PDF and DOCX exports now match the final preview hierarchy** — exports use centered name/contact info, divider rules, bold experience roles, right-aligned dates, and compact skills like the review-flow preview.
+- **Export page usage tightened** — PDF and DOCX margins/spacing were reduced so downloaded resumes use more of the page instead of looking undersized with excess whitespace.
+
+---
+
 ## [0.1.1.2] - 2026-05-10
 
 ### Fixed
