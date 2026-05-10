@@ -28,3 +28,33 @@ test("buildContactSuggestions suggests missing required contact fields without b
   assert.ok(suggestions.every((item) => item.applyMode === "insert-field"));
   assert.ok(suggestions.every((item) => item.severity !== "blocking"));
 });
+
+test("buildContactSuggestions offers optional profile links when core contact info is present", () => {
+  const suggestions = buildContactSuggestions({
+    name: "Jane Doe",
+    email: "jane@example.com",
+    phone: "(415) 555-1212",
+    location: "Oakland, CA",
+    links: []
+  });
+
+  assert.deepEqual(suggestions.map((item) => item.id), [
+    "contact-linkedin-optional",
+    "contact-github-optional",
+    "contact-portfolio-optional"
+  ]);
+  assert.ok(suggestions.every((item) => item.severity === "low"));
+  assert.ok(suggestions.every((item) => item.applyMode === "insert-field"));
+});
+
+test("buildContactSuggestions does not duplicate detected LinkedIn or GitHub links", () => {
+  const suggestions = buildContactSuggestions({
+    name: "Jane Doe",
+    email: "jane@example.com",
+    phone: "(415) 555-1212",
+    location: "Oakland, CA",
+    links: ["linkedin.com/in/janedoe", "github.com/janedoe"]
+  });
+
+  assert.deepEqual(suggestions.map((item) => item.id), ["contact-portfolio-optional"]);
+});

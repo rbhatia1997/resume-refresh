@@ -80,6 +80,30 @@ function missingFieldSuggestion({ id, title, detail, field }) {
   };
 }
 
+function optionalLinkSuggestion({ id, title, detail, field, suggestedText }) {
+  return {
+    id,
+    type: "optional-link",
+    severity: "low",
+    title,
+    detail,
+    originalText: "",
+    suggestedText,
+    rationale: "Profile links are optional, but they help recruiters verify relevant work quickly.",
+    applyMode: "insert-field",
+    field
+  };
+}
+
+function classifyLinks(links = []) {
+  const normalized = links.map((link) => String(link || "").toLowerCase());
+  return {
+    hasLinkedIn: normalized.some((link) => /linkedin\.com\/in\//.test(link)),
+    hasGithub: normalized.some((link) => /github\.com\//.test(link)),
+    hasPortfolio: normalized.some((link) => link && !/linkedin\.com\/in\/|github\.com\//.test(link))
+  };
+}
+
 export function buildContactSuggestions(contact = {}) {
   const suggestions = [];
 
@@ -107,6 +131,42 @@ export function buildContactSuggestions(contact = {}) {
       title: "Phone missing",
       detail: "Add a phone number if this resume is for direct applications.",
       field: "phone"
+    }));
+  }
+
+  if (suggestions.length) {
+    return suggestions;
+  }
+
+  const { hasLinkedIn, hasGithub, hasPortfolio } = classifyLinks(contact.links || []);
+
+  if (!hasLinkedIn) {
+    suggestions.push(optionalLinkSuggestion({
+      id: "contact-linkedin-optional",
+      title: "Add LinkedIn",
+      detail: "Include a LinkedIn URL if the profile is current and aligned with this resume.",
+      field: "linkedin",
+      suggestedText: "LinkedIn: https://linkedin.com/in/your-handle"
+    }));
+  }
+
+  if (!hasGithub) {
+    suggestions.push(optionalLinkSuggestion({
+      id: "contact-github-optional",
+      title: "Add GitHub",
+      detail: "Add GitHub if it shows projects, scripts, troubleshooting notes, or technical work worth reviewing.",
+      field: "github",
+      suggestedText: "GitHub: https://github.com/your-handle"
+    }));
+  }
+
+  if (!hasPortfolio) {
+    suggestions.push(optionalLinkSuggestion({
+      id: "contact-portfolio-optional",
+      title: "Add portfolio or website",
+      detail: "Use this for a portfolio, personal site, certification profile, or other relevant work sample.",
+      field: "portfolio",
+      suggestedText: "Portfolio: https://your-site.com"
     }));
   }
 

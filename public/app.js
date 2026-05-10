@@ -512,10 +512,14 @@ function applySuggestionToTextarea(textarea, suggestion, overrideText) {
     const label = {
       name: 'Name',
       email: 'Email',
-      phone: 'Phone'
+      phone: 'Phone',
+      linkedin: 'LinkedIn',
+      github: 'GitHub',
+      portfolio: 'Portfolio'
     }[suggestion.field] || 'Field';
+    const insertion = suggestedText || `${label}: `;
     const prefix = textarea.value.trim() ? `${textarea.value.trim()}\n` : '';
-    textarea.value = `${prefix}${label}: `;
+    textarea.value = `${prefix}${insertion}`;
   }
 
   state.editingSuggestionId = null;

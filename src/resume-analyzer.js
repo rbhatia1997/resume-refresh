@@ -1408,7 +1408,8 @@ function buildSectionEditorData({
       }
       return [];
     })();
-    const effectiveStatus = status === "ok" && (sectionLevelSuggestions.length || parseWarning) ? "needs-work" : status;
+    const hasActionableSuggestion = sectionLevelSuggestions.some((item) => ["high", "medium"].includes(item.severity || "medium"));
+    const effectiveStatus = status === "ok" && (hasActionableSuggestion || parseWarning) ? "needs-work" : status;
 
     const sectionResult = {
       id,
