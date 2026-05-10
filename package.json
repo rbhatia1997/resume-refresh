@@ -6,9 +6,6 @@
   "type": "module",
   "scripts": {
     "start": "node src/server.js",
-    "build:v2:js": "esbuild prototype/main.tsx --bundle --format=esm --outfile=public/v2/app.js",
-    "build:v2:css": "tailwindcss -i ./prototype/tailwind.css -o ./public/v2/app.css --minify",
-    "build:v2": "npm run build:v2:js && npm run build:v2:css",
     "test": "node --test",
     "test:e2e": "playwright test"
   },
@@ -16,15 +13,10 @@
     "node": ">=20"
   },
   "dependencies": {
-    "@tailwindcss/cli": "^4.2.1",
     "docx": "^9.6.1",
-    "esbuild": "^0.27.4",
     "openai": "^6.30.1",
     "pdf-lib": "^1.17.1",
-    "pdf-parse": "^1.1.1",
-    "react": "^19.2.4",
-    "react-dom": "^19.2.4",
-    "tailwindcss": "^4.2.1"
+    "pdf-parse": "^1.1.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2"

@@ -9,7 +9,7 @@ The user should feel in control: Resume Refresh parses what they uploaded, shows
 ## Product Decisions
 
 - Keep the production `/` vanilla frontend as the target for this pass.
-- Use `/v2.html` only as a reference for interaction ideas and visual polish.
+- Keep the production `/` flow as the only user-facing app surface.
 - Keep original parsed section text in the editor. Do not silently pre-fill the editor with rewritten text.
 - Render suggestions as compact section-level cards beside or below the editor.
 - Use OpenAI vision for photographed resumes when an AI provider is configured. If not configured, keep PDF/TXT/MD working and explain that photo parsing requires AI.

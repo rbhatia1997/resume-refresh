@@ -858,7 +858,7 @@ Expected: PASS.
 
 Run: `E2E_BASE_URL=http://127.0.0.1:3210 npm run test:e2e`
 
-Expected: PASS or document existing `/v2.html` failures separately if unrelated.
+Expected: PASS.
 
 - [ ] **Step 5: Browser QA**
 
