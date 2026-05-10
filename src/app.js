@@ -23,6 +23,7 @@ const sessionCookieName = "resume_refresh_session";
 export const MAX_BODY_BYTES = 6 * 1024 * 1024;
 const maxRewriteChars = 10000;
 const maxOnePageExportLines = 64;
+const compactListSectionKeys = new Set(["skills", "languages", "hobbies", "interests"]);
 const dailyEditLimit = parsePositiveInteger(process.env.DAILY_EDIT_LIMIT, 10);
 const dailyEditWindowMs = 24 * 60 * 60 * 1000;
 const maxRateLimitBuckets = 5000;
@@ -829,7 +830,60 @@ function formatExportFileStem(candidateName = "") {
   return `${parts.join("")}_Resume`;
 }
 
-function parseResumeForExport(text) {
+function isCompactListSubheading(line = "") {
+  const text = String(line || "").trim().replace(/:$/, "");
+  return text.length >= 3
+    && text.length <= 30
+    && /^[A-Z][A-Z\s/&-]+$/.test(text)
+    && !/[0-9]/.test(text);
+}
+
+function splitCompactListItems(line = "") {
+  const cleaned = String(line || "").trim().replace(/^[-*•]\s*/, "");
+  if (!cleaned) return [];
+  return cleaned
+    .split(/\s*[|,;]\s*/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function pushCompactListRow(rows, items, maxChars = 96) {
+  let current = "";
+  for (const item of items) {
+    const next = current ? `${current} | ${item}` : item;
+    if (current && next.length > maxChars) {
+      rows.push(current);
+      current = item;
+    } else {
+      current = next;
+    }
+  }
+  if (current) rows.push(current);
+}
+
+function compactListSectionLines(lines = []) {
+  const rows = [];
+  let pending = [];
+
+  for (const rawLine of lines) {
+    const line = String(rawLine || "").trim();
+    if (!line) continue;
+
+    if (isCompactListSubheading(line)) {
+      pushCompactListRow(rows, pending);
+      pending = [];
+      rows.push(line.replace(/:$/, "").toUpperCase());
+      continue;
+    }
+
+    pending.push(...splitCompactListItems(line));
+  }
+
+  pushCompactListRow(rows, pending);
+  return rows;
+}
+
+export function parseResumeForExport(text) {
   const lines = String(text || "")
     .replace(/\r/g, "")
     .split("\n")
@@ -927,6 +981,10 @@ function parseResumeForExport(text) {
     sections[key] = sections[key].filter((line, index, list) => !(line === "" && list[index - 1] === ""));
   }
 
+  for (const key of compactListSectionKeys) {
+    sections[key] = compactListSectionLines(sections[key]);
+  }
+
   // Merge AI-wrapped bullet continuations back into the preceding bullet.
   // A continuation is a non-bullet, non-job-title line that immediately follows a bullet.
   // Job-title lines are identified by containing " | " or a 4-digit year.
@@ -1017,7 +1075,7 @@ async function buildDocx(text) {
   if (sections.header[0]) {
     paragraphs.push(new Paragraph({
       children: [new TextRun({ text: sections.header[0], bold: true, size: 26 })],
-      spacing: { after: 80 }
+      spacing: { after: 70 }
     }));
   }
 
@@ -1025,7 +1083,7 @@ async function buildDocx(text) {
   if (headerMeta) {
     paragraphs.push(new Paragraph({
       children: [new TextRun({ text: headerMeta, color: "555555", size: 18 })],
-      spacing: { after: 160 }
+      spacing: { after: 130 }
     }));
   }
 
@@ -1037,7 +1095,7 @@ async function buildDocx(text) {
 
     paragraphs.push(new Paragraph({
       children: [new TextRun({ text: title.toUpperCase(), bold: true, size: 17, color: "6B5B4D" })],
-      spacing: { before: 120, after: 60 }
+      spacing: { before: 95, after: 45 }
     }));
 
     for (const line of sections[key]) {
@@ -1058,19 +1116,19 @@ async function buildDocx(text) {
               new TextRun({ text: "\t" }),
               new TextRun({ text: split.date, color: "555555", size: 20 })
             ],
-            spacing: { after: 60 }
+            spacing: { after: 50 }
           }));
         } else {
           paragraphs.push(new Paragraph({
             text: line,
-            spacing: { after: 60 }
+            spacing: { after: 45 }
           }));
         }
       } else {
         paragraphs.push(new Paragraph({
           text: line.replace(/^[-*•]\s*/, ""),
           bullet: { level: 0 },
-          spacing: { after: 40 }
+          spacing: { after: 32 }
         }));
       }
     }
@@ -1117,7 +1175,7 @@ async function buildPdf(text) {
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   const boldFont = await pdf.embedFont(StandardFonts.HelveticaBold);
   const fontSize = 10;
-  const lineHeight = 14;
+  const lineHeight = 13;
   const margin = 46;
   const maxWidth = page.getWidth() - margin * 2;
   let y = page.getHeight() - margin;
@@ -1160,7 +1218,7 @@ async function buildPdf(text) {
       size: 18,
       currentFont: boldFont
     });
-    y -= 4;
+    y -= 3;
   }
 
   const headerMeta = sections.header.slice(1).join("  |  ");
@@ -1169,7 +1227,7 @@ async function buildPdf(text) {
       size: 10,
       color: rgb(0.33, 0.33, 0.33)
     });
-    y -= 10;
+    y -= 8;
   }
 
   for (const [title, key] of exportSectionEntries(sections)) {
@@ -1226,7 +1284,7 @@ async function buildPdf(text) {
         }
       }
     }
-    y -= 6;
+    y -= 4;
   }
 
   return Buffer.from(await pdf.save());

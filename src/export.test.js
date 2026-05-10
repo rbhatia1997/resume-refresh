@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { PDFDocument } from "pdf-lib";
-import { handleRequest } from "./app.js";
+import { handleRequest, parseResumeForExport } from "./app.js";
 
 function exportRequest(body, address = "203.0.113.10") {
   return new Request("http://127.0.0.1:3216/api/export", {
@@ -64,6 +64,14 @@ test("PDF export produces a single-page PDF for a concise resume", async () => {
   assert.equal(response.status, 200);
   const pdf = await PDFDocument.load(await response.arrayBuffer());
   assert.equal(pdf.getPageCount(), 1);
+});
+
+test("export formatting compacts skills into grouped rows", () => {
+  const sections = parseResumeForExport(conciseResume);
+
+  assert.deepEqual(sections.skills, [
+    "Hardware Troubleshooting | POS Systems | Device Deployment"
+  ]);
 });
 
 test("PDF and DOCX export reject resumes that exceed the one-page budget", async () => {

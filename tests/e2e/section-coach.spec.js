@@ -115,6 +115,8 @@ Hardware Support
   await expect(page.getByRole("heading", { name: "Your resume" })).toBeVisible();
   await expect(page.getByText("Tighten wording")).toHaveCount(0);
   await expect(page.getByText("Improve ATS match")).toHaveCount(0);
+  await expect(page.locator("#final-draft")).toContainText("SKILLS\nPOS Systems | Networking | Hardware Support");
+  await expect(page.locator("#final-draft")).not.toContainText("SKILLS\nPOS Systems\nNetworking\nHardware Support");
 });
 
 test("OCR-style pasted resume gets structured experience, skills coaching, and final notes", async ({ page }) => {

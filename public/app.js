@@ -40,6 +40,7 @@ const tabUploadEl  = document.querySelector('#tab-upload');
 const tabPasteEl   = document.querySelector('#tab-paste');
 
 const COACH_VISIBLE_LIMIT = 3;
+const COMPACT_LIST_SECTION_IDS = new Set(['skills', 'languages', 'hobbies', 'interests']);
 
 // ── App state ─────────────────────────────────────────────────────
 const state = {
@@ -567,12 +568,73 @@ editorSkipBtn.addEventListener('click',     () => advanceSection(true));
 editorBackBtn.addEventListener('click',     () => goBackSection());
 
 // ── Final view assembly ───────────────────────────────────────────
+function isListSubheading(line = '') {
+  const text = String(line || '').trim().replace(/:$/, '');
+  return text.length >= 3
+    && text.length <= 30
+    && /^[A-Z][A-Z\s/&-]+$/.test(text)
+    && !/[0-9]/.test(text);
+}
+
+function splitListItems(line = '') {
+  const cleaned = String(line || '').trim().replace(/^[-*•]\s*/, '');
+  if (!cleaned) return [];
+  return cleaned
+    .split(/\s*[|,;]\s*/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function pushCompactListRow(rows, items, maxChars = 96) {
+  let current = '';
+  for (const item of items) {
+    const next = current ? `${current} | ${item}` : item;
+    if (current && next.length > maxChars) {
+      rows.push(current);
+      current = item;
+    } else {
+      current = next;
+    }
+  }
+  if (current) rows.push(current);
+}
+
+function compactListSectionText(text = '') {
+  const rows = [];
+  let pending = [];
+
+  for (const rawLine of String(text || '').split('\n')) {
+    const line = rawLine.trim();
+    if (!line) continue;
+
+    if (isListSubheading(line)) {
+      pushCompactListRow(rows, pending);
+      pending = [];
+      rows.push(line.replace(/:$/, '').toUpperCase());
+      continue;
+    }
+
+    pending.push(...splitListItems(line));
+  }
+
+  pushCompactListRow(rows, pending);
+  return rows.join('\n').trim();
+}
+
+function formatSectionForFinal(id, text) {
+  const cleaned = String(text || '').trim().replace(/\n{3,}/g, '\n\n');
+  if (COMPACT_LIST_SECTION_IDS.has(id)) {
+    return compactListSectionText(cleaned);
+  }
+  return cleaned;
+}
+
 function assembleFinalResume() {
   const parts  = [];
 
   for (const section of state.sections) {
     const id = section.id;
-    const text = state.approved[id];
+    const text = formatSectionForFinal(id, state.approved[id]);
     if (!text?.trim()) continue;
 
     const header = SECTION_HEADERS[id];
