@@ -31,6 +31,7 @@ const finalDraftEl     = document.querySelector('#final-draft');
 const finalNotesEl     = document.querySelector('#final-notes');
 const downloadDocxEl   = document.querySelector('#download-docx');
 const downloadPdfEl    = document.querySelector('#download-pdf');
+const exportStatusEl   = document.querySelector('#export-status');
 const startOverBtn     = document.querySelector('#start-over');
 
 // Tabs
@@ -63,6 +64,9 @@ const SECTION_HEADERS = {
   certifications: 'CERTIFICATIONS',
   awards:         'AWARDS',
   volunteer:      'VOLUNTEER',
+  hobbies:        'HOBBIES',
+  interests:      'INTERESTS',
+  languages:      'LANGUAGES',
 };
 
 // ── Init ──────────────────────────────────────────────────────────
@@ -270,6 +274,11 @@ function renderSectionPanel(section) {
   const editorCol = el('div', 'section-editor-column');
   const coachCol  = el('div', 'section-coach-column');
 
+  if (section.id === 'experience') {
+    const preview = renderExperiencePreview(section.parsedFields?.entries || []);
+    if (preview) editorPanelEl.appendChild(preview);
+  }
+
   // Editable content starts from the parsed original. Suggested rewrites stay optional.
   const proposed = el('div', 'proposed-block');
   const propLbl  = el('p', 'field-label', section.currentText ? 'Edit this section' : 'Add this section');
@@ -279,13 +288,51 @@ function renderSectionPanel(section) {
   textarea.value     = section.currentText || section.proposedText || '';
   const lineCount = (textarea.value.match(/\n/g) || []).length + 1;
   textarea.rows = Math.max(6, Math.min(lineCount + 2, 22));
-  proposed.append(propLbl, textarea);
+  proposed.appendChild(propLbl);
+  proposed.appendChild(textarea);
   editorCol.appendChild(proposed);
 
   renderCoachPanel(coachCol, section, textarea);
 
   workspace.append(editorCol, coachCol);
   editorPanelEl.appendChild(workspace);
+}
+
+function formatExperiencePreviewRole(entry = {}) {
+  const companyLocation = [entry.company || '', entry.location || ''].filter(Boolean).join(', ');
+  return [
+    entry.title || '',
+    companyLocation
+  ].filter(Boolean).join(' - ') || 'Experience';
+}
+
+function renderExperiencePreview(entries = []) {
+  const usableEntries = entries.filter((entry) => entry && (entry.title || entry.company || entry.dateRange || entry.bullets?.length));
+  if (!usableEntries.length) return null;
+
+  const preview = el('div', 'experience-preview');
+  for (const entry of usableEntries) {
+    const item = el('div', 'experience-preview-entry');
+    const heading = el('div', 'experience-preview-heading');
+    heading.append(
+      el('span', 'experience-preview-role', formatExperiencePreviewRole(entry)),
+      el('span', 'experience-preview-date', entry.dateRange || '')
+    );
+    item.appendChild(heading);
+
+    const bullets = (entry.bullets || []).filter(Boolean);
+    if (bullets.length) {
+      const list = el('ul', 'experience-preview-bullets');
+      for (const bullet of bullets) {
+        list.appendChild(el('li', '', bullet));
+      }
+      item.appendChild(list);
+    }
+
+    preview.appendChild(item);
+  }
+
+  return preview;
 }
 
 function renderCoachPanel(container, section, textarea) {
@@ -296,6 +343,16 @@ function renderCoachPanel(container, section, textarea) {
   const suggestions = (section.suggestions || []).filter((item) => !skipped[item.id]);
 
   if (!suggestions.length) {
+    if (section.status === 'needs-work' || section.status === 'missing') {
+      const review = el('div', `suggestion-card severity-${section.status === 'missing' ? 'high' : 'medium'}`);
+      review.append(
+        el('p', 'suggestion-card-title', section.status === 'missing' ? `Add ${section.label}` : 'Review this section'),
+        el('p', 'suggestion-card-detail', section.critique || section.parseWarning || 'This section needs a closer review before export.')
+      );
+      container.appendChild(review);
+      return;
+    }
+
     const empty = el('div', 'suggestion-card suggestion-card-ok');
     empty.append(
       el('p', 'suggestion-card-title', 'No major issues detected'),
@@ -484,18 +541,52 @@ function buildFinalView() {
 
 function renderFinalNotes() {
   finalNotesEl.replaceChildren();
-  const unresolved = state.sections
-    .flatMap(section => (section.suggestions || []).map(suggestion => ({ section, suggestion })))
-    .filter(({ section, suggestion }) => suggestion.severity === 'high' && !state.skippedSuggestions[section.id]?.[suggestion.id])
-    .slice(0, 4);
+  const severityRank = { high: 0, medium: 1, low: 2 };
+  const unresolved = [];
 
-  if (!unresolved.length) {
+  for (const section of state.sections) {
+    const skipped = state.skippedSuggestions[section.id] || {};
+    for (const suggestion of section.suggestions || []) {
+      if (skipped[suggestion.id]) continue;
+      if (!['high', 'medium'].includes(suggestion.severity || 'medium')) continue;
+      unresolved.push({ section, suggestion });
+    }
+
+    if (section.parseWarning) {
+      unresolved.push({
+        section,
+        suggestion: {
+          id: `${section.id}-parse-warning`,
+          severity: 'medium',
+          title: 'Review parsing',
+          detail: section.parseWarning
+        }
+      });
+    }
+
+    if (section.status === 'needs-work' && section.critique && !(section.suggestions || []).length) {
+      unresolved.push({
+        section,
+        suggestion: {
+          id: `${section.id}-critique`,
+          severity: 'medium',
+          title: 'Review this section',
+          detail: section.critique
+        }
+      });
+    }
+  }
+
+  unresolved.sort((a, b) => (severityRank[a.suggestion.severity] ?? 1) - (severityRank[b.suggestion.severity] ?? 1));
+  const visible = unresolved.slice(0, 4);
+
+  if (!visible.length) {
     finalNotesEl.appendChild(el('p', 'note-empty', 'No major issues detected.'));
     return;
   }
-  for (const { section, suggestion } of unresolved) {
+  for (const { section, suggestion } of visible) {
     const item   = el('div', 'note-item');
-    const pri    = el('p', 'note-priority high', section.label ?? 'Review');
+    const pri    = el('p', `note-priority ${suggestion.severity || 'medium'}`, section.label ?? 'Review');
     const title  = el('p', 'note-title', suggestion.title ?? '');
     const detail = el('p', 'note-detail', suggestion.detail ?? '');
     item.append(pri, title, detail);
@@ -593,36 +684,52 @@ function synthesizeFallbackSections(result) {
 // ── Export ────────────────────────────────────────────────────────
 async function exportText(format, text) {
   if (!text?.trim()) return;
-  const res = await fetch('/api/export', {
-    method:  'POST',
-    headers: { 'content-type': 'application/json' },
-    body:    JSON.stringify({
-      format,
-      text,
-      candidateName: state.candidateName   // used server-side for filename
-    })
-  });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error ?? 'Export failed');
+  const button = format === 'pdf' ? downloadPdfEl : downloadDocxEl;
+  const originalLabel = button.textContent;
+  button.disabled = true;
+  exportStatusEl.textContent = `Preparing ${format.toUpperCase()}...`;
+  exportStatusEl.classList.remove('export-status-error');
+  button.textContent = 'Preparing...';
+
+  try {
+    const res = await fetch('/api/export', {
+      method:  'POST',
+      headers: { 'content-type': 'application/json' },
+      body:    JSON.stringify({
+        format,
+        text,
+        candidateName: state.candidateName   // used server-side for filename
+      })
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error ?? 'Export failed');
+    }
+    const blob = await res.blob();
+    const disposition = res.headers.get('content-disposition') ?? '';
+    const match    = disposition.match(/filename="([^"]+)"/);
+    const fileName = match?.[1] ?? `resume.${format}`;
+    const url = URL.createObjectURL(blob);
+    const a   = document.createElement('a');
+    a.href     = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    exportStatusEl.textContent = `${format.toUpperCase()} ready. Check your downloads.`;
+  } catch (err) {
+    exportStatusEl.textContent = err.message || 'Export failed. Please try again.';
+    exportStatusEl.classList.add('export-status-error');
+  } finally {
+    button.disabled = false;
+    button.textContent = originalLabel;
   }
-  const blob = await res.blob();
-  const disposition = res.headers.get('content-disposition') ?? '';
-  const match    = disposition.match(/filename="([^"]+)"/);
-  const fileName = match?.[1] ?? `resume.${format}`;
-  const url = URL.createObjectURL(blob);
-  const a   = document.createElement('a');
-  a.href     = url;
-  a.download = fileName;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
 }
 
 // Use innerText so user edits to the contenteditable pre are captured
-downloadDocxEl.addEventListener('click',   () => exportText('docx', finalDraftEl.innerText).catch(console.error));
-downloadPdfEl.addEventListener('click',    () => exportText('pdf',  finalDraftEl.innerText).catch(console.error));
+downloadDocxEl.addEventListener('click',   () => exportText('docx', finalDraftEl.innerText));
+downloadPdfEl.addEventListener('click',    () => exportText('pdf',  finalDraftEl.innerText));
 
 // Strip HTML formatting on paste into editable pres (keeps plain text only)
 for (const pre of [finalDraftEl]) {

@@ -542,6 +542,56 @@ button { cursor: pointer; font: inherit; }
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
 }
 
+.experience-preview {
+  margin: 18px 24px 0;
+  padding: 0 0 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.experience-preview-entry + .experience-preview-entry {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.experience-preview-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: baseline;
+}
+
+.experience-preview-role {
+  min-width: 0;
+  color: var(--ink);
+  font-size: 0.9375rem;
+  font-weight: 750;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.experience-preview-date {
+  justify-self: end;
+  color: var(--muted);
+  font-size: 0.8125rem;
+  font-weight: 650;
+  line-height: 1.35;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.experience-preview-bullets {
+  margin: 8px 0 0 18px;
+  padding: 0;
+  color: var(--muted);
+  font-size: 0.875rem;
+  line-height: 1.55;
+}
+
+.experience-preview-bullets li + li {
+  margin-top: 4px;
+}
+
 .suggestion-card {
   border: 1px solid var(--border);
   border-radius: var(--r-sm);
@@ -669,6 +719,17 @@ button { cursor: pointer; font: inherit; }
 .block-head-sm  { margin-top: 20px; }
 
 .export-row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.export-status {
+  min-height: 1.25rem;
+  margin: -4px 0 10px;
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+
+.export-status-error {
+  color: var(--error);
+}
 
 /* Resume pre */
 .resume-pre {
@@ -971,6 +1032,9 @@ button { cursor: pointer; font: inherit; }
   .proposed-block { padding: 14px 18px; }
   .section-workspace { grid-template-columns: 1fr; padding: 14px 18px; }
   .section-workspace .proposed-block { padding: 0; }
+  .experience-preview { margin: 14px 18px 0; }
+  .experience-preview-heading { grid-template-columns: 1fr; gap: 4px; }
+  .experience-preview-date { justify-self: start; text-align: left; }
   .editor-actions { flex-direction: column-reverse; align-items: stretch; }
   .editor-actions .btn-primary { text-align: center; }
   .block-head { flex-direction: column; align-items: flex-start; }

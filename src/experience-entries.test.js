@@ -31,3 +31,51 @@ test("formatExperienceEntryHeading emits role/company/location separate from dat
     "IT Support Specialist - Example Retail, Northern California 2022 - Present"
   );
 });
+
+test("parseExperienceEntries recovers OCR-style roles and wrapped unbulleted bullets", () => {
+  const entries = parseExperienceEntries([
+    "Service & Delivery Technician -",
+    "Example Retail, Northern California",
+    "July 2025 - Present",
+    "Troubleshoot and resolve hardware",
+    "and software issues for retail store",
+    "systems and devices",
+    "Support installation, replacement,",
+    "and configuration of IT equipment",
+    "Sushi Chef - Example Restaurant, Davis",
+    "September 2021 - June 2025",
+    "Delivered customer service in fast-",
+    "paced restaurant environment",
+    "Managed order accuracy and",
+    "multitasking under pressure"
+  ]);
+
+  assert.equal(entries.length, 2);
+  assert.equal(entries[0].title, "Service & Delivery Technician");
+  assert.equal(entries[0].company, "Example Retail");
+  assert.equal(entries[0].location, "Northern California");
+  assert.equal(entries[0].dateRange, "July 2025 - Present");
+  assert.deepEqual(entries[0].bullets, [
+    "Troubleshoot and resolve hardware and software issues for retail store systems and devices",
+    "Support installation, replacement, and configuration of IT equipment"
+  ]);
+  assert.equal(entries[1].title, "Sushi Chef");
+  assert.equal(entries[1].company, "Example Restaurant");
+  assert.equal(entries[1].dateRange, "September 2021 - June 2025");
+  assert.deepEqual(entries[1].bullets, [
+    "Delivered customer service in fast-paced restaurant environment",
+    "Managed order accuracy and multitasking under pressure"
+  ]);
+});
+
+test("formatExperienceEntryHeading can pad dates for monospace editor previews", () => {
+  const heading = formatExperienceEntryHeading({
+    title: "Sushi Chef",
+    company: "Example Restaurant",
+    location: "Davis",
+    dateRange: "September 2021 - June 2025"
+  }, { alignDate: true, width: 68 });
+
+  assert.match(heading, /^Sushi Chef - Example Restaurant, Davis\s+September 2021 - June 2025$/);
+  assert.equal(heading.length, 68);
+});

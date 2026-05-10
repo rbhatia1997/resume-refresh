@@ -1,5 +1,5 @@
 import { extractContactInfo } from "./contact-info.js";
-import { parseExperienceEntries } from "./experience-entries.js";
+import { formatExperienceEntryHeading, parseExperienceEntries } from "./experience-entries.js";
 import {
   buildContactSuggestions,
   buildEducationSuggestions,
@@ -27,7 +27,8 @@ const SECTION_HEADERS = [
   "awards",
   "volunteer",
   "hobbies",
-  "interests"
+  "interests",
+  "languages"
 ];
 
 const STOPWORDS = new Set([
@@ -172,12 +173,13 @@ const SECTION_ALIASES = {
   experience: ["experience", "work experience", "employment", "experience highlights"],
   education: ["education"],
   skills: ["skills", "technical skills", "core competencies", "core skills"],
-  projects: ["projects"],
+  projects: ["projects", "projects hobbies", "projects interests"],
   certifications: ["certifications"],
   awards: ["awards"],
   volunteer: ["volunteer"],
-  hobbies: ["hobbies"],
-  interests: ["interests"]
+  hobbies: ["hobbies", "hobbies interests"],
+  interests: ["interests"],
+  languages: ["languages"]
 };
 
 function normalizeWhitespace(text = "") {
@@ -188,19 +190,29 @@ function splitLines(text = "") {
   return normalizeWhitespace(text).split("\n").map((line) => line.trim()).filter(Boolean);
 }
 
+function normalizeHeadingValue(line = "") {
+  return String(line || "").toLowerCase().replace(/[^a-z ]/g, " ").replace(/\s+/g, " ").trim();
+}
+
 function isHeading(line) {
-  const value = line.toLowerCase().replace(/[^a-z ]/g, "").trim();
-  return SECTION_HEADERS.includes(value);
+  const value = normalizeHeadingValue(line);
+  return SECTION_HEADERS.includes(value) || Boolean(resolveCanonicalHeading(value));
 }
 
 function canonicalHeading(line) {
-  const value = line.toLowerCase().replace(/[^a-z ]/g, "").trim();
+  const value = normalizeHeadingValue(line);
+  const resolved = resolveCanonicalHeading(value);
+  if (resolved) return resolved;
+  return value;
+}
+
+function resolveCanonicalHeading(value) {
   for (const [canonical, aliases] of Object.entries(SECTION_ALIASES)) {
     if (aliases.includes(value)) {
       return canonical;
     }
   }
-  return value;
+  return "";
 }
 
 function parseSections(text = "") {
@@ -1098,6 +1110,7 @@ const SECTION_DISPLAY_LABELS = {
   volunteer:      "Volunteer & Leadership",
   hobbies:        "Hobbies",
   interests:      "Interests",
+  languages:      "Languages",
 };
 
 // Common non-name words that can appear in resume headers
@@ -1172,7 +1185,7 @@ function determineSectionOrder(sections, candidateLevel) {
   }
 
   // Append optional sections only if they have content
-  for (const id of ["projects", "certifications", "awards", "volunteer", "hobbies", "interests"]) {
+  for (const id of ["projects", "certifications", "awards", "volunteer", "hobbies", "interests", "languages"]) {
     if (!base.includes(id) && (sections[id] || []).filter(l => l.trim()).length > 0) {
       base.push(id);
     }
@@ -1305,10 +1318,9 @@ function buildSectionEditorData({
     // For experience: reconstruct current text from structured entries so role
     // boundaries are clearly visible (blank lines between entries)
     let currentText = currentLines.join("\n").trim();
-    if (id === "experience" && expEntries.length > 1) {
+    if (id === "experience" && expEntries.length > 0) {
       currentText = expEntries.map(e => [
-        ...e.headerLines.filter(Boolean),
-        e.dateRange,
+        formatExperienceEntryHeading(e, { alignDate: true }),
         ...e.bullets.map(b => `- ${b}`)
       ].filter(Boolean).join("\n")).join("\n\n");
     }
@@ -1346,7 +1358,7 @@ function buildSectionEditorData({
       }
       return [];
     })();
-    const effectiveStatus = status === "ok" && sectionLevelSuggestions.length ? "needs-work" : status;
+    const effectiveStatus = status === "ok" && (sectionLevelSuggestions.length || parseWarning) ? "needs-work" : status;
 
     const sectionResult = {
       id,

@@ -42,3 +42,38 @@ test("skills suggestions use canonical casing and readable copy", () => {
   assert.doesNotMatch(JSON.stringify(suggestions), /RANDOM PROBLEM SOLVING|COMMUNICATION/);
   assert.ok(suggestions.some((item) => /SQL|POS|Networking|Hardware/i.test(item.suggestedText)));
 });
+
+test("experience suggestions flag bullets that lack quantified scope or results", () => {
+  const suggestions = buildExperienceSuggestions({
+    entries: [{
+      title: "Service & Delivery Technician",
+      company: "Example Retail",
+      dateRange: "July 2025 - Present",
+      bullets: [
+        "Troubleshoot and resolve hardware and software issues for retail store systems and devices",
+        "Support installation, replacement, and configuration of IT equipment"
+      ]
+    }]
+  });
+
+  assert.ok(suggestions.some((item) => item.title === "Add scope or result"));
+  assert.ok(suggestions.some((item) => /volume|frequency|systems|locations|outcome/i.test(item.detail)));
+});
+
+test("experience suggestions flag tense and filler issues", () => {
+  const suggestions = buildExperienceSuggestions({
+    entries: [{
+      title: "Sushi Chef",
+      company: "Example Restaurant",
+      dateRange: "September 2021 - June 2025",
+      bullets: [
+        "Manage order accuracy and multitasking under pressure",
+        "Delivered customer service in a fast-paced restaurant environment"
+      ]
+    }]
+  });
+
+  assert.ok(suggestions.some((item) => item.title === "Fix past-role tense"));
+  assert.ok(suggestions.some((item) => item.suggestedText === "Managed order accuracy and multitasking under pressure"));
+  assert.ok(suggestions.some((item) => item.title === "Trim filler wording"));
+});
