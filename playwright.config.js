@@ -7,7 +7,7 @@ export default defineConfig({
     timeout: 15_000
   },
   use: {
-    baseURL: process.env.E2E_BASE_URL || "https://resume-refresh-isacarius-projects.vercel.app",
+    baseURL: process.env.E2E_BASE_URL || "https://resume-refresh-ten.vercel.app",
     trace: "on-first-retry"
   }
 });

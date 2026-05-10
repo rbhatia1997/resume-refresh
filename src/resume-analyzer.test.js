@@ -139,3 +139,284 @@ University of California, Berkeley
   assert.ok(result.sectionSuggestions.education.every((item) => item.sectionId === "education"));
   assert.ok(result.sectionSuggestions.education.every((item) => !item.detail.includes("stakeholder management across B2B SaaS")));
 });
+
+test("analyzeResume keeps projects and hobbies out of education", () => {
+  const result = analyzeResume({
+    linkedinText: "",
+    resumeText: `
+Jane Doe
+jane@example.com
+
+EDUCATION
+City College
+Associate Degree, Computer Science
+
+PROJECTS
+Home Lab Network
+- Configured routers and POS-style peripherals
+
+HOBBIES
+Photography
+`,
+    targetRole: "IT Support Specialist"
+  });
+
+  const education = result.sectionEditorData.find((section) => section.id === "education");
+  const projects = result.sectionEditorData.find((section) => section.id === "projects");
+  const hobbies = result.sectionEditorData.find((section) => section.id === "hobbies");
+
+  assert.ok(education.currentText.includes("City College"));
+  assert.doesNotMatch(education.currentText, /Home Lab|Photography/);
+  assert.ok(projects.currentText.includes("Home Lab Network"));
+  assert.doesNotMatch(projects.currentText, /Photography/);
+  assert.ok(hobbies.currentText.includes("Photography"));
+});
+
+test("analyzeResume splits combined projects hobbies heading out of education", () => {
+  const result = analyzeResume({
+    linkedinText: "",
+    resumeText: `
+Jane Doe
+jane@example.com
+
+EDUCATION
+Example High School, Example City
+2017 - 2022
+PROJECTS / HOBBIES
+
+Building Computers
+Modding consoles / Applications
+Running Community Events
+DJing
+`,
+    targetRole: "IT Support Specialist"
+  });
+
+  const education = result.sectionEditorData.find((section) => section.id === "education");
+  const projects = result.sectionEditorData.find((section) => section.id === "projects");
+
+  assert.match(education.currentText, /Example High School/);
+  assert.doesNotMatch(education.currentText, /Building Computers|DJing|PROJECTS/i);
+  assert.ok(projects);
+  assert.match(projects.currentText, /Building Computers/);
+});
+
+test("analyzeResume formats OCR-style experience into entries with bullets and coaching", () => {
+  const result = analyzeResume({
+    linkedinText: "",
+    resumeText: `
+Jane Doe
+jane@example.com
+
+EXPERIENCE
+Service & Delivery Technician -
+Example Retail, Northern California
+July 2025 - Present
+Troubleshoot and resolve hardware
+and software issues for retail store
+systems and devices
+Support installation, replacement,
+and configuration of IT equipment
+Sushi Chef - Example Restaurant, Davis
+September 2021 - June 2025
+Delivered customer service in fast-
+paced restaurant environment
+Managed order accuracy and
+multitasking under pressure
+`,
+    targetRole: "IT Support Specialist"
+  });
+
+  const experience = result.sectionEditorData.find((section) => section.id === "experience");
+
+  assert.match(experience.currentText, /Service & Delivery Technician - Example Retail, Northern California\s+July 2025 - Present/);
+  assert.match(experience.currentText, /- Troubleshoot and resolve hardware and software issues/);
+  assert.match(experience.currentText, /Sushi Chef - Example Restaurant, Davis\s+September 2021 - June 2025/);
+  assert.equal(experience.parsedFields.entries.length, 2);
+  assert.ok(experience.suggestions.some((item) => item.title === "Add scope or result"));
+  assert.notEqual(experience.status, "ok");
+});
+
+test("analyzeResume preserves common optional sections", () => {
+  const result = analyzeResume({
+    linkedinText: "",
+    resumeText: `
+Jane Doe
+jane@example.com
+
+SUMMARY
+IT support specialist with retail systems experience.
+
+EXPERIENCE
+IT Support Specialist - Example Retail, California
+2022 - Present
+- Resolved POS and device issues.
+
+EDUCATION
+Example High School
+2022
+
+PUBLICATIONS
+Retail Systems Troubleshooting Notes
+
+COMMUNITY INVOLVEMENT
+- Hosted local computer-building workshops
+`,
+    targetRole: "IT Support Specialist"
+  });
+
+  const education = result.sectionEditorData.find((section) => section.id === "education");
+  const publications = result.sectionEditorData.find((section) => section.id === "publications");
+  const community = result.sectionEditorData.find((section) => section.id === "community");
+
+  assert.ok(publications);
+  assert.equal(publications.label, "Publications");
+  assert.match(publications.currentText, /Retail Systems Troubleshooting Notes/);
+  assert.ok(community);
+  assert.equal(community.label, "Community Involvement");
+  assert.match(community.currentText, /Hosted local computer-building workshops/);
+  assert.doesNotMatch(education.currentText, /PUBLICATIONS|COMMUNITY INVOLVEMENT|Retail Systems/i);
+});
+
+test("analyzeResume does not promote project or hobby items into section headings", () => {
+  const result = analyzeResume({
+    linkedinText: "",
+    resumeText: `
+Jane Doe
+jane@example.com
+
+SUMMARY
+IT support specialist with retail systems experience.
+
+EXPERIENCE
+IT Support Specialist - Example Retail, California
+2022 - Present
+- Resolved POS and device issues.
+
+EDUCATION
+Example High School
+2022
+
+PROJECTS / HOBBIES
+Building Computers
+Modding consoles / Applications
+Running Community Events
+DJing
+`,
+    targetRole: "IT Support Specialist"
+  });
+
+  const projects = result.sectionEditorData.find((section) => section.id === "projects");
+
+  assert.ok(projects);
+  assert.equal(projects.label, "Projects");
+  assert.match(projects.currentText, /Building Computers/);
+  assert.match(projects.currentText, /Modding consoles \/ Applications/);
+  assert.ok(!result.sectionEditorData.some((section) => section.label === "Building Computers"));
+});
+
+test("analyzeResume does not treat all-caps skills as optional section headings", () => {
+  const result = analyzeResume({
+    linkedinText: "",
+    resumeText: `
+Jane Doe
+jane@example.com
+
+SUMMARY
+IT support specialist with retail systems experience.
+
+EXPERIENCE
+IT Support Specialist - Example Retail, California
+2022 - Present
+- Resolved POS and device issues.
+
+SKILLS
+SQL
+AWS
+POS Systems
+
+EDUCATION
+Example High School
+2022
+`,
+    targetRole: "IT Support Specialist"
+  });
+
+  const skills = result.sectionEditorData.find((section) => section.id === "skills");
+
+  assert.match(skills.currentText, /SQL/);
+  assert.match(skills.currentText, /AWS/);
+  assert.ok(!result.sectionEditorData.some((section) => section.label === "Sql" || section.label === "Aws"));
+});
+
+test("analyzeResume removes duplicate inline dates from experience preview headings", () => {
+  const result = analyzeResume({
+    linkedinText: "",
+    resumeText: `
+Alex Rivera
+alex@example.com
+
+SUMMARY
+Product manager with AI infrastructure experience.
+
+EXPERIENCE
+Co-Founder - Example Events LLC (example-events.com) Jun 2022 - Aug 2022 Jan 2022 - Present
+- Created $7K+ annual revenue through subscriptions and commissions with 14x growth rate YoY.
+
+SKILLS
+Product Strategy
+Experimentation
+
+EDUCATION
+Example University
+`,
+    targetRole: "Product Manager"
+  });
+
+  const experience = result.sectionEditorData.find((section) => section.id === "experience");
+
+  assert.ok(experience);
+  assert.doesNotMatch(experience.currentText, /Example Events LLC \(example-events\.com\) Jun 2022/);
+  assert.match(experience.currentText, /Co-Founder - Example Events LLC \(example-events\.com\)\s+Jan 2022 - Present/);
+  assert.doesNotMatch(experience.proposedText, /Example Events LLC \(example-events\.com\) Jun 2022/);
+});
+
+test("analyzeResume uses LinkedIn-backed skills instead of low-signal product tools", () => {
+  const result = analyzeResume({
+    linkedinText: "Architected AI infrastructure and datacenter systems across NVIDIA H100/H200 deployments, product analytics, experimentation, go-to-market planning, growth strategy, and product strategy.",
+    resumeText: `
+Alex Rivera
+alex@example.com
+
+SUMMARY
+Product manager with AI infrastructure experience.
+
+EXPERIENCE
+Product Manager - Example Hardware Co Aug 2023 - Present
+- Architected AI infrastructure systems for NVIDIA H100/H200 deployments.
+
+SKILLS
+Agile
+Experimentation
+Figma
+Go-to-Market Strategy
+Growth Strategy
+Jira
+OKRs
+Product Analytics
+Product Discovery
+Product Strategy
+
+EDUCATION
+Example University
+`,
+    targetRole: "AI Infrastructure Product Manager"
+  });
+
+  const skills = result.sectionEditorData.find((section) => section.id === "skills");
+
+  assert.match(skills.proposedText, /AI Infrastructure/);
+  assert.doesNotMatch(skills.proposedText, /Jira|OKRs/);
+  assert.match(result.rewrittenResume, /AI Infrastructure/);
+  assert.doesNotMatch(result.rewrittenResume, /Jira|OKRs/);
+});

@@ -31,16 +31,7 @@ const finalDraftEl     = document.querySelector('#final-draft');
 const finalNotesEl     = document.querySelector('#final-notes');
 const downloadDocxEl   = document.querySelector('#download-docx');
 const downloadPdfEl    = document.querySelector('#download-pdf');
-const aiHintEl         = document.querySelector('#ai-hint');
-const aiIdleEl         = document.querySelector('#ai-idle');
-const aiActionsEl      = document.querySelector('#ai-actions');
-const aiResultEl       = document.querySelector('#ai-result');
-const aiResultLabelEl  = document.querySelector('#ai-result-label');
-const aiRewriteEl      = document.querySelector('#ai-rewrite');
-const aiNotesEl        = document.querySelector('#ai-notes');
-const dlRewriteDocxEl  = document.querySelector('#download-rewrite-docx');
-const dlRewritePdfEl   = document.querySelector('#download-rewrite-pdf');
-// #try-another-action removed — action buttons are now always visible
+const exportStatusEl   = document.querySelector('#export-status');
 const startOverBtn     = document.querySelector('#start-over');
 
 // Tabs
@@ -48,18 +39,23 @@ const tabButtons   = document.querySelectorAll('.tab');
 const tabUploadEl  = document.querySelector('#tab-upload');
 const tabPasteEl   = document.querySelector('#tab-paste');
 
+const COACH_VISIBLE_LIMIT = 3;
+const COMPACT_LIST_SECTION_IDS = new Set(['skills', 'languages', 'hobbies', 'interests']);
+
 // ── App state ─────────────────────────────────────────────────────
 const state = {
   view:           'intake',  // 'intake' | 'editor' | 'final'
-  appConfig:      { openAiRewriteEnabled: false },
   analysisResult: null,
   sections:       [],        // array of {id, label, currentText, proposedText, critique, status}
   sectionIndex:   0,
   approved:       {},        // {sectionId: editedText}
+  skippedSuggestions: {},
+  expandedCoachSections: {},
+  editingSuggestionId: null,
   candidateName:  '',
   lastPayload:    null,
   currentTab:     'upload',
-  rewriteInFlight: false,
+  finalDraftText:  '',
 };
 
 // ── Section header labels for final resume assembly ───────────────
@@ -73,17 +69,22 @@ const SECTION_HEADERS = {
   certifications: 'CERTIFICATIONS',
   awards:         'AWARDS',
   volunteer:      'VOLUNTEER',
+  hobbies:        'HOBBIES',
+  interests:      'INTERESTS',
+  languages:      'LANGUAGES',
+  publications:   'PUBLICATIONS',
+  research:       'RESEARCH',
+  coursework:     'COURSEWORK',
+  licenses:       'LICENSES',
+  community:      'COMMUNITY INVOLVEMENT',
+  extracurriculars: 'EXTRACURRICULARS',
+  military:       'MILITARY SERVICE',
+  development:    'PROFESSIONAL DEVELOPMENT',
+  portfolio:      'PORTFOLIO',
 };
 
 // ── Init ──────────────────────────────────────────────────────────
 async function init() {
-  try {
-    const res = await fetch('/api/config');
-    state.appConfig = await res.json();
-  } catch (_) { /* safe default: openAiRewriteEnabled: false */ }
-
-  updateRewriteUI();
-
   // Clean LinkedIn OAuth query param
   const url = new URL(window.location.href);
   if (url.searchParams.has('linkedin')) {
@@ -123,17 +124,17 @@ resumeFileEl.addEventListener('change', () => {
 
 function applyFile(file) {
   const name = file.name.toLowerCase();
-  if (!name.endsWith('.pdf') && !name.endsWith('.txt') && !name.endsWith('.md')) {
-    showFileStatus('Only PDF, TXT, or MD files are supported.', true);
+  if (!isSupportedResumeFile(name)) {
+    showFileStatus('Only PDF, TXT, MD, JPG, PNG, or WEBP files are supported.', true);
     return;
   }
   if (file.size > 4.5 * 1024 * 1024) {
     showFileStatus('File is too large. Keep it under 4.5 MB.', true);
     return;
   }
-  const ALLOWED_MIMES = ['application/pdf', 'text/plain', 'text/markdown', 'text/x-markdown', ''];
+  const ALLOWED_MIMES = ['application/pdf', 'text/plain', 'text/markdown', 'text/x-markdown', 'image/jpeg', 'image/png', 'image/webp', ''];
   if (file.type && !ALLOWED_MIMES.includes(file.type)) {
-    showFileStatus('Only PDF, TXT, or MD files are supported.', true);
+    showFileStatus('Only PDF, TXT, MD, JPG, PNG, or WEBP files are supported.', true);
     return;
   }
   try {
@@ -142,6 +143,21 @@ function applyFile(file) {
     resumeFileEl.files = dt.files;
   } catch (_) { /* DataTransfer not in some browsers */ }
   showFileStatus(`${file.name}  ·  ${(file.size / 1024).toFixed(0)} KB`);
+}
+
+function isSupportedResumeFile(name = '') {
+  return ['.pdf', '.txt', '.md', '.jpg', '.jpeg', '.png', '.webp'].some((ext) => name.endsWith(ext));
+}
+
+function inferMimeFromFileName(name = '') {
+  const lower = name.toLowerCase();
+  if (lower.endsWith('.pdf')) return 'application/pdf';
+  if (lower.endsWith('.txt')) return 'text/plain';
+  if (lower.endsWith('.md')) return 'text/markdown';
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+  if (lower.endsWith('.png')) return 'image/png';
+  if (lower.endsWith('.webp')) return 'image/webp';
+  return '';
 }
 
 function showFileStatus(msg, isError = false) {
@@ -198,6 +214,7 @@ async function buildPayload() {
     if (file) {
       payload.resumeFileName   = file.name;
       payload.resumeFileBase64 = await fileToBase64(file);
+      payload.resumeFileType   = file.type || inferMimeFromFileName(file.name);
     }
   } else {
     payload.resumeText = resumeTextEl.value.trim();
@@ -267,72 +284,248 @@ function renderSectionPanel(section) {
     editorPanelEl.appendChild(warn);
   }
 
-  // Current content (read-only) — only show if there's content
-  if (section.currentText) {
-    const block = el('div', 'current-block');
-    const lbl   = el('p',   'field-label', 'What we found');
-    const pre   = el('pre', 'current-text', section.currentText);
-    block.append(lbl, pre);
-    editorPanelEl.appendChild(block);
+  const workspace = el('div', 'section-workspace');
+  const editorCol = el('div', 'section-editor-column');
+  const coachCol  = el('div', 'section-coach-column');
+
+  if (section.id === 'experience') {
+    const preview = renderExperiencePreview(section.parsedFields?.entries || []);
+    if (preview) editorPanelEl.appendChild(preview);
   }
 
-  // Critique bar — what seems off
-  if (section.critique) {
-    const bar      = el('div', `critique-bar ${section.status}`);
-    const iconChar = section.status === 'ok' ? '✓' : section.status === 'missing' ? '+' : '!';
-    const icon     = el('span', `critique-icon ${section.status}`, iconChar);
-    const text     = el('p',   'critique-text', section.critique);
-    bar.append(icon, text);
-    editorPanelEl.appendChild(bar);
-  }
-
-  // Proposed / editable content — the suggested rewrite
+  // Editable content starts from the parsed original. Suggested rewrites stay optional.
   const proposed = el('div', 'proposed-block');
-  let propLblText = section.currentText
-    ? 'Suggested rewrite — edit freely'
-    : 'Suggested content — edit to fit your background';
-  // For summary: when proposed === current (existing summary preserved), be explicit
-  if (section.id === 'summary' && section.summarySource && section.summarySource !== 'none'
-      && section.currentText && section.currentText.trim() === section.proposedText?.trim()) {
-    propLblText = 'Your existing summary — edit to refine it';
-  }
-  const propLbl  = el('p', 'field-label', propLblText);
+  const propLbl  = el('p', 'field-label', section.currentText ? 'Edit this section' : 'Add this section');
   const textarea = document.createElement('textarea');
   textarea.id        = 'section-textarea';
   textarea.className = 'editor-textarea';
-  textarea.value     = section.proposedText;
-  const lineCount = (section.proposedText.match(/\n/g) || []).length + 1;
+  textarea.value     = section.currentText || section.proposedText || '';
+  const lineCount = (textarea.value.match(/\n/g) || []).length + 1;
   textarea.rows = Math.max(6, Math.min(lineCount + 2, 22));
-  proposed.append(propLbl, textarea);
-  editorPanelEl.appendChild(proposed);
+  proposed.appendChild(propLbl);
+  proposed.appendChild(textarea);
+  editorCol.appendChild(proposed);
 
-  // Change log — per-bullet explanations (experience section)
-  if (section.changeLog?.length) {
-    const changeWrap = el('div', 'change-log');
-    const changeLbl  = el('p',  'field-label', `Why we changed ${section.changeLog.length} bullet${section.changeLog.length > 1 ? 's' : ''}`);
-    changeWrap.appendChild(changeLbl);
+  renderCoachPanel(coachCol, section, textarea);
 
-    for (const change of section.changeLog.slice(0, 6)) {
-      const item = el('div', 'change-item');
+  workspace.append(editorCol, coachCol);
+  editorPanelEl.appendChild(workspace);
+}
 
-      const origRow  = el('div', 'change-row change-original');
-      const origBadge= el('span', 'change-badge before', 'Before');
-      const origText = el('span', 'change-text', change.original);
-      origRow.append(origBadge, origText);
+function formatExperiencePreviewRole(entry = {}) {
+  const companyLocation = [entry.company || '', entry.location || ''].filter(Boolean).join(', ');
+  return [
+    entry.title || '',
+    companyLocation
+  ].filter(Boolean).join(' - ') || 'Experience';
+}
 
-      const revRow   = el('div', 'change-row change-revised');
-      const revBadge = el('span', 'change-badge after', 'After');
-      const revText  = el('span', 'change-text', change.revised);
-      revRow.append(revBadge, revText);
+function renderExperiencePreview(entries = []) {
+  const usableEntries = entries.filter((entry) => entry && (entry.title || entry.company || entry.dateRange || entry.bullets?.length));
+  if (!usableEntries.length) return null;
 
-      const reason   = el('p', 'change-reason', `Why: ${change.reason}`);
+  const preview = el('div', 'experience-preview');
+  for (const entry of usableEntries) {
+    const item = el('div', 'experience-preview-entry');
+    const heading = el('div', 'experience-preview-heading');
+    heading.append(
+      el('span', 'experience-preview-role', formatExperiencePreviewRole(entry)),
+      el('span', 'experience-preview-date', entry.dateRange || '')
+    );
+    item.appendChild(heading);
 
-      item.append(origRow, revRow, reason);
-      changeWrap.appendChild(item);
+    const bullets = (entry.bullets || []).filter(Boolean);
+    if (bullets.length) {
+      const list = el('ul', 'experience-preview-bullets');
+      for (const bullet of bullets) {
+        list.appendChild(el('li', '', bullet));
+      }
+      item.appendChild(list);
     }
 
-    editorPanelEl.appendChild(changeWrap);
+    preview.appendChild(item);
   }
+
+  return preview;
+}
+
+function renderCoachPanel(container, section, textarea) {
+  const label = el('p', 'field-label', 'Section coach');
+  container.appendChild(label);
+
+  const skipped = state.skippedSuggestions[section.id] || {};
+  const suggestions = (section.suggestions || []).filter((item) => !skipped[item.id]);
+
+  if (!suggestions.length) {
+    if (section.status === 'needs-work' || section.status === 'missing') {
+      const review = el('div', `suggestion-card severity-${section.status === 'missing' ? 'high' : 'medium'}`);
+      review.append(
+        el('p', 'suggestion-card-title', section.status === 'missing' ? `Add ${section.label}` : 'Review this section'),
+        el('p', 'suggestion-card-detail', section.critique || section.parseWarning || 'This section needs a closer review before export.')
+      );
+      container.appendChild(review);
+      return;
+    }
+
+    const empty = el('div', 'suggestion-card suggestion-card-ok');
+    empty.append(
+      el('p', 'suggestion-card-title', 'No major issues detected'),
+      el('p', 'suggestion-card-detail', 'You can keep editing manually or continue to the next section.')
+    );
+    container.appendChild(empty);
+    return;
+  }
+
+  if (suggestions.length > COACH_VISIBLE_LIMIT) {
+    container.appendChild(renderCoachSummary(section, textarea, suggestions.length));
+  }
+
+  const isExpanded = Boolean(state.expandedCoachSections[section.id]);
+  const visibleSuggestions = isExpanded
+    ? suggestions
+    : suggestions.slice(0, COACH_VISIBLE_LIMIT);
+
+  for (const suggestion of visibleSuggestions) {
+    container.appendChild(renderSuggestionCard(section, suggestion, textarea));
+  }
+}
+
+function renderCoachSummary(section, textarea, totalCount) {
+  const isExpanded = Boolean(state.expandedCoachSections[section.id]);
+  const visibleCount = isExpanded ? totalCount : Math.min(totalCount, COACH_VISIBLE_LIMIT);
+  const hiddenCount = Math.max(0, totalCount - COACH_VISIBLE_LIMIT);
+  const summary = el('div', 'coach-summary');
+  summary.appendChild(el('p', 'coach-summary-text', `Showing ${visibleCount} of ${totalCount} suggestions`));
+
+  const toggle = el('button', 'btn-ghost coach-summary-toggle', isExpanded ? 'Show fewer' : `Show ${hiddenCount} more`);
+  toggle.type = 'button';
+  toggle.addEventListener('click', () => {
+    persistSectionEdit(section, textarea);
+    state.expandedCoachSections[section.id] = !isExpanded;
+    renderSectionPanel(section);
+  });
+  summary.appendChild(toggle);
+  return summary;
+}
+
+function renderSuggestionCard(section, suggestion, textarea) {
+  const card = el('div', `suggestion-card severity-${suggestion.severity || 'medium'}`);
+  card.appendChild(el('p', 'suggestion-card-title', suggestion.title || 'Suggestion'));
+  if (suggestion.detail) {
+    card.appendChild(el('p', 'suggestion-card-detail', suggestion.detail));
+  }
+  if (suggestion.type === 'skills-list' && suggestion.suggestedText) {
+    const chips = el('div', 'skill-chip-list');
+    for (const skill of suggestion.suggestedText.split(/\n|\|/).map(s => s.trim()).filter(Boolean)) {
+      chips.appendChild(el('span', 'skill-chip', skill));
+    }
+    card.appendChild(chips);
+  } else if (suggestion.originalText && suggestion.suggestedText) {
+    const diff = el('div', 'suggestion-diff');
+    diff.append(
+      el('p', 'suggestion-before', `Before: ${suggestion.originalText}`),
+      el('p', 'suggestion-after', `After: ${suggestion.suggestedText}`)
+    );
+    card.appendChild(diff);
+  } else if (suggestion.suggestedText) {
+    card.appendChild(el('p', 'suggestion-after', suggestion.suggestedText));
+  }
+  if (suggestion.rationale) {
+    card.appendChild(el('p', 'suggestion-card-rationale', suggestion.rationale));
+  }
+
+  if (state.editingSuggestionId === suggestion.id && suggestion.suggestedText) {
+    const edit = document.createElement('textarea');
+    edit.className = 'suggestion-edit';
+    edit.value = suggestion.suggestedText;
+    edit.rows = Math.max(3, Math.min((suggestion.suggestedText.match(/\n/g) || []).length + 2, 8));
+    card.appendChild(edit);
+  }
+
+  const actions = el('div', 'suggestion-actions');
+  if (suggestion.applyMode && suggestion.applyMode !== 'informational') {
+    const apply = el('button', 'btn-secondary suggestion-apply', 'Apply');
+    apply.type = 'button';
+    apply.addEventListener('click', () => {
+      const editValue = card.querySelector('.suggestion-edit')?.value;
+      applySuggestionToTextarea(textarea, suggestion, editValue);
+      resolveSuggestion(section, textarea, suggestion.id);
+    });
+    actions.appendChild(apply);
+  }
+  if (suggestion.suggestedText) {
+    const editBtn = el('button', 'btn-secondary suggestion-edit-btn', 'Edit');
+    editBtn.type = 'button';
+    editBtn.addEventListener('click', () => {
+      persistSectionEdit(section, textarea);
+      state.editingSuggestionId = state.editingSuggestionId === suggestion.id ? null : suggestion.id;
+      renderSectionPanel(section);
+    });
+    actions.appendChild(editBtn);
+  }
+  const skip = el('button', 'btn-ghost suggestion-skip', 'Mark addressed');
+  skip.type = 'button';
+  skip.addEventListener('click', () => {
+    resolveSuggestion(section, textarea, suggestion.id);
+  });
+  actions.appendChild(skip);
+  card.appendChild(actions);
+  return card;
+}
+
+function persistSectionEdit(section, textarea) {
+  if (!section || !textarea) return;
+  section.currentText = textarea.value;
+  if (textarea.value.trim()) {
+    state.approved[section.id] = textarea.value.trim();
+  }
+}
+
+function resolveSuggestion(section, textarea, suggestionId) {
+  persistSectionEdit(section, textarea);
+  markSuggestionResolved(section.id, suggestionId);
+  state.editingSuggestionId = null;
+  renderSectionPanel(section);
+}
+
+function markSuggestionResolved(sectionId, suggestionId) {
+  if (!sectionId || !suggestionId) return;
+  state.skippedSuggestions[sectionId] = {
+    ...(state.skippedSuggestions[sectionId] || {}),
+    [suggestionId]: true
+  };
+}
+
+function applySuggestionToTextarea(textarea, suggestion, overrideText) {
+  const suggestedText = (overrideText ?? suggestion.suggestedText ?? '').trim();
+  if (!suggestedText && suggestion.applyMode !== 'insert-field') return;
+
+  if (suggestion.applyMode === 'replace-section') {
+    textarea.value = suggestedText;
+  } else if (suggestion.applyMode === 'replace-line') {
+    const original = suggestion.originalText || '';
+    const replacement = suggestedText;
+    if (original && textarea.value.includes(original)) {
+      textarea.value = textarea.value.replace(original, replacement);
+    } else if (original && textarea.value.includes(`- ${original}`)) {
+      textarea.value = textarea.value.replace(`- ${original}`, `- ${replacement}`);
+    }
+  } else if (suggestion.applyMode === 'insert-field') {
+    const label = {
+      name: 'Name',
+      email: 'Email',
+      phone: 'Phone',
+      linkedin: 'LinkedIn',
+      github: 'GitHub',
+      portfolio: 'Portfolio'
+    }[suggestion.field] || 'Field';
+    const insertion = suggestedText || `${label}: `;
+    const prefix = textarea.value.trim() ? `${textarea.value.trim()}\n` : '';
+    textarea.value = `${prefix}${insertion}`;
+  }
+
+  state.editingSuggestionId = null;
+  textarea.focus();
 }
 
 // ── Section navigation ────────────────────────────────────────────
@@ -376,12 +569,403 @@ editorSkipBtn.addEventListener('click',     () => advanceSection(true));
 editorBackBtn.addEventListener('click',     () => goBackSection());
 
 // ── Final view assembly ───────────────────────────────────────────
+function isListSubheading(line = '') {
+  const text = String(line || '').trim().replace(/:$/, '');
+  return text.length >= 3
+    && text.length <= 30
+    && /^[A-Z][A-Z\s/&-]+$/.test(text)
+    && !/[0-9]/.test(text);
+}
+
+function splitListItems(line = '') {
+  const cleaned = String(line || '').trim().replace(/^[-*•]\s*/, '');
+  if (!cleaned) return [];
+  return cleaned
+    .split(/\s*[|,;]\s*/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function pushCompactListRow(rows, items, maxChars = 96) {
+  let current = '';
+  for (const item of items) {
+    const next = current ? `${current} | ${item}` : item;
+    if (current && next.length > maxChars) {
+      rows.push(current);
+      current = item;
+    } else {
+      current = next;
+    }
+  }
+  if (current) rows.push(current);
+}
+
+function compactListSectionText(text = '') {
+  const rows = [];
+  let pending = [];
+
+  for (const rawLine of String(text || '').split('\n')) {
+    const line = rawLine.trim();
+    if (!line) continue;
+
+    if (isListSubheading(line)) {
+      pushCompactListRow(rows, pending);
+      pending = [];
+      rows.push(line.replace(/:$/, '').toUpperCase());
+      continue;
+    }
+
+    pending.push(...splitListItems(line));
+  }
+
+  pushCompactListRow(rows, pending);
+  return rows.join('\n').trim();
+}
+
+function formatSectionForFinal(id, text) {
+  const cleaned = String(text || '').trim().replace(/\n{3,}/g, '\n\n');
+  if (COMPACT_LIST_SECTION_IDS.has(id)) {
+    return compactListSectionText(cleaned);
+  }
+  return cleaned;
+}
+
+const FINAL_MONTH_OR_SEASON_RE = String.raw`(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?|Spring|Summer|Fall|Autumn|Winter)`;
+const FINAL_DATE_POINT_RE = String.raw`(?:(?:${FINAL_MONTH_OR_SEASON_RE})\s+)?(?:19|20)\d{2}`;
+const FINAL_DATE_RANGE_SOURCE = String.raw`(?:${FINAL_DATE_POINT_RE}\s*[-–—/]\s*(?:Present|Current|Now|${FINAL_DATE_POINT_RE})|${FINAL_MONTH_OR_SEASON_RE}\s+(?:19|20)\d{2})`;
+const FINAL_DATE_RANGE_RE = new RegExp(FINAL_DATE_RANGE_SOURCE, 'i');
+const FINAL_DATE_RANGE_GLOBAL_RE = new RegExp(FINAL_DATE_RANGE_SOURCE, 'ig');
+const FINAL_TRAILING_DATE_RE = new RegExp(String.raw`\s*(?:[|,]\s*)?(${FINAL_DATE_RANGE_SOURCE})$`, 'i');
+
+function splitFinalTrailingDate(line = '') {
+  const text = String(line || '').trim();
+  const trailingMatch = text.match(FINAL_TRAILING_DATE_RE);
+  if (!trailingMatch) return null;
+  const dateMatches = Array.from(text.matchAll(FINAL_DATE_RANGE_GLOBAL_RE));
+  const firstDateIndex = dateMatches[0]?.index ?? trailingMatch.index;
+  const role = text
+    .slice(0, firstDateIndex)
+    .replace(/\s*[|,–—-]\s*$/, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+  if (!role) return null;
+  return {
+    role,
+    date: trailingMatch[1].trim()
+  };
+}
+
+function isStandaloneFinalDate(line = '') {
+  const text = String(line || '').trim();
+  if (!text || /^[-*•]/.test(text)) return false;
+  const withoutDate = text.replace(FINAL_DATE_RANGE_RE, '').replace(/[()[\]–—\-\/\s|,]/g, '').trim();
+  return FINAL_DATE_RANGE_RE.test(text) && withoutDate.length < 8;
+}
+
+function parseFinalResumeDraft(draft = '') {
+  const headingToId = new Map(
+    Object.entries(SECTION_HEADERS)
+      .filter(([, heading]) => heading)
+      .map(([id, heading]) => [heading, id])
+  );
+  const sections = [];
+  let current = { id: 'heading', heading: null, lines: [] };
+
+  for (const rawLine of String(draft || '').replace(/\r/g, '').split('\n')) {
+    const line = rawLine.trimEnd();
+    const normalized = line.trim().toUpperCase();
+    if (headingToId.has(normalized)) {
+      if (current.lines.some((entry) => entry.trim())) sections.push(current);
+      current = { id: headingToId.get(normalized), heading: normalized, lines: [] };
+      continue;
+    }
+    current.lines.push(line);
+  }
+
+  if (current.lines.some((entry) => entry.trim())) sections.push(current);
+  return sections;
+}
+
+function parseFinalExperienceEntries(lines = []) {
+  const entries = [];
+  let current = null;
+
+  function flush() {
+    if (current && (current.role || current.date || current.bullets.length || current.details.length)) {
+      entries.push(current);
+    }
+    current = null;
+  }
+
+  function start(role = '', date = '') {
+    flush();
+    current = { role: role.trim(), date: date.trim(), bullets: [], details: [] };
+  }
+
+  const compact = lines.map((line) => String(line || '').trim()).filter(Boolean);
+  for (let index = 0; index < compact.length; index += 1) {
+    const line = compact[index];
+    const bulletMatch = line.match(/^[-*•]\s*(.+)$/);
+    if (bulletMatch) {
+      if (!current) start();
+      current.bullets.push(bulletMatch[1].trim());
+      continue;
+    }
+
+    const split = splitFinalTrailingDate(line);
+    if (split?.role) {
+      start(split.role, split.date);
+      continue;
+    }
+
+    if (isStandaloneFinalDate(line)) {
+      if (!current) start();
+      current.date = line;
+      continue;
+    }
+
+    if (index + 1 < compact.length && isStandaloneFinalDate(compact[index + 1])) {
+      start(line, compact[index + 1]);
+      index += 1;
+      continue;
+    }
+
+    if (!current || current.bullets.length || current.date) {
+      start(line, '');
+    } else {
+      current.details.push(line);
+    }
+  }
+
+  flush();
+  return entries;
+}
+
+function appendFinalPlainLines(parent, lines = []) {
+  const list = [];
+  let paragraph = [];
+
+  function flushParagraph() {
+    if (!paragraph.length) return;
+    parent.appendChild(el('p', 'resume-final-text', paragraph.join(' ')));
+    paragraph = [];
+  }
+
+  for (const rawLine of lines) {
+    const line = String(rawLine || '').trim();
+    if (!line) {
+      flushParagraph();
+      continue;
+    }
+
+    const bulletMatch = line.match(/^[-*•]\s*(.+)$/);
+    if (bulletMatch) {
+      flushParagraph();
+      list.push(bulletMatch[1].trim());
+      continue;
+    }
+
+    if (list.length) {
+      const ul = el('ul', 'resume-final-bullets');
+      for (const item of list.splice(0)) ul.appendChild(el('li', '', item));
+      parent.appendChild(ul);
+    }
+    paragraph.push(line);
+  }
+
+  flushParagraph();
+  if (list.length) {
+    const ul = el('ul', 'resume-final-bullets');
+    for (const item of list) ul.appendChild(el('li', '', item));
+    parent.appendChild(ul);
+  }
+}
+
+function looksLikeContactToken(value = '') {
+  const text = String(value || '').trim();
+  if (!text) return false;
+  if (/@/.test(text)) return true;
+  if (/\b(?:https?:\/\/|www\.|linkedin\.com|github\.com|portfolio|behance\.net|dribbble\.com)\b/i.test(text)) return true;
+  if (/(?:\+?1[-.\s]?)?(?:\(?\d{3}\)?[-.\s]?)\d{3}[-.\s]?\d{4}/.test(text)) return true;
+  return false;
+}
+
+function splitFinalHeaderLines(lines = []) {
+  const compact = lines.map((line) => String(line || '').trim()).filter(Boolean);
+  if (!compact.length) return { name: '', contact: '' };
+
+  const firstParts = compact[0].split(/\s*[|•·]\s*/).map((part) => part.trim()).filter(Boolean);
+  if (firstParts.length > 1) {
+    const firstPartIsName = !looksLikeContactToken(firstParts[0]);
+    const name = firstPartIsName ? firstParts[0] : '';
+    const contacts = firstPartIsName ? firstParts.slice(1) : firstParts;
+    contacts.push(...compact.slice(1));
+    return { name, contact: contacts.join(' | ') };
+  }
+
+  if (looksLikeContactToken(compact[0])) {
+    return { name: '', contact: compact.join(' | ') };
+  }
+
+  return {
+    name: compact[0],
+    contact: compact.slice(1).join(' | ')
+  };
+}
+
+function appendFinalHeader(section) {
+  const lines = section.lines.map((line) => line.trim()).filter(Boolean);
+  if (!lines.length) return;
+  const { name, contact } = splitFinalHeaderLines(lines);
+
+  const header = el('header', 'resume-final-header');
+  if (name) header.appendChild(el('h1', '', name));
+
+  if (contact) header.appendChild(el('p', 'resume-final-contact', contact));
+
+  finalDraftEl.appendChild(header);
+}
+
+function appendFinalExperience(section) {
+  const entries = parseFinalExperienceEntries(section.lines);
+  const sectionEl = el('section', 'resume-final-section resume-final-experience');
+  sectionEl.appendChild(el('h3', '', section.heading));
+
+  if (!entries.length) {
+    appendFinalPlainLines(sectionEl, section.lines);
+    finalDraftEl.appendChild(sectionEl);
+    return;
+  }
+
+  for (const entry of entries) {
+    const item = el('div', 'resume-final-experience-entry');
+    if (entry.role || entry.date) {
+      const heading = el('div', 'resume-final-experience-heading');
+      heading.append(
+        el('strong', 'resume-final-experience-role', entry.role || 'Experience'),
+        el('span', 'resume-final-experience-date', entry.date || '')
+      );
+      item.appendChild(heading);
+    }
+    for (const detail of entry.details) {
+      item.appendChild(el('p', 'resume-final-text', detail));
+    }
+    if (entry.bullets.length) {
+      const ul = el('ul', 'resume-final-bullets');
+      for (const bullet of entry.bullets) ul.appendChild(el('li', '', bullet));
+      item.appendChild(ul);
+    }
+    sectionEl.appendChild(item);
+  }
+
+  finalDraftEl.appendChild(sectionEl);
+}
+
+function appendFinalCompactList(section) {
+  const sectionEl = el('section', 'resume-final-section resume-final-compact-list');
+  sectionEl.appendChild(el('h3', '', section.heading));
+
+  for (const rawLine of section.lines) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    if (isListSubheading(line)) {
+      sectionEl.appendChild(el('p', 'resume-final-subheading', line.replace(/:$/, '').toUpperCase()));
+    } else {
+      sectionEl.appendChild(el('p', 'resume-final-list-row', line));
+    }
+  }
+
+  finalDraftEl.appendChild(sectionEl);
+}
+
+function renderFinalResumePreview(draft = '') {
+  finalDraftEl.replaceChildren();
+  const sections = parseFinalResumeDraft(draft);
+
+  for (const section of sections) {
+    if (section.id === 'heading') {
+      appendFinalHeader(section);
+    } else if (section.id === 'experience') {
+      appendFinalExperience(section);
+    } else if (COMPACT_LIST_SECTION_IDS.has(section.id)) {
+      appendFinalCompactList(section);
+    } else {
+      const sectionEl = el('section', 'resume-final-section');
+      sectionEl.appendChild(el('h3', '', section.heading));
+      appendFinalPlainLines(sectionEl, section.lines);
+      finalDraftEl.appendChild(sectionEl);
+    }
+  }
+}
+
+function finalText(node) {
+  return String(node?.innerText || node?.textContent || '').replace(/\s+/g, ' ').trim();
+}
+
+function appendSerializedSectionLines(lines, sectionEl) {
+  for (const node of Array.from(sectionEl.children)) {
+    if (node.matches('h3')) continue;
+
+    if (node.matches('ul')) {
+      for (const item of Array.from(node.querySelectorAll(':scope > li'))) {
+        const text = finalText(item);
+        if (text) lines.push(`- ${text}`);
+      }
+      continue;
+    }
+
+    if (node.matches('.resume-final-experience-entry')) {
+      const role = finalText(node.querySelector('.resume-final-experience-role'));
+      const date = finalText(node.querySelector('.resume-final-experience-date'));
+      const heading = [role, date].filter(Boolean).join(' ');
+      if (heading) lines.push(heading);
+
+      for (const detail of Array.from(node.querySelectorAll(':scope > .resume-final-text'))) {
+        const text = finalText(detail);
+        if (text) lines.push(text);
+      }
+
+      for (const item of Array.from(node.querySelectorAll(':scope > ul > li'))) {
+        const text = finalText(item);
+        if (text) lines.push(`- ${text}`);
+      }
+      lines.push('');
+      continue;
+    }
+
+    const text = finalText(node);
+    if (text) lines.push(text);
+  }
+}
+
+function serializeFinalPreviewForExport() {
+  const lines = [];
+  const header = finalDraftEl.querySelector('.resume-final-header');
+
+  if (header) {
+    const name = finalText(header.querySelector('h1'));
+    const contact = finalText(header.querySelector('.resume-final-contact'));
+    if (name) lines.push(name);
+    if (contact) lines.push(contact);
+    if (name || contact) lines.push('');
+  }
+
+  for (const sectionEl of Array.from(finalDraftEl.querySelectorAll(':scope > .resume-final-section'))) {
+    const heading = finalText(sectionEl.querySelector(':scope > h3'));
+    if (heading) lines.push(heading);
+    appendSerializedSectionLines(lines, sectionEl);
+    lines.push('');
+  }
+
+  return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
 function assembleFinalResume() {
   const parts  = [];
-  const sOrder = state.sections.map(s => s.id);
 
-  for (const id of sOrder) {
-    const text = state.approved[id];
+  for (const section of state.sections) {
+    const id = section.id;
+    const text = formatSectionForFinal(id, state.approved[id]);
     if (!text?.trim()) continue;
 
     const header = SECTION_HEADERS[id];
@@ -397,25 +981,63 @@ function assembleFinalResume() {
 
 function buildFinalView() {
   const draft = assembleFinalResume();
-  finalDraftEl.textContent = draft;
+  state.finalDraftText = draft;
+  renderFinalResumePreview(draft);
 
   renderFinalNotes();
-  updateRewriteUI();
   setView('final');
 }
 
 function renderFinalNotes() {
   finalNotesEl.replaceChildren();
-  const suggestions = state.analysisResult?.suggestions ?? [];
-  if (!suggestions.length) {
-    finalNotesEl.innerHTML = '<p style="font-size:0.8125rem;color:var(--muted)">No major issues detected.</p>';
+  const severityRank = { high: 0, medium: 1, low: 2 };
+  const unresolved = [];
+
+  for (const section of state.sections) {
+    const skipped = state.skippedSuggestions[section.id] || {};
+    for (const suggestion of section.suggestions || []) {
+      if (skipped[suggestion.id]) continue;
+      if (!['high', 'medium'].includes(suggestion.severity || 'medium')) continue;
+      unresolved.push({ section, suggestion });
+    }
+
+    if (section.parseWarning) {
+      unresolved.push({
+        section,
+        suggestion: {
+          id: `${section.id}-parse-warning`,
+          severity: 'medium',
+          title: 'Review parsing',
+          detail: section.parseWarning
+        }
+      });
+    }
+
+    if (section.status === 'needs-work' && section.critique && !(section.suggestions || []).length) {
+      unresolved.push({
+        section,
+        suggestion: {
+          id: `${section.id}-critique`,
+          severity: 'medium',
+          title: 'Review this section',
+          detail: section.critique
+        }
+      });
+    }
+  }
+
+  unresolved.sort((a, b) => (severityRank[a.suggestion.severity] ?? 1) - (severityRank[b.suggestion.severity] ?? 1));
+  const visible = unresolved.slice(0, 4);
+
+  if (!visible.length) {
+    finalNotesEl.appendChild(el('p', 'note-empty', 'No major issues detected.'));
     return;
   }
-  for (const s of suggestions.slice(0, 8)) {
+  for (const { section, suggestion } of visible) {
     const item   = el('div', 'note-item');
-    const pri    = el('p', `note-priority ${(s.priority ?? 'medium').toLowerCase()}`, s.priority ?? 'Note');
-    const title  = el('p', 'note-title', s.title ?? '');
-    const detail = el('p', 'note-detail', s.detail ?? '');
+    const pri    = el('p', `note-priority ${suggestion.severity || 'medium'}`, section.label ?? 'Review');
+    const title  = el('p', 'note-title', suggestion.title ?? '');
+    const detail = el('p', 'note-detail', suggestion.detail ?? '');
     item.append(pri, title, detail);
     finalNotesEl.appendChild(item);
   }
@@ -435,10 +1057,12 @@ startOverBtn.addEventListener('click', () => {
   state.sections       = [];
   state.sectionIndex   = 0;
   state.approved       = {};
+  state.skippedSuggestions = {};
+  state.expandedCoachSections = {};
+  state.editingSuggestionId = null;
   state.candidateName  = '';
   state.lastPayload    = null;
-  state.rewriteInFlight = false;
-  aiResultEl.classList.add('hidden');
+  state.finalDraftText = '';
   analyzeBtnEl.disabled = false;
   analyzeLabelEl.textContent = 'Analyze my resume';
   clearFormError();
@@ -484,6 +1108,9 @@ intakeForm.addEventListener('submit', async e => {
 
     state.sectionIndex = 0;
     state.approved     = {};
+    state.skippedSuggestions = {};
+    state.expandedCoachSections = {};
+    state.editingSuggestionId = null;
 
     showEditorSection();
   } catch (err) {
@@ -506,194 +1133,70 @@ function synthesizeFallbackSections(result) {
   }];
 }
 
-const AI_ACTION_LABELS = {
-  'tighten':           'Tighten wording',
-  'ats':               'Improve ATS match',
-  'tailor':            'Tailor to target role',
-  'shorten':           'Shorten to one page',
-  'strengthen-bullets':'Strengthen bullets',
-};
-
-// ── Rewrite UI state ──────────────────────────────────────────────
-function updateRewriteUI() {
-  const enabled = state.appConfig.openAiRewriteEnabled;
-  for (const btn of document.querySelectorAll('.ai-action-btn')) {
-    btn.disabled = !enabled;
-  }
-  aiHintEl.textContent = enabled
-    ? ''
-    : 'Refinement requires a configured AI provider. Add your OPENAI_API_KEY to .env to enable.';
-}
-
-// ── AI Action handler ─────────────────────────────────────────────
-async function triggerAiAction(action) {
-  if (state.rewriteInFlight || !state.appConfig.openAiRewriteEnabled) return;
-
-  state.rewriteInFlight = true;
-
-  for (const btn of document.querySelectorAll('.ai-action-btn')) {
-    btn.disabled = true;
-    if (btn.dataset.action === action) {
-      btn.querySelector('.ai-action-label').textContent = 'Working…';
-    }
-  }
-  aiHintEl.textContent = '';
-
-  try {
-    const payload = { ...(state.lastPayload ?? {}) };
-    if (!payload.resumeText && state.analysisResult?.extractedResumeText) {
-      payload.resumeText = state.analysisResult.extractedResumeText;
-    }
-    // Use innerText so edits to the contenteditable pre are captured
-    const assembled = finalDraftEl.innerText?.trim();
-    if (assembled) payload.resumeText = assembled;
-    payload.action = action;
-
-    const controller = new AbortController();
-    const timeoutId  = setTimeout(() => controller.abort(), 120_000);
-    let res;
-    try {
-      res = await fetch('/api/rewrite', {
-        method:  'POST',
-        headers: { 'content-type': 'application/json' },
-        body:    JSON.stringify(payload),
-        signal:  controller.signal
-      });
-    } catch (fetchErr) {
-      if (fetchErr.name === 'AbortError') throw new Error('AI action timed out. Please try again.');
-      throw fetchErr;
-    } finally {
-      clearTimeout(timeoutId);
-    }
-    const result = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(result.error ?? 'Action failed. Please try again.');
-
-    aiResultLabelEl.textContent = `${AI_ACTION_LABELS[action] ?? 'AI-revised'} version`;
-    // Set content on contenteditable pre via textContent (safe — no HTML)
-    aiRewriteEl.textContent = result.rewrittenResume ?? 'No result returned.';
-    renderAiNotes(result.summary, result.bulletImprovements ?? [], result.notes ?? []);
-
-    aiResultEl.classList.remove('hidden');
-    // Keep action buttons visible — just show the "Run another pass:" label
-    document.querySelector('#ai-next-label').classList.remove('hidden');
-    aiHintEl.textContent = '';
-
-    aiResultEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  } catch (err) {
-    aiHintEl.textContent = err.message ?? 'Action failed. Please try again.';
-  } finally {
-    state.rewriteInFlight = false;
-    for (const btn of document.querySelectorAll('.ai-action-btn')) {
-      const a = btn.dataset.action;
-      if (AI_ACTION_LABELS[a]) {
-        btn.querySelector('.ai-action-label').textContent = AI_ACTION_LABELS[a];
-      }
-      btn.disabled = !state.appConfig.openAiRewriteEnabled;
-    }
-  }
-}
-
-// Delegate click on all action buttons
-document.querySelector('#ai-actions').addEventListener('click', e => {
-  const btn = e.target.closest('.ai-action-btn');
-  if (btn && !btn.disabled) triggerAiAction(btn.dataset.action);
-});
-
-// ── AI notes — grouped rendering (Issue 6) ────────────────────────
-function renderAiNotes(summary = '', bulletImprovements = [], notes = []) {
-  aiNotesEl.replaceChildren();
-  if (!summary && !bulletImprovements.length && !notes.length) return;
-
-  // Group 1: What this pass did (summary)
-  if (summary) {
-    const group = makeNoteGroup('✦', 'What this pass did');
-    const item  = el('div', 'ai-note-item summary-item', summary);
-    group.appendChild(item);
-    aiNotesEl.appendChild(group);
-  }
-
-  // Group 2: Bullet improvements
-  const improvements = bulletImprovements.filter(Boolean);
-  if (improvements.length) {
-    const group = makeNoteGroup('↻', 'Bullet changes');
-    for (const imp of improvements.slice(0, 8)) {
-      const item = el('div', 'ai-note-item', imp);
-      group.appendChild(item);
-    }
-    aiNotesEl.appendChild(group);
-  }
-
-  // Group 3: Suggestions / caveats
-  const caveats = notes.filter(Boolean);
-  if (caveats.length) {
-    const group = makeNoteGroup('→', 'Review before sending');
-    for (const note of caveats) {
-      const item = el('div', 'ai-note-item muted', note);
-      group.appendChild(item);
-    }
-    aiNotesEl.appendChild(group);
-  }
-}
-
-function makeNoteGroup(icon, title) {
-  const group  = el('div', 'ai-note-group');
-  const header = el('div', 'ai-note-group-header');
-  const ico    = el('span', 'ai-note-group-icon', icon);
-  const lbl    = el('span', 'ai-note-group-title', title);
-  header.append(ico, lbl);
-  group.appendChild(header);
-  return group;
-}
-
 // ── Export ────────────────────────────────────────────────────────
 async function exportText(format, text) {
   if (!text?.trim()) return;
-  const res = await fetch('/api/export', {
-    method:  'POST',
-    headers: { 'content-type': 'application/json' },
-    body:    JSON.stringify({
-      format,
-      text,
-      candidateName: state.candidateName   // used server-side for filename
-    })
-  });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error ?? 'Export failed');
+  const button = format === 'pdf' ? downloadPdfEl : downloadDocxEl;
+  const originalLabel = button.textContent;
+  button.disabled = true;
+  exportStatusEl.textContent = `Preparing ${format.toUpperCase()}...`;
+  exportStatusEl.classList.remove('export-status-error');
+  button.textContent = 'Preparing...';
+
+  try {
+    const res = await fetch('/api/export', {
+      method:  'POST',
+      headers: { 'content-type': 'application/json' },
+      body:    JSON.stringify({
+        format,
+        text,
+        candidateName: state.candidateName   // used server-side for filename
+      })
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error ?? 'Export failed');
+    }
+    const blob = await res.blob();
+    const disposition = res.headers.get('content-disposition') ?? '';
+    const match    = disposition.match(/filename="([^"]+)"/);
+    const fileName = match?.[1] ?? `resume.${format}`;
+    const url = URL.createObjectURL(blob);
+    const a   = document.createElement('a');
+    a.href     = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    exportStatusEl.textContent = `${format.toUpperCase()} ready. Check your downloads.`;
+  } catch (err) {
+    exportStatusEl.textContent = err.message || 'Export failed. Please try again.';
+    exportStatusEl.classList.add('export-status-error');
+  } finally {
+    button.disabled = false;
+    button.textContent = originalLabel;
   }
-  const blob = await res.blob();
-  const disposition = res.headers.get('content-disposition') ?? '';
-  const match    = disposition.match(/filename="([^"]+)"/);
-  const fileName = match?.[1] ?? `resume.${format}`;
-  const url = URL.createObjectURL(blob);
-  const a   = document.createElement('a');
-  a.href     = url;
-  a.download = fileName;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
 }
 
-// Use innerText so user edits to the contenteditable pre are captured
-downloadDocxEl.addEventListener('click',   () => exportText('docx', finalDraftEl.innerText).catch(console.error));
-downloadPdfEl.addEventListener('click',    () => exportText('pdf',  finalDraftEl.innerText).catch(console.error));
-dlRewriteDocxEl.addEventListener('click', () => exportText('docx', aiRewriteEl.innerText).catch(console.error));
-dlRewritePdfEl.addEventListener('click',  () => exportText('pdf',  aiRewriteEl.innerText).catch(console.error));
+downloadDocxEl.addEventListener('click',   () => exportText('docx', serializeFinalPreviewForExport() || state.finalDraftText || finalDraftEl.innerText));
+downloadPdfEl.addEventListener('click',    () => exportText('pdf',  serializeFinalPreviewForExport() || state.finalDraftText || finalDraftEl.innerText));
 
-// Strip HTML formatting on paste into editable pres (keeps plain text only)
-for (const pre of [finalDraftEl, aiRewriteEl]) {
-  pre.addEventListener('paste', e => {
-    e.preventDefault();
-    const text = e.clipboardData?.getData('text/plain') ?? '';
-    const sel = window.getSelection();
-    if (!sel || !sel.rangeCount) return;
-    sel.deleteFromDocument();
-    const range = sel.getRangeAt(0);
-    range.insertNode(document.createTextNode(text));
-    sel.collapseToEnd();
-  });
-}
+finalDraftEl.addEventListener('input', () => {
+  state.finalDraftText = serializeFinalPreviewForExport();
+});
+
+finalDraftEl.addEventListener('paste', e => {
+  e.preventDefault();
+  const text = e.clipboardData?.getData('text/plain') ?? '';
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) return;
+  sel.deleteFromDocument();
+  const range = sel.getRangeAt(0);
+  range.insertNode(document.createTextNode(text));
+  sel.collapseToEnd();
+  state.finalDraftText = serializeFinalPreviewForExport();
+});
 
 // ── DOM utility ───────────────────────────────────────────────────
 function el(tag, className, textContent) {

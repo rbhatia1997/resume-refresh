@@ -4,23 +4,39 @@ import { createRequire } from "node:module";
 import { promises as fs, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { Document, Packer, Paragraph, TextRun, TabStopType } from "docx";
+import { AlignmentType, BorderStyle, Document, Packer, Paragraph, TextRun, TabStopType } from "docx";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { analyzeResume } from "./resume-analyzer.js";
 import { normalizeInputText } from "./text-normalizer.js";
 import { buildResumeValidationFromText } from "./resume-validator.js";
-import { callModel, isModelConfigured, getProviderLabel } from "./inference.js";
+import { callModel, isModelConfigured, getProviderLabel, extractTextFromResumeImage } from "./inference.js";
+import { classifyResumeUpload } from "./resume-upload.js";
+import { splitJobDate } from "./export-format.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, "..");
 const publicDir = path.resolve(projectRoot, "public");
-const sessionCookieName = "resume_refresh_session";
-const maxBodyBytes = 6 * 1024 * 1024;
-const maxRewriteChars = 10000;
-const rateLimits = new Map();
-const require = createRequire(import.meta.url);
 
 loadDotEnv();
+
+const sessionCookieName = "resume_refresh_session";
+export const MAX_BODY_BYTES = 6 * 1024 * 1024;
+const maxRewriteChars = 10000;
+const maxOnePageExportLines = 64;
+const compactListSectionKeys = new Set(["skills", "languages", "hobbies", "interests"]);
+const exportRuleColor = "D7DDE6";
+const exportInkColor = "111827";
+const exportMutedColor = "64748B";
+const exportHeadingColor = "334155";
+const docxPageWidthTwips = 12240;
+const docxPageHeightTwips = 15840;
+const docxMarginTwips = 720;
+const docxRightTabTwips = docxPageWidthTwips - docxMarginTwips * 2;
+const dailyEditLimit = parsePositiveInteger(process.env.DAILY_EDIT_LIMIT, 10);
+const dailyEditWindowMs = 24 * 60 * 60 * 1000;
+const maxRateLimitBuckets = 5000;
+const rateLimits = new Map();
+const require = createRequire(import.meta.url);
 
 const linkedInClientId = process.env.LINKEDIN_CLIENT_ID || process.env.LI_CLIENT_ID || "";
 const linkedInClientSecret = process.env.LINKEDIN_CLIENT_SECRET || process.env.LI_CLIENT_SECRET || "";
@@ -30,6 +46,14 @@ const hasSecureAppSecret = process.env.NODE_ENV !== "production" || appSecret !=
 
 if (process.env.NODE_ENV === "production" && !hasSecureAppSecret) {
   throw new Error("FATAL: APP_SECRET must be set to a strong random value in production. Do not use the default.");
+}
+
+function parsePositiveInteger(value, fallback) {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    return fallback;
+  }
+  return parsed;
 }
 
 class AppError extends Error {
@@ -143,6 +167,7 @@ export async function handleRequest(request, { serveStatic = true } = {}) {
     if (request.method === "POST" && url.pathname === "/api/analyze") {
       enforceSameOrigin(request);
       enforceRateLimit(request, "analyze", { limit: 20, windowMs: 60_000 });
+      enforceDailyEditLimit(request);
       const body = await readJsonBody(request);
       const rawResumeText = await extractResumeText(body);
       const targetRoleInput = String(body.targetRole || "").trim();
@@ -171,14 +196,17 @@ export async function handleRequest(request, { serveStatic = true } = {}) {
 
       return jsonResponse({
         ...result,
-        extractedResumeText: cleanedResumeText,
-        linkedInProfile: session?.profile || null
+        linkedInProfile: session?.profile ? {
+          name: session.profile.name || "",
+          email: session.profile.email || ""
+        } : null
       });
     }
 
     if (request.method === "POST" && url.pathname === "/api/rewrite") {
       enforceSameOrigin(request);
       enforceRateLimit(request, "rewrite", { limit: 8, windowMs: 60_000 });
+      enforceDailyEditLimit(request);
       assertModelConfigured();
       const body = await readJsonBody(request);
       const rewritten = await rewriteWithOpenAI(body);
@@ -198,11 +226,15 @@ export async function handleRequest(request, { serveStatic = true } = {}) {
 
     return textResponse("Not found", { status: 404 });
   } catch (error) {
-    const status = (error instanceof AppError) ? error.status : 400;
-    return jsonResponse({
-      error: error instanceof Error ? error.message : "Unknown error"
-    }, { status });
+    return buildErrorResponse(error);
   }
+}
+
+export function buildErrorResponse(error) {
+  const status = error instanceof AppError ? error.status : Number(error?.status || 400);
+  return jsonResponse({
+    error: error instanceof Error ? error.message : "Unknown error"
+  }, { status: status >= 400 && status < 600 ? status : 400 });
 }
 
 function loadDotEnv() {
@@ -259,16 +291,44 @@ function enforceSameOrigin(request) {
 }
 
 function getClientAddress(request) {
+  const vercelForwardedFor = request.headers.get("x-vercel-forwarded-for");
+  if (vercelForwardedFor) {
+    return vercelForwardedFor.split(",")[0].trim();
+  }
   const forwardedFor = request.headers.get("x-forwarded-for");
   if (forwardedFor) {
     return forwardedFor.split(",")[0].trim();
   }
-  return "unknown";
+  return request.headers.get("x-real-ip") || "unknown";
 }
 
-function enforceRateLimit(request, action, { limit, windowMs }) {
-  const key = `${action}:${getClientAddress(request)}`;
+function getRateLimitSubject(request) {
+  return crypto
+    .createHmac("sha256", appSecret)
+    .update(getClientAddress(request))
+    .digest("base64url")
+    .slice(0, 24);
+}
+
+function pruneRateLimits(now = Date.now()) {
+  for (const [key, bucket] of rateLimits) {
+    if (bucket.expiresAt <= now) {
+      rateLimits.delete(key);
+    }
+  }
+
+  while (rateLimits.size > maxRateLimitBuckets) {
+    const oldest = rateLimits.keys().next().value;
+    if (!oldest) break;
+    rateLimits.delete(oldest);
+  }
+}
+
+function enforceRateLimit(request, action, { limit, windowMs, message = "Too many requests. Please wait a minute and try again." }) {
   const now = Date.now();
+  pruneRateLimits(now);
+
+  const key = `${action}:${getRateLimitSubject(request)}`;
   const bucket = rateLimits.get(key) || { count: 0, expiresAt: now + windowMs };
 
   if (bucket.expiresAt <= now) {
@@ -280,8 +340,16 @@ function enforceRateLimit(request, action, { limit, windowMs }) {
   rateLimits.set(key, bucket);
 
   if (bucket.count > limit) {
-    throw new AppError("Too many requests. Please wait a minute and try again.", { status: 429 });
+    throw new AppError(message, { status: 429 });
   }
+}
+
+function enforceDailyEditLimit(request) {
+  enforceRateLimit(request, "edit:daily", {
+    limit: dailyEditLimit,
+    windowMs: dailyEditWindowMs,
+    message: "Daily edit limit reached for this IP. Please try again tomorrow."
+  });
 }
 
 function parseCookies(request) {
@@ -456,18 +524,46 @@ async function readJsonBody(request) {
   }
 
   const contentLength = Number(request.headers.get("content-length") || 0);
-  if (contentLength > maxBodyBytes) {
+  if (contentLength > MAX_BODY_BYTES) {
     throw new AppError("Payload too large. Keep uploads under 6 MB.", { status: 413 });
   }
 
-  const raw = await request.text();
-  if (raw.length > maxBodyBytes) {
-    throw new AppError("Payload too large. Keep uploads under 6 MB.", { status: 413 });
-  }
+  const raw = await readRequestText(request);
   return raw ? JSON.parse(raw) : {};
 }
 
-async function extractResumeText({ resumeText = "", resumeFileName = "", resumeFileBase64 = "" }) {
+async function readRequestText(request) {
+  if (!request.body) {
+    return "";
+  }
+
+  const chunks = [];
+  const reader = request.body.getReader();
+  let received = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+
+      const chunk = value instanceof Uint8Array ? value : Buffer.from(value);
+      received += chunk.byteLength;
+      if (received > MAX_BODY_BYTES) {
+        await reader.cancel().catch(() => {});
+        throw new AppError("Payload too large. Keep uploads under 6 MB.", { status: 413 });
+      }
+      chunks.push(chunk);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  return Buffer.concat(chunks).toString("utf8");
+}
+
+async function extractResumeText({ resumeText = "", resumeFileName = "", resumeFileBase64 = "", resumeFileType = "" }) {
   if (resumeText.trim()) {
     return resumeText;
   }
@@ -481,8 +577,12 @@ async function extractResumeText({ resumeText = "", resumeFileName = "", resumeF
     throw new Error("Resume file is too large. Keep files under 4.5 MB.");
   }
 
-  const extension = path.extname(resumeFileName).toLowerCase();
-  if (extension === ".pdf") {
+  const upload = classifyResumeUpload({
+    fileName: resumeFileName,
+    mimeType: resumeFileType
+  });
+
+  if (upload.kind === "pdf") {
     const pdfParse = require("pdf-parse");
     const parsed = await withTimeout(
       pdfParse(buffer),
@@ -492,11 +592,22 @@ async function extractResumeText({ resumeText = "", resumeFileName = "", resumeF
     return parsed.text.trim();
   }
 
-  if ([".txt", ".md"].includes(extension)) {
+  if (upload.kind === "text") {
     return buffer.toString("utf8");
   }
 
-  throw new Error("Unsupported file type. Use PDF, TXT, or MD.");
+  if (upload.kind === "image") {
+    return await withTimeout(
+      extractTextFromResumeImage({
+        imageBase64: resumeFileBase64,
+        mimeType: upload.mimeType
+      }),
+      60_000,
+      "Photo parsing timed out. Try a clearer image, a smaller file, or paste the text instead."
+    );
+  }
+
+  throw new Error("Unsupported file type. Use PDF, TXT, MD, JPG, PNG, or WEBP.");
 }
 
 const AI_ACTION_INSTRUCTIONS = {
@@ -727,7 +838,60 @@ function formatExportFileStem(candidateName = "") {
   return `${parts.join("")}_Resume`;
 }
 
-function parseResumeForExport(text) {
+function isCompactListSubheading(line = "") {
+  const text = String(line || "").trim().replace(/:$/, "");
+  return text.length >= 3
+    && text.length <= 30
+    && /^[A-Z][A-Z\s/&-]+$/.test(text)
+    && !/[0-9]/.test(text);
+}
+
+function splitCompactListItems(line = "") {
+  const cleaned = String(line || "").trim().replace(/^[-*•]\s*/, "");
+  if (!cleaned) return [];
+  return cleaned
+    .split(/\s*[|,;]\s*/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function pushCompactListRow(rows, items, maxChars = 96) {
+  let current = "";
+  for (const item of items) {
+    const next = current ? `${current} | ${item}` : item;
+    if (current && next.length > maxChars) {
+      rows.push(current);
+      current = item;
+    } else {
+      current = next;
+    }
+  }
+  if (current) rows.push(current);
+}
+
+function compactListSectionLines(lines = []) {
+  const rows = [];
+  let pending = [];
+
+  for (const rawLine of lines) {
+    const line = String(rawLine || "").trim();
+    if (!line) continue;
+
+    if (isCompactListSubheading(line)) {
+      pushCompactListRow(rows, pending);
+      pending = [];
+      rows.push(line.replace(/:$/, "").toUpperCase());
+      continue;
+    }
+
+    pending.push(...splitCompactListItems(line));
+  }
+
+  pushCompactListRow(rows, pending);
+  return rows;
+}
+
+export function parseResumeForExport(text) {
   const lines = String(text || "")
     .replace(/\r/g, "")
     .split("\n")
@@ -745,9 +909,26 @@ function parseResumeForExport(text) {
     ["technical skills", "skills"],
     ["education", "education"],
     ["projects", "projects"],
+    ["projects hobbies", "projects"],
     ["interests", "interests"],
+    ["hobbies", "hobbies"],
+    ["hobbies interests", "hobbies"],
+    ["languages", "languages"],
     ["certifications", "certifications"],
+    ["licenses", "licenses"],
+    ["licensure", "licenses"],
+    ["publications", "publications"],
+    ["research", "research"],
+    ["coursework", "coursework"],
+    ["relevant coursework", "coursework"],
     ["community", "community"],
+    ["community involvement", "community"],
+    ["extracurriculars", "extracurriculars"],
+    ["activities", "extracurriculars"],
+    ["military service", "military"],
+    ["professional development", "development"],
+    ["training", "development"],
+    ["portfolio", "portfolio"],
     ["leadership", "community"],
     ["volunteer", "community"],
     ["volunteering", "community"]
@@ -761,12 +942,23 @@ function parseResumeForExport(text) {
     education: [],
     projects: [],
     certifications: [],
+    licenses: [],
+    publications: [],
+    research: [],
+    coursework: [],
     community: [],
-    interests: []
+    extracurriculars: [],
+    military: [],
+    development: [],
+    portfolio: [],
+    hobbies: [],
+    languages: [],
+    interests: [],
   };
   let current = "header";
 
-  for (const line of lines) {
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
     const trimmed = line.trim();
     if (!trimmed) {
       if (current !== "header" && sections[current].length && sections[current][sections[current].length - 1] !== "") {
@@ -793,13 +985,18 @@ function parseResumeForExport(text) {
   }
 
   for (const key of Object.keys(sections)) {
+    if (!Array.isArray(sections[key])) continue;
     sections[key] = sections[key].filter((line, index, list) => !(line === "" && list[index - 1] === ""));
+  }
+
+  for (const key of compactListSectionKeys) {
+    sections[key] = compactListSectionLines(sections[key]);
   }
 
   // Merge AI-wrapped bullet continuations back into the preceding bullet.
   // A continuation is a non-bullet, non-job-title line that immediately follows a bullet.
   // Job-title lines are identified by containing " | " or a 4-digit year.
-  for (const key of ["experience", "summary", "education", "projects", "certifications", "community", "interests"]) {
+  for (const key of Object.keys(sections).filter((sectionKey) => sectionKey !== "header")) {
     const merged = [];
     for (const line of sections[key]) {
       if (line && merged.length > 0) {
@@ -820,93 +1017,157 @@ function parseResumeForExport(text) {
   return sections;
 }
 
-/**
- * Detect and split a trailing date range from a job title line.
- * "Software Engineer | Acme Corp Jan 2022 - Present"
- *   → { role: "Software Engineer | Acme Corp", date: "Jan 2022 - Present" }
- * Returns null if no date found (line is a bullet or plain text).
- */
-function splitJobDate(line) {
-  if (/^[-*•]/.test(line)) return null;
-  const DATE_RE = /\s+((?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?|Spring|Summer|Fall|Winter)\s+\d{4}(?:\s*[-–]\s*(?:Present|Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)(?:\s+\d{4})?)?)$/;
-  const match = line.match(DATE_RE);
-  if (!match) return null;
-  return {
-    role: line.slice(0, match.index).trim(),
-    date: match[1].trim()
-  };
-}
-
-async function buildDocx(text) {
-  const sections = parseResumeForExport(text);
-  const paragraphs = [];
-
-  if (sections.header[0]) {
-    paragraphs.push(new Paragraph({
-      children: [new TextRun({ text: sections.header[0], bold: true, size: 26 })],
-      spacing: { after: 80 }
-    }));
-  }
-
-  const headerMeta = sections.header.slice(1).join("  |  ");
-  if (headerMeta) {
-    paragraphs.push(new Paragraph({
-      children: [new TextRun({ text: headerMeta, color: "555555", size: 18 })],
-      spacing: { after: 160 }
-    }));
-  }
-
-  for (const [title, key] of [
+function exportSectionEntries(sections) {
+  return [
     ["Summary", "summary"],
     ["Experience", "experience"],
     ["Skills", "skills"],
     ["Education", "education"],
     ["Projects", "projects"],
     ["Certifications", "certifications"],
+    ["Licenses", "licenses"],
+    ["Publications", "publications"],
+    ["Research", "research"],
+    ["Coursework", "coursework"],
+    ["Portfolio", "portfolio"],
     ["Community", "community"],
-    ["Interests", "interests"]
-  ]) {
+    ["Extracurriculars", "extracurriculars"],
+    ["Military Service", "military"],
+    ["Professional Development", "development"],
+    ["Hobbies", "hobbies"],
+    ["Interests", "interests"],
+    ["Languages", "languages"]
+  ];
+}
+
+function estimateOnePageExportLines(sections) {
+  let lines = 0;
+  if (sections.header[0]) lines += 2;
+  if (sections.header.slice(1).join("  |  ").trim()) lines += 1;
+
+  for (const [, key] of exportSectionEntries(sections)) {
+    const sectionLines = sections[key].filter((line) => line !== "");
+    if (!sectionLines.length) continue;
+    lines += 1;
+
+    for (const line of sections[key]) {
+      if (!line) {
+        lines += 0.5;
+        continue;
+      }
+      const clean = line.replace(/^[-*•]\s*/, "");
+      const charsPerLine = /^[-*•]/.test(line) ? 88 : 96;
+      lines += Math.max(1, Math.ceil(clean.length / charsPerLine));
+    }
+    lines += 0.5;
+  }
+
+  return lines;
+}
+
+function assertOnePageExportBudget(sections) {
+  const estimatedLines = estimateOnePageExportLines(sections);
+  if (estimatedLines > maxOnePageExportLines) {
+    throw new AppError(
+      "This resume is still too long for a one-page export. Shorten or remove low-signal content before downloading.",
+      { status: 400 }
+    );
+  }
+}
+
+function docxDividerBorder() {
+  return {
+    bottom: {
+      style: BorderStyle.SINGLE,
+      color: exportRuleColor,
+      size: 4,
+      space: 4
+    }
+  };
+}
+
+function docxEntryDividerBorder() {
+  return {
+    top: {
+      style: BorderStyle.SINGLE,
+      color: "EDF0F4",
+      size: 4,
+      space: 4
+    }
+  };
+}
+
+async function buildDocx(text) {
+  const sections = parseResumeForExport(text);
+  assertOnePageExportBudget(sections);
+  const paragraphs = [];
+
+  const headerMeta = sections.header.slice(1).join(" | ");
+
+  if (sections.header[0]) {
+    paragraphs.push(new Paragraph({
+      alignment: AlignmentType.CENTER,
+      children: [new TextRun({ text: sections.header[0], bold: true, size: 32, color: exportInkColor })],
+      spacing: { after: headerMeta ? 35 : 110 }
+    }));
+  }
+
+  if (headerMeta) {
+    paragraphs.push(new Paragraph({
+      alignment: AlignmentType.CENTER,
+      children: [new TextRun({ text: headerMeta, color: exportMutedColor, size: 18 })],
+      spacing: { after: 115 }
+    }));
+  }
+
+  for (const [title, key] of exportSectionEntries(sections)) {
     const lines = sections[key].filter((line) => line !== "");
     if (!lines.length) {
       continue;
     }
+    let experienceEntryCount = 0;
 
     paragraphs.push(new Paragraph({
-      children: [new TextRun({ text: title.toUpperCase(), bold: true, size: 17, color: "6B5B4D" })],
-      spacing: { before: 120, after: 60 }
+      children: [new TextRun({ text: title.toUpperCase(), bold: true, size: 16, color: exportHeadingColor })],
+      spacing: { before: 105, after: 70 },
+      border: docxDividerBorder()
     }));
 
     for (const line of sections[key]) {
       if (!line) {
-        paragraphs.push(new Paragraph({ spacing: { after: 60 } }));
+        if (key === "experience") continue;
+        paragraphs.push(new Paragraph({ spacing: { after: 40 } }));
         continue;
       }
 
       const isBullet = /^[-*•]/.test(line);
       if (!isBullet) {
-        const split = splitJobDate(line);
+        const split = key === "experience" ? splitJobDate(line) : null;
         if (split) {
+          const isSubsequentExperienceEntry = experienceEntryCount > 0;
+          experienceEntryCount += 1;
           // Job title line: role left, date right-aligned via tab stop
           paragraphs.push(new Paragraph({
-            tabStops: [{ type: TabStopType.RIGHT, position: 9360 }],
+            tabStops: [{ type: TabStopType.RIGHT, position: docxRightTabTwips }],
+            border: isSubsequentExperienceEntry ? docxEntryDividerBorder() : undefined,
             children: [
-              new TextRun({ text: split.role, bold: false, size: 20 }),
+              new TextRun({ text: split.role, bold: true, size: 21, color: exportInkColor }),
               new TextRun({ text: "\t" }),
-              new TextRun({ text: split.date, color: "555555", size: 20 })
+              new TextRun({ text: split.date, color: exportMutedColor, size: 19 })
             ],
-            spacing: { after: 60 }
+            spacing: { before: isSubsequentExperienceEntry ? 120 : 35, after: 35 }
           }));
         } else {
           paragraphs.push(new Paragraph({
-            text: line,
-            spacing: { after: 60 }
+            children: [new TextRun({ text: line, color: exportInkColor, size: 20 })],
+            spacing: { after: 35 }
           }));
         }
       } else {
         paragraphs.push(new Paragraph({
-          text: line.replace(/^[-*•]\s*/, ""),
+          children: [new TextRun({ text: line.replace(/^[-*•]\s*/, ""), color: exportInkColor, size: 20 })],
           bullet: { level: 0 },
-          spacing: { after: 40 }
+          spacing: { after: 24 }
         }));
       }
     }
@@ -917,7 +1178,13 @@ async function buildDocx(text) {
       {
         properties: {
           page: {
-            margin: { top: 720, bottom: 720, left: 864, right: 864 }
+            size: { width: docxPageWidthTwips, height: docxPageHeightTwips },
+            margin: {
+              top: 576,
+              bottom: 576,
+              left: docxMarginTwips,
+              right: docxMarginTwips
+            }
           }
         },
         children: paragraphs
@@ -947,14 +1214,20 @@ function sanitizeForWinAnsi(str) {
 
 async function buildPdf(text) {
   const sections = parseResumeForExport(sanitizeForWinAnsi(text));
+  assertOnePageExportBudget(sections);
   const pdf = await PDFDocument.create();
   const page = pdf.addPage([612, 792]);
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   const boldFont = await pdf.embedFont(StandardFonts.HelveticaBold);
-  const fontSize = 10;
+  const fontSize = 10.4;
   const lineHeight = 14;
-  const margin = 46;
+  const margin = 36;
   const maxWidth = page.getWidth() - margin * 2;
+  const ink = rgb(0.07, 0.09, 0.15);
+  const muted = rgb(0.39, 0.45, 0.55);
+  const heading = rgb(0.2, 0.25, 0.33);
+  const rule = rgb(0.84, 0.87, 0.9);
+  const entryRule = rgb(0.93, 0.94, 0.96);
   let y = page.getHeight() - margin;
   let clipped = false;
 
@@ -970,7 +1243,7 @@ async function buildPdf(text) {
       x = margin,
       size = fontSize,
       currentFont = font,
-      color = rgb(0.07, 0.11, 0.13),
+      color = ink,
       indent = 0
     } = options;
     const lines = wrapText(sanitizeForWinAnsi(textValue), currentFont, size, maxWidth - indent);
@@ -990,53 +1263,96 @@ async function buildPdf(text) {
     }
   };
 
-  if (sections.header[0]) {
-    drawWrapped(sections.header[0], {
-      size: 18,
-      currentFont: boldFont
+  const drawCenteredWrapped = (textValue, options = {}) => {
+    if (clipped) return;
+    const {
+      size = fontSize,
+      currentFont = font,
+      color = ink
+    } = options;
+    const lines = wrapText(sanitizeForWinAnsi(textValue), currentFont, size, maxWidth);
+    for (const line of lines) {
+      ensureSpace(lineHeight);
+      if (clipped) return;
+      const textWidth = currentFont.widthOfTextAtSize(line, size);
+      page.drawText(line, {
+        x: margin + (maxWidth - textWidth) / 2,
+        y,
+        size,
+        font: currentFont,
+        color
+      });
+      y -= lineHeight;
+    }
+  };
+
+  const drawDivider = (offset = 0) => {
+    if (clipped) return;
+    page.drawLine({
+      start: { x: margin, y: y - offset },
+      end: { x: margin + maxWidth, y: y - offset },
+      thickness: 0.6,
+      color: rule
     });
-    y -= 4;
+  };
+
+  const drawEntryDivider = () => {
+    if (clipped) return;
+    y -= 5;
+    page.drawLine({
+      start: { x: margin, y },
+      end: { x: margin + maxWidth, y },
+      thickness: 0.45,
+      color: entryRule
+    });
+    y -= 8;
+  };
+
+  if (sections.header[0]) {
+    drawCenteredWrapped(sections.header[0], {
+      size: 16,
+      currentFont: boldFont,
+      color: ink
+    });
+    y -= 1;
   }
 
   const headerMeta = sections.header.slice(1).join("  |  ");
   if (headerMeta) {
-    drawWrapped(headerMeta, {
-      size: 10,
-      color: rgb(0.33, 0.33, 0.33)
+    drawCenteredWrapped(headerMeta, {
+      size: 9,
+      color: muted
     });
-    y -= 10;
+  }
+  if (sections.header[0] || headerMeta) {
+    y -= 11;
   }
 
-  for (const [title, key] of [
-    ["SUMMARY", "summary"],
-    ["EXPERIENCE", "experience"],
-    ["SKILLS", "skills"],
-    ["EDUCATION", "education"],
-    ["PROJECTS", "projects"],
-    ["CERTIFICATIONS", "certifications"],
-    ["COMMUNITY", "community"],
-    ["INTERESTS", "interests"]
-  ]) {
+  for (const [title, key] of exportSectionEntries(sections)) {
     const lines = sections[key].filter((line) => line !== "");
     if (!lines.length) {
       continue;
     }
+    let experienceEntryCount = 0;
 
     ensureSpace(lineHeight * 2);
     if (!clipped) {
-      page.drawText(title, {
+      page.drawText(title.toUpperCase(), {
         x: margin,
         y,
-        size: 9,
+        size: 8.2,
         font: boldFont,
-        color: rgb(0.42, 0.35, 0.28)
+        color: heading
       });
-      y -= lineHeight;
+      y -= 6;
+      drawDivider();
+      y -= 12;
     }
 
     for (const line of sections[key]) {
       if (clipped) break;
       if (!line) {
+        if (key === "experience") continue;
         y -= 4;
         continue;
       }
@@ -1048,29 +1364,38 @@ async function buildPdf(text) {
             y,
             size: fontSize,
             font: boldFont,
-            color: rgb(0.07, 0.11, 0.13)
+            color: ink
           });
           drawWrapped(line.replace(/^[-*•]\s*/, ""), { indent: 14 });
         }
       } else {
-        const split = splitJobDate(sanitizeForWinAnsi(line));
+        const split = key === "experience" ? splitJobDate(sanitizeForWinAnsi(line)) : null;
         if (split) {
           ensureSpace(lineHeight);
           if (!clipped) {
-            // Role: left-aligned
-            const roleLines = wrapText(split.role, font, fontSize, maxWidth * 0.72);
-            page.drawText(roleLines[0] || split.role, { x: margin, y, size: fontSize, font, color: rgb(0.07, 0.11, 0.13) });
-            // Date: right-aligned on the same baseline
-            const dateWidth = font.widthOfTextAtSize(split.date, fontSize);
-            page.drawText(split.date, { x: margin + maxWidth - dateWidth, y, size: fontSize, font, color: rgb(0.33, 0.33, 0.33) });
+            if (experienceEntryCount > 0) {
+              drawEntryDivider();
+            }
+            experienceEntryCount += 1;
+            const dateSize = 9.8;
+            const dateWidth = font.widthOfTextAtSize(split.date, dateSize);
+            const roleLines = wrapText(split.role, boldFont, fontSize, Math.max(220, maxWidth - dateWidth - 24));
+            page.drawText(roleLines[0] || split.role, { x: margin, y, size: fontSize, font: boldFont, color: ink });
+            page.drawText(split.date, { x: margin + maxWidth - dateWidth, y, size: dateSize, font, color: muted });
             y -= lineHeight;
+            for (const roleLine of roleLines.slice(1)) {
+              ensureSpace(lineHeight);
+              if (clipped) break;
+              page.drawText(roleLine, { x: margin, y, size: fontSize, font: boldFont, color: ink });
+              y -= lineHeight;
+            }
           }
         } else {
           drawWrapped(line);
         }
       }
     }
-    y -= 6;
+    y -= 7;
   }
 
   return Buffer.from(await pdf.save());

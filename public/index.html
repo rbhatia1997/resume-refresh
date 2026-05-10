@@ -29,7 +29,7 @@
           <div class="card">
             <div class="card-header">
               <h2>Your resume</h2>
-              <p class="card-hint">Upload a PDF, TXT, or MD file — or paste text. Works with messy drafts, LinkedIn pastes, or copied PDFs.</p>
+              <p class="card-hint">Upload a PDF, TXT, MD, or resume photo — or paste text. Works with messy drafts, LinkedIn pastes, copied PDFs, or clear screenshots.</p>
             </div>
             <div class="tab-bar" role="tablist">
               <button class="tab active" type="button" data-tab="upload" role="tab" aria-selected="true">Upload file</button>
@@ -37,14 +37,14 @@
             </div>
             <div id="tab-upload" class="tab-panel">
               <label class="drop-zone" id="drop-zone" for="resume-file">
-                <input type="file" id="resume-file" name="resumeFile" accept=".pdf,.txt,.md" />
+                <input type="file" id="resume-file" name="resumeFile" accept=".pdf,.txt,.md,.jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" />
                 <div class="drop-zone-inner">
                   <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <path d="M12 15V3m0 0L8 7m4-4 4 4"/>
                     <path d="M2 17l.621 2.485A2 2 0 0 0 4.561 21h14.878a2 2 0 0 0 1.94-1.515L22 17"/>
                   </svg>
                   <p class="drop-zone-label">Drag &amp; drop or click to upload</p>
-                  <p class="drop-zone-hint">PDF, TXT, or MD · max 6 MB</p>
+                  <p class="drop-zone-hint">PDF, TXT, MD, JPG, PNG, or WEBP · max 6 MB</p>
                 </div>
               </label>
               <p id="file-status" class="file-status hidden" role="status"></p>
@@ -150,64 +150,14 @@
               <button id="download-pdf"  type="button" class="btn-secondary">PDF</button>
             </div>
           </div>
-          <pre id="final-draft" class="resume-pre resume-pre-editable" contenteditable="true" spellcheck="false" role="textbox" aria-multiline="true" aria-label="Resume draft — editable"></pre>
+          <p id="export-status" class="export-status" role="status" aria-live="polite"></p>
+          <article id="final-draft" class="resume-preview" contenteditable="true" spellcheck="true" role="textbox" aria-multiline="true" aria-label="Final resume preview — editable"></article>
         </section>
 
         <!-- Improvement notes -->
         <section class="final-block" id="notes-block">
           <h2>Key improvements</h2>
           <div id="final-notes" class="notes-list"></div>
-        </section>
-
-        <!-- AI Polish (optional) -->
-        <section class="final-block ai-block">
-          <div class="block-head">
-            <h2>Refine this draft</h2>
-            <p class="card-hint">Choose a focus area to polish your resume. Each pass is targeted and reversible.</p>
-          </div>
-
-          <!-- Result (shown after AI runs — sits above the action buttons) -->
-          <div id="ai-result" class="hidden">
-            <div class="ai-result-header">
-              <div class="ai-result-header-left">
-                <p class="label-muted" id="ai-result-label">AI-revised version</p>
-              </div>
-              <div class="export-row">
-                <button id="download-rewrite-docx" type="button" class="btn-secondary">DOCX</button>
-                <button id="download-rewrite-pdf"  type="button" class="btn-secondary">PDF</button>
-              </div>
-            </div>
-            <pre id="ai-rewrite" class="resume-pre resume-pre-editable" contenteditable="true" spellcheck="false" role="textbox" aria-multiline="true" aria-label="AI-revised resume — editable"></pre>
-            <div id="ai-notes" class="ai-notes"></div>
-          </div>
-
-          <!-- Action buttons (always visible) -->
-          <div id="ai-idle" class="ai-idle">
-            <p id="ai-hint" class="hint-text"></p>
-            <p id="ai-next-label" class="ai-next-label hidden">Run another pass:</p>
-            <div class="ai-actions" id="ai-actions">
-              <button class="btn-secondary ai-action-btn" data-action="tighten" type="button">
-                <span class="ai-action-label">Tighten wording</span>
-                <span class="ai-action-desc">Remove filler, reduce wordiness</span>
-              </button>
-              <button class="btn-secondary ai-action-btn" data-action="ats" type="button">
-                <span class="ai-action-label">Improve ATS match</span>
-                <span class="ai-action-desc">Add keywords from target role</span>
-              </button>
-              <button class="btn-secondary ai-action-btn" data-action="tailor" type="button">
-                <span class="ai-action-label">Tailor to target role</span>
-                <span class="ai-action-desc">Emphasize the most relevant experience</span>
-              </button>
-              <button class="btn-secondary ai-action-btn" data-action="shorten" type="button">
-                <span class="ai-action-label">Shorten to one page</span>
-                <span class="ai-action-desc">Cut low-signal content, keep impact</span>
-              </button>
-              <button class="btn-secondary ai-action-btn" data-action="strengthen-bullets" type="button">
-                <span class="ai-action-label">Strengthen bullets</span>
-                <span class="ai-action-desc">Better verbs, clearer scope, quantified results</span>
-              </button>
-            </div>
-          </div>
         </section>
 
         <!-- Footer actions -->
