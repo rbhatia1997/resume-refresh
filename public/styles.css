@@ -753,14 +753,14 @@ button { cursor: pointer; font: inherit; }
 /* Resume pre */
 .resume-pre {
   font-family: ui-monospace, SFMono-Regular, Menlo, "Cascadia Code", monospace;
-  font-size: 0.78125rem;
-  line-height: 1.7;
+  font-size: 0.8125rem;
+  line-height: 1.55;
   white-space: pre-wrap;
   word-break: break-word;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--r-sm);
-  padding: 20px;
+  padding: 22px 24px;
   color: var(--ink);
   box-shadow: var(--shadow);
 }
