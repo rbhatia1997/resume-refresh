@@ -149,7 +149,7 @@ test("final preview splits contact metadata, allows inline edits, and exports ed
           {
             id: "experience",
             label: "Experience",
-            proposedText: "Product Manager - Hewlett Packard Enterprise | Aug 2023 - Present\n- Enable $100M+ in sales through direct customer engagement.",
+            proposedText: "Product Manager - Hewlett Packard Enterprise | Aug 2023 - Present\n- Enable $100M+ in sales through direct customer engagement.\n\nCo-Founder - LYOKO LLC (lyoko.com) Jun 2022 - Aug 2022 Jan 2022 - Present\n- Created $7K+ annual revenue through subscriptions and commissions.",
             status: "ok",
             suggestions: []
           },
@@ -197,6 +197,10 @@ test("final preview splits contact metadata, allows inline edits, and exports ed
   await expect(page.locator(".resume-final-header h1")).toHaveText("RONAK BHATIA");
   await expect(page.locator(".resume-final-contact")).toHaveText("Spring, TX | ronak@lyoko.com | linkedin.com/in/ronakbhatia | 805-428-7218");
   await expect(page.locator("#final-draft")).toHaveAttribute("contenteditable", "true");
+  const doubleDateRow = page.locator(".resume-final-experience-entry", { hasText: "Co-Founder - LYOKO LLC" });
+  await expect(doubleDateRow.locator(".resume-final-experience-role")).toHaveText("Co-Founder - LYOKO LLC (lyoko.com)");
+  await expect(doubleDateRow.locator(".resume-final-experience-date")).toHaveText("Jan 2022 - Present");
+  await expect(doubleDateRow.locator(".resume-final-experience-role")).not.toContainText("Jun 2022");
 
   await page.locator(".resume-final-section", { hasText: "SUMMARY" }).locator(".resume-final-text").evaluate((node) => {
     node.textContent = "Edited product leader summary.";

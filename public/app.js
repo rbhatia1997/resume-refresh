@@ -632,16 +632,26 @@ function formatSectionForFinal(id, text) {
 
 const FINAL_MONTH_OR_SEASON_RE = String.raw`(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?|Spring|Summer|Fall|Autumn|Winter)`;
 const FINAL_DATE_POINT_RE = String.raw`(?:(?:${FINAL_MONTH_OR_SEASON_RE})\s+)?(?:19|20)\d{2}`;
-const FINAL_DATE_RANGE_RE = new RegExp(String.raw`(?:${FINAL_DATE_POINT_RE}\s*[-–—/]\s*(?:Present|Current|Now|${FINAL_DATE_POINT_RE})|${FINAL_MONTH_OR_SEASON_RE}\s+(?:19|20)\d{2})`, 'i');
-const FINAL_TRAILING_DATE_RE = new RegExp(String.raw`\s*(?:[|,]\s*)?(${FINAL_DATE_RANGE_RE.source})$`, 'i');
+const FINAL_DATE_RANGE_SOURCE = String.raw`(?:${FINAL_DATE_POINT_RE}\s*[-–—/]\s*(?:Present|Current|Now|${FINAL_DATE_POINT_RE})|${FINAL_MONTH_OR_SEASON_RE}\s+(?:19|20)\d{2})`;
+const FINAL_DATE_RANGE_RE = new RegExp(FINAL_DATE_RANGE_SOURCE, 'i');
+const FINAL_DATE_RANGE_GLOBAL_RE = new RegExp(FINAL_DATE_RANGE_SOURCE, 'ig');
+const FINAL_TRAILING_DATE_RE = new RegExp(String.raw`\s*(?:[|,]\s*)?(${FINAL_DATE_RANGE_SOURCE})$`, 'i');
 
 function splitFinalTrailingDate(line = '') {
   const text = String(line || '').trim();
-  const match = text.match(FINAL_TRAILING_DATE_RE);
-  if (!match) return null;
+  const trailingMatch = text.match(FINAL_TRAILING_DATE_RE);
+  if (!trailingMatch) return null;
+  const dateMatches = Array.from(text.matchAll(FINAL_DATE_RANGE_GLOBAL_RE));
+  const firstDateIndex = dateMatches[0]?.index ?? trailingMatch.index;
+  const role = text
+    .slice(0, firstDateIndex)
+    .replace(/\s*[|,–—-]\s*$/, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+  if (!role) return null;
   return {
-    role: text.slice(0, match.index).replace(/\s*[|,–—-]\s*$/, '').trim(),
-    date: match[1].trim()
+    role,
+    date: trailingMatch[1].trim()
   };
 }
 

@@ -55,6 +55,31 @@ EDUCATION
 Example University
 `;
 
+const mixedFormatResume = `
+Alex Rivera
+alex@example.com | linkedin.com/in/alexrivera | (555) 111-2222
+
+SUMMARY
+Operations and product generalist with experience across software launches and community programs.
+
+EXPERIENCE
+Co-Founder - LYOKO LLC (lyoko.com) Jun 2022 - Aug 2022 Jan 2022 - Present
+- Built event operations tooling for 30+ shows across multiple countries.
+
+SKILLS
+Python
+Project Management
+Human Centered Design
+
+EDUCATION
+M.S. Computer Science | University of Illinois Urbana-Champaign | 3.95 GPA Dec 2024
+B.S. Engineering | Harvey Mudd College May 2019
+
+PROJECTS
+Community Hardware Lab
+Volunteer repair workshops
+`;
+
 async function readDocxDocumentXml(response) {
   assert.equal(response.status, 200);
   const zip = await JSZip.loadAsync(Buffer.from(await response.arrayBuffer()));
@@ -111,6 +136,21 @@ test("DOCX export matches the final preview hierarchy", async () => {
   assert.match(xml, /<w:pBdr><w:bottom w:val="single"/);
   assert.match(xml, /<w:b\/>.*?<w:sz w:val="21"\/>.*?<w:t[^>]*>Product Manager - Hewlett Packard Enterprise<\/w:t>/);
   assert.match(xml, /<w:tabs><w:tab w:val="right"/);
+});
+
+test("DOCX export only right-aligns dates for experience rows", async () => {
+  const response = await handleRequest(exportRequest({
+    format: "docx",
+    candidateName: "Alex Rivera",
+    text: mixedFormatResume
+  }, "203.0.113.14"), { serveStatic: false });
+
+  const xml = await readDocxDocumentXml(response);
+  assert.match(xml, /<w:t[^>]*>Co-Founder - LYOKO LLC \(lyoko\.com\)<\/w:t>/);
+  assert.match(xml, /<w:t[^>]*>Jan 2022 - Present<\/w:t>/);
+  assert.doesNotMatch(xml, /Co-Founder - LYOKO LLC \(lyoko\.com\) Jun 2022/);
+  assert.equal((xml.match(/<w:tabs>/g) || []).length, 1);
+  assert.match(xml, /<w:t[^>]*>M\.S\. Computer Science \| University of Illinois Urbana-Champaign \| 3\.95 GPA Dec 2024<\/w:t>/);
 });
 
 test("PDF and DOCX export reject resumes that exceed the one-page budget", async () => {

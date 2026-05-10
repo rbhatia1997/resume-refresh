@@ -1,6 +1,16 @@
-const MONTH_OR_SEASON_RE = String.raw`(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?|Spring|Summer|Fall|Winter)`;
+const MONTH_OR_SEASON_RE = String.raw`(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?|Spring|Summer|Fall|Autumn|Winter)`;
 const DATE_POINT_RE = String.raw`(?:(?:${MONTH_OR_SEASON_RE})\s+)?(?:19|20)\d{2}`;
-const TRAILING_DATE_RE = new RegExp(String.raw`\s+(${DATE_POINT_RE}\s*[-\u2013\u2014]\s*(?:Present|Current|Now|${DATE_POINT_RE})|${MONTH_OR_SEASON_RE}\s+(?:19|20)\d{2})$`, "i");
+const DATE_RANGE_SOURCE = String.raw`(?:${DATE_POINT_RE}\s*[-\u2013\u2014/]\s*(?:Present|Current|Now|${DATE_POINT_RE})|${MONTH_OR_SEASON_RE}\s+(?:19|20)\d{2})`;
+const DATE_RANGE_RE = new RegExp(DATE_RANGE_SOURCE, "ig");
+const TRAILING_DATE_RE = new RegExp(String.raw`\s*(?:[|,]\s*)?(${DATE_RANGE_SOURCE})$`, "i");
+
+function cleanRoleDatePrefix(text, firstDateIndex) {
+  return text
+    .slice(0, firstDateIndex)
+    .replace(/\s*[|,\u2013\u2014-]\s*$/, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
 
 /**
  * Detect and split a trailing date range from a job title line.
@@ -9,11 +19,19 @@ const TRAILING_DATE_RE = new RegExp(String.raw`\s+(${DATE_POINT_RE}\s*[-\u2013\u
  * Returns null if no date is found.
  */
 export function splitJobDate(line = "") {
-  if (/^[-*\u2022]/.test(line)) return null;
-  const match = String(line || "").match(TRAILING_DATE_RE);
-  if (!match) return null;
+  const text = String(line || "").trim();
+  if (/^[-*\u2022]/.test(text)) return null;
+
+  const trailingMatch = text.match(TRAILING_DATE_RE);
+  if (!trailingMatch) return null;
+
+  const dateMatches = Array.from(text.matchAll(DATE_RANGE_RE));
+  const firstDateIndex = dateMatches[0]?.index ?? trailingMatch.index;
+  const role = cleanRoleDatePrefix(text, firstDateIndex);
+  if (!role) return null;
+
   return {
-    role: line.slice(0, match.index).trim(),
-    date: match[1].trim()
+    role,
+    date: trailingMatch[1].trim()
   };
 }
