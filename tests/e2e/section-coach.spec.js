@@ -91,3 +91,123 @@ Hardware Support
   await expect(page.getByText("Tighten wording")).toHaveCount(0);
   await expect(page.getByText("Improve ATS match")).toHaveCount(0);
 });
+
+test("OCR-style pasted resume gets structured experience, skills coaching, and final notes", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("tab", { name: "Paste text" }).click();
+  await page.locator("#resume-text").fill(`
+Jane Doe
+jane@example.com
+(415) 555-1212
+
+SUMMARY
+IT support specialist with retail systems experience.
+
+EXPERIENCE
+Service & Delivery Technician -
+Safeway, Northern California
+July 2025 - Present
+Troubleshoot and resolve hardware
+and software issues for retail store
+systems and devices
+Support installation, replacement,
+and configuration of IT equipment
+Sushi Chef - Mikuni, Davis
+September 2021 - June 2025
+Delivered customer service in fast-
+paced restaurant environment
+Managed order accuracy and
+multitasking under pressure
+
+SKILLS
+Hardware Troubleshooting
+Software Troubleshooting
+Device Deployment
+Customer Support
+Network Troubleshooting
+ServiceNow
+Initiative
+
+EDUCATION
+Example High School, Example City
+2017 - 2022
+PROJECTS / HOBBIES
+Building Computers
+DJing
+`);
+  await page.locator("#target-role").fill("IT Support Specialist");
+  await page.getByRole("button", { name: "Analyze my resume" }).click();
+
+  await expect(page.getByRole("heading", { name: "Contact Info" })).toBeVisible();
+  await page.getByRole("button", { name: /Continue/ }).click();
+  await page.getByRole("button", { name: /Continue/ }).click();
+
+  await expect(page.getByRole("heading", { name: "Experience" })).toBeVisible();
+  await expect(page.locator("#section-textarea")).toHaveValue(/Service & Delivery Technician - Safeway, Northern California\s+July 2025 - Present/);
+  await expect(page.locator("#section-textarea")).toHaveValue(/- Troubleshoot and resolve hardware and software issues/);
+  const sushiPreview = page.locator(".experience-preview-entry", { hasText: "Sushi Chef - Mikuni, Davis" });
+  await expect(sushiPreview.locator(".experience-preview-date")).toHaveText("September 2021 - June 2025");
+  await expect(page.getByText("Add scope or result").first()).toBeVisible();
+  await expect(page.getByText("Trim filler wording").first()).toBeVisible();
+
+  await page.getByRole("button", { name: /Continue/ }).click();
+  await expect(page.getByRole("heading", { name: "Skills" })).toBeVisible();
+  await expect(page.getByText("Clean up skills")).toBeVisible();
+
+  await page.getByRole("button", { name: /Continue/ }).click();
+  await expect(page.getByRole("heading", { name: "Education" })).toBeVisible();
+  await expect(page.locator("#section-textarea")).not.toHaveValue(/Building Computers|DJing/);
+
+  await page.getByRole("button", { name: /Continue/ }).click();
+  await expect(page.getByRole("heading", { name: "Projects" })).toBeVisible();
+  await expect(page.locator("#section-textarea")).toHaveValue(/Building Computers/);
+
+  await page.getByRole("button", { name: /Finish/ }).click();
+  await expect(page.getByRole("heading", { name: "Your resume" })).toBeVisible();
+  await expect(page.getByText("No major issues detected.")).toHaveCount(0);
+  await expect(page.getByText("Add scope or result").first()).toBeVisible();
+});
+
+test("export buttons show progress and completion feedback", async ({ page }) => {
+  await page.route("**/api/export", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    await route.fulfill({
+      status: 200,
+      headers: {
+        "content-type": "application/pdf",
+        "content-disposition": 'attachment; filename="resume.pdf"'
+      },
+      body: "fake-pdf"
+    });
+  });
+
+  await page.goto("/");
+  await page.getByRole("tab", { name: "Paste text" }).click();
+  await page.locator("#resume-text").fill(`
+Jane Doe
+jane@example.com
+(415) 555-1212
+
+SUMMARY
+IT support specialist with retail systems experience.
+
+EXPERIENCE
+IT Support Specialist - Safeway, Northern California | 2022 - Present
+- Diagnosed and resolved hardware and software issues for retail store systems.
+
+SKILLS
+POS Systems
+Networking
+Hardware Support
+`);
+  await page.locator("#target-role").fill("IT Support Specialist");
+  await page.getByRole("button", { name: "Analyze my resume" }).click();
+
+  for (let i = 0; i < 5; i += 1) {
+    await page.getByRole("button", { name: /Continue|Finish/ }).click();
+  }
+
+  await page.getByRole("button", { name: "PDF" }).click();
+  await expect(page.getByText("Preparing PDF...")).toBeVisible();
+  await expect(page.getByText("PDF ready. Check your downloads.")).toBeVisible();
+});

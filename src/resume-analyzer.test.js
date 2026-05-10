@@ -171,3 +171,67 @@ Photography
   assert.doesNotMatch(projects.currentText, /Photography/);
   assert.ok(hobbies.currentText.includes("Photography"));
 });
+
+test("analyzeResume splits combined projects hobbies heading out of education", () => {
+  const result = analyzeResume({
+    linkedinText: "",
+    resumeText: `
+Jane Doe
+jane@example.com
+
+EDUCATION
+Example High School, Example City
+2017 - 2022
+PROJECTS / HOBBIES
+Building Computers
+Modding consoles / Applications
+Running Community Events
+DJing
+`,
+    targetRole: "IT Support Specialist"
+  });
+
+  const education = result.sectionEditorData.find((section) => section.id === "education");
+  const projects = result.sectionEditorData.find((section) => section.id === "projects");
+
+  assert.match(education.currentText, /Example High School/);
+  assert.doesNotMatch(education.currentText, /Building Computers|DJing|PROJECTS/i);
+  assert.ok(projects);
+  assert.match(projects.currentText, /Building Computers/);
+});
+
+test("analyzeResume formats OCR-style experience into entries with bullets and coaching", () => {
+  const result = analyzeResume({
+    linkedinText: "",
+    resumeText: `
+Jane Doe
+jane@example.com
+
+EXPERIENCE
+Service & Delivery Technician -
+Safeway, Northern California
+July 2025 - Present
+Troubleshoot and resolve hardware
+and software issues for retail store
+systems and devices
+Support installation, replacement,
+and configuration of IT equipment
+Sushi Chef - Mikuni, Davis
+September 2021 - June 2025
+Delivered customer service in fast-
+paced restaurant environment
+Managed order accuracy and
+multitasking under pressure
+`,
+    targetRole: "IT Support Specialist"
+  });
+
+  const experience = result.sectionEditorData.find((section) => section.id === "experience");
+
+  assert.match(experience.currentText, /Service & Delivery Technician - Safeway, Northern California\s+July 2025 - Present/);
+  assert.match(experience.currentText, /- Troubleshoot and resolve hardware and software issues/);
+  assert.match(experience.currentText, /Sushi Chef - Mikuni, Davis\s+September 2021 - June 2025/);
+  assert.equal(experience.parsedFields.entries.length, 2);
+  assert.ok(experience.suggestions.some((item) => item.title === "Add scope or result"));
+  assert.notEqual(experience.status, "ok");
+});

@@ -1,6 +1,7 @@
 export const DATE_RANGE_RE = /(?:(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+)?(?:19|20)\d{2}\s*[-–—/]\s*(?:(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+)?(?:(?:19|20)\d{2}|present|current|now)/i;
 
-const TITLE_WORD_RE = /\b(engineer|manager|analyst|designer|developer|director|specialist|associate|lead|senior|junior|consultant|coordinator|intern|founder|president|officer|strategist|scientist|architect|technician|support)\b/i;
+const TITLE_WORD_RE = /\b(engineer|manager|analyst|designer|developer|director|specialist|associate|lead|senior|junior|consultant|coordinator|intern|founder|president|officer|strategist|scientist|architect|technician|chef)\b/i;
+const ACTION_START_RE = /^(troubleshoot|resolve|diagnose|support|install|replace|configure|configured|deploy|deployed|maintain|maintained|document|documented|deliver|delivered|manage|managed|assist|assisted|prepare|prepared|coordinate|coordinated|operate|operated|repair|repaired|image|imaged|build|built|lead|led|own|owned|provide|provided)\b/i;
 
 export function isStandaloneDateLine(line) {
   const t = String(line || "").trim();
@@ -26,6 +27,10 @@ function splitDateFromLine(line = "") {
     withoutDate: line.replace(match[0], "").replace(/[|,–—-]\s*$/, "").trim(),
     dateRange: match[0].trim()
   };
+}
+
+function cleanTitle(value = "") {
+  return String(value || "").replace(/\s*[-–—]\s*$/, "").trim();
 }
 
 function parseHeaderParts(headerLines = [], existingDateRange = "") {
@@ -57,9 +62,17 @@ function parseHeaderParts(headerLines = [], existingDateRange = "") {
       company = commaParts[0] || "";
       location = commaParts.slice(1).join(", ");
     } else if (compact.length >= 2) {
-      company = compact[0] || "";
-      title = compact[1] || "";
-      location = compact[2] || "";
+      if (TITLE_WORD_RE.test(compact[0]) || /[-–—]\s*$/.test(compact[0])) {
+        title = cleanTitle(compact[0]);
+        const companyLocation = compact[1] || "";
+        const commaParts = companyLocation.split(/\s*,\s*/).filter(Boolean);
+        company = commaParts[0] || companyLocation;
+        location = compact[2] || commaParts.slice(1).join(", ");
+      } else {
+        company = compact[0] || "";
+        title = compact[1] || "";
+        location = compact[2] || "";
+      }
     } else {
       title = joined;
     }
@@ -72,7 +85,7 @@ function parseHeaderParts(headerLines = [], existingDateRange = "") {
   }
 
   return {
-    title,
+    title: cleanTitle(title),
     company,
     location,
     dateRange,
@@ -114,6 +127,28 @@ export function parseExperienceEntries(lines = []) {
     current = { headerLines: [], dateRange: "", bullets: [] };
   }
 
+  function appendToPreviousBullet(fragment) {
+    const lastIndex = current.bullets.length - 1;
+    const previous = current.bullets[lastIndex] || "";
+    current.bullets[lastIndex] = previous.endsWith("-")
+      ? `${previous}${fragment}`
+      : `${previous} ${fragment}`;
+  }
+
+  function pushUnmarkedBullet(text, { forceNew = false } = {}) {
+    if (!current) startEntry();
+    inBullets = true;
+    const cleaned = String(text || "").trim().replace(/^[-*•]\s*/, "");
+    if (!cleaned) return;
+
+    const startsNewBullet = forceNew || ACTION_START_RE.test(cleaned) || current.bullets.length === 0;
+    if (!startsNewBullet && current.bullets.length) {
+      appendToPreviousBullet(cleaned);
+      return;
+    }
+    current.bullets.push(cleaned);
+  }
+
   for (const line of lines) {
     const t = String(line || "").trim();
 
@@ -128,7 +163,7 @@ export function parseExperienceEntries(lines = []) {
     if (isBullet) {
       if (!current) startEntry();
       inBullets = true;
-      current.bullets.push(t.replace(/^[-*•]\s*/, "").trim());
+      pushUnmarkedBullet(t, { forceNew: true });
       continue;
     }
 
@@ -136,19 +171,27 @@ export function parseExperienceEntries(lines = []) {
       if (looksLikeNewRoleStart(t)) {
         startEntry();
       } else {
-        inBullets = false;
-        if (!current) startEntry();
         if (isDateOnly) {
           current.dateRange = t;
         } else {
-          current.headerLines.push(t);
+          pushUnmarkedBullet(t);
         }
         continue;
       }
     }
 
+    if (current?.dateRange && !looksLikeNewRoleStart(t)) {
+      pushUnmarkedBullet(t);
+      continue;
+    }
+
     if (!inBullets && current && current.bullets.length > 0 && looksLikeNewRoleStart(t)) {
       startEntry();
+    }
+
+    if (!inBullets && current && current.bullets.length > 0 && !looksLikeNewRoleStart(t)) {
+      pushUnmarkedBullet(t);
+      continue;
     }
 
     if (!current) startEntry();
@@ -164,11 +207,16 @@ export function parseExperienceEntries(lines = []) {
   return entries;
 }
 
-export function formatExperienceEntryHeading(entry = {}) {
+export function formatExperienceEntryHeading(entry = {}, { alignDate = false, width = 76 } = {}) {
   const left = [
     entry.title || "",
     [entry.company || "", entry.location || ""].filter(Boolean).join(", ")
   ].filter(Boolean).join(" - ");
+
+  if (alignDate && entry.dateRange) {
+    const gap = Math.max(2, width - left.length - entry.dateRange.length);
+    return `${left}${" ".repeat(gap)}${entry.dateRange}`;
+  }
 
   return [left, entry.dateRange || ""].filter(Boolean).join(" ").trim();
 }
