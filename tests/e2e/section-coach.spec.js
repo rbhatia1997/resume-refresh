@@ -232,6 +232,59 @@ Example High School
   await expect.poll(() => cards.count()).toBeGreaterThan(3);
 });
 
+test("unknown heading-like resume sections are preserved as editable additional sections", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("tab", { name: "Paste text" }).click();
+  await page.locator("#resume-text").fill(`
+Jane Doe
+jane@example.com
+(415) 555-1212
+
+SUMMARY
+IT support specialist with retail systems experience.
+
+EXPERIENCE
+IT Support Specialist - Example Retail, California
+2022 - Present
+- Resolved POS and device issues.
+
+SKILLS
+Hardware Troubleshooting
+Device Deployment
+
+EDUCATION
+Example High School
+2022
+
+PUBLICATIONS
+Retail Systems Troubleshooting Notes
+
+COMMUNITY INVOLVEMENT
+- Hosted local computer-building workshops
+`);
+  await page.locator("#target-role").fill("IT Support Specialist");
+  await page.getByRole("button", { name: "Analyze my resume" }).click();
+
+  await page.getByRole("button", { name: /Continue/ }).click();
+  await page.getByRole("button", { name: /Continue/ }).click();
+  await page.getByRole("button", { name: /Continue/ }).click();
+  await page.getByRole("button", { name: /Continue/ }).click();
+  await page.getByRole("button", { name: /Continue/ }).click();
+
+  await expect(page.getByRole("heading", { name: "Publications" })).toBeVisible();
+  await expect(page.locator("#section-textarea")).toHaveValue(/Retail Systems Troubleshooting Notes/);
+  await page.getByRole("button", { name: /Continue/ }).click();
+
+  await expect(page.getByRole("heading", { name: "Community Involvement" })).toBeVisible();
+  await expect(page.locator("#section-textarea")).toHaveValue(/Hosted local computer-building workshops/);
+  await page.getByRole("button", { name: /Finish/ }).click();
+
+  await expect(page.getByRole("heading", { name: "Your resume" })).toBeVisible();
+  await expect(page.locator("#final-draft")).toContainText("PUBLICATIONS");
+  await expect(page.locator("#final-draft")).toContainText("Retail Systems Troubleshooting Notes");
+  await expect(page.locator("#final-draft")).toContainText("COMMUNITY INVOLVEMENT");
+});
+
 test("export buttons show progress and completion feedback", async ({ page }) => {
   await page.route("**/api/export", async (route) => {
     await new Promise((resolve) => setTimeout(resolve, 300));

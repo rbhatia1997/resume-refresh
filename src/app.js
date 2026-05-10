@@ -782,11 +782,13 @@ function parseResumeForExport(text) {
     projects: [],
     certifications: [],
     community: [],
-    interests: []
+    interests: [],
+    _customSections: []
   };
   let current = "header";
 
-  for (const line of lines) {
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
     const trimmed = line.trim();
     if (!trimmed) {
       if (current !== "header" && sections[current].length && sections[current][sections[current].length - 1] !== "") {
@@ -798,6 +800,15 @@ function parseResumeForExport(text) {
     const canonical = headingMap.get(trimmed.toLowerCase().replace(/[^a-z ]/g, "").trim());
     if (canonical) {
       current = canonical;
+      continue;
+    }
+
+    if (looksLikeExportCustomHeading(trimmed, {
+      current,
+      previous: lines[index - 1] || "",
+      next: lines[index + 1] || ""
+    })) {
+      current = getOrCreateExportCustomSection(sections, trimmed).id;
       continue;
     }
 
@@ -813,13 +824,18 @@ function parseResumeForExport(text) {
   }
 
   for (const key of Object.keys(sections)) {
+    if (!Array.isArray(sections[key])) continue;
     sections[key] = sections[key].filter((line, index, list) => !(line === "" && list[index - 1] === ""));
   }
 
   // Merge AI-wrapped bullet continuations back into the preceding bullet.
   // A continuation is a non-bullet, non-job-title line that immediately follows a bullet.
   // Job-title lines are identified by containing " | " or a 4-digit year.
-  for (const key of ["experience", "summary", "education", "projects", "certifications", "community", "interests"]) {
+  for (const key of Object.keys(sections).filter((sectionKey) => (
+    Array.isArray(sections[sectionKey]) &&
+    sectionKey !== "header" &&
+    !sectionKey.startsWith("_")
+  ))) {
     const merged = [];
     for (const line of sections[key]) {
       if (line && merged.length > 0) {
@@ -838,6 +854,84 @@ function parseResumeForExport(text) {
   }
 
   return sections;
+}
+
+function normalizeExportHeading(line = "") {
+  return String(line || "").toLowerCase().replace(/[^a-z ]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function displayExportHeading(line = "") {
+  return normalizeExportHeading(line)
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+function looksLikeExportCustomHeading(line = "", { current = "", previous = "", next = "" } = {}) {
+  const raw = String(line || "").trim();
+  if (!raw || current === "header") return false;
+  if (/^[-*•]/.test(raw)) return false;
+  if (/@|https?:|www\.|linkedin\.com/i.test(raw)) return false;
+  if (/\b(19|20)\d{2}\b/.test(raw)) return false;
+  if (/[.,:;!?|]/.test(raw)) return false;
+
+  const normalized = normalizeExportHeading(raw);
+  const words = normalized.split(/\s+/).filter(Boolean);
+  if (words.length < 1 || words.length > 5) return false;
+  if (normalized.length < 3 || normalized.length > 48) return false;
+
+  const letters = raw.replace(/[^A-Za-z]/g, "");
+  if (letters.length < 3) return false;
+
+  const previousBlank = !String(previous || "").trim();
+  const nextHasContent = Boolean(String(next || "").trim());
+  if (!previousBlank || !nextHasContent) return false;
+
+  if (letters === letters.toUpperCase()) return true;
+
+  const titleLikeWords = raw
+    .split(/\s+/)
+    .filter(Boolean)
+    .every((word) => /^(and|or|of|for|in|on|&|\/)$/.test(word.toLowerCase()) || /^[A-Z][A-Za-z&/-]*$/.test(word));
+
+  return titleLikeWords;
+}
+
+function getOrCreateExportCustomSection(sections, label) {
+  const base = normalizeExportHeading(label).replace(/\s+/g, "-") || "additional-section";
+  const existing = sections._customSections.find((section) => section.slug === base);
+  if (existing) return existing;
+
+  let id = `custom:${base}`;
+  let suffix = 2;
+  while (sections[id]) {
+    id = `custom:${base}-${suffix}`;
+    suffix += 1;
+  }
+
+  const section = {
+    id,
+    slug: base,
+    title: displayExportHeading(label).toUpperCase()
+  };
+  sections[id] = [];
+  sections._customSections.push(section);
+  return section;
+}
+
+function exportSectionEntries(sections) {
+  return [
+    ["Summary", "summary"],
+    ["Experience", "experience"],
+    ["Skills", "skills"],
+    ["Education", "education"],
+    ["Projects", "projects"],
+    ["Certifications", "certifications"],
+    ["Community", "community"],
+    ["Interests", "interests"],
+    ...(sections._customSections || []).map((section) => [section.title, section.id])
+  ];
 }
 
 async function buildDocx(text) {
@@ -859,16 +953,7 @@ async function buildDocx(text) {
     }));
   }
 
-  for (const [title, key] of [
-    ["Summary", "summary"],
-    ["Experience", "experience"],
-    ["Skills", "skills"],
-    ["Education", "education"],
-    ["Projects", "projects"],
-    ["Certifications", "certifications"],
-    ["Community", "community"],
-    ["Interests", "interests"]
-  ]) {
+  for (const [title, key] of exportSectionEntries(sections)) {
     const lines = sections[key].filter((line) => line !== "");
     if (!lines.length) {
       continue;
@@ -1010,16 +1095,7 @@ async function buildPdf(text) {
     y -= 10;
   }
 
-  for (const [title, key] of [
-    ["SUMMARY", "summary"],
-    ["EXPERIENCE", "experience"],
-    ["SKILLS", "skills"],
-    ["EDUCATION", "education"],
-    ["PROJECTS", "projects"],
-    ["CERTIFICATIONS", "certifications"],
-    ["COMMUNITY", "community"],
-    ["INTERESTS", "interests"]
-  ]) {
+  for (const [title, key] of exportSectionEntries(sections)) {
     const lines = sections[key].filter((line) => line !== "");
     if (!lines.length) {
       continue;
@@ -1027,7 +1103,7 @@ async function buildPdf(text) {
 
     ensureSpace(lineHeight * 2);
     if (!clipped) {
-      page.drawText(title, {
+      page.drawText(title.toUpperCase(), {
         x: margin,
         y,
         size: 9,
