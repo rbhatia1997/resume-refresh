@@ -139,3 +139,35 @@ University of California, Berkeley
   assert.ok(result.sectionSuggestions.education.every((item) => item.sectionId === "education"));
   assert.ok(result.sectionSuggestions.education.every((item) => !item.detail.includes("stakeholder management across B2B SaaS")));
 });
+
+test("analyzeResume keeps projects and hobbies out of education", () => {
+  const result = analyzeResume({
+    linkedinText: "",
+    resumeText: `
+Jane Doe
+jane@example.com
+
+EDUCATION
+City College
+Associate Degree, Computer Science
+
+PROJECTS
+Home Lab Network
+- Configured routers and POS-style peripherals
+
+HOBBIES
+Photography
+`,
+    targetRole: "IT Support Specialist"
+  });
+
+  const education = result.sectionEditorData.find((section) => section.id === "education");
+  const projects = result.sectionEditorData.find((section) => section.id === "projects");
+  const hobbies = result.sectionEditorData.find((section) => section.id === "hobbies");
+
+  assert.ok(education.currentText.includes("City College"));
+  assert.doesNotMatch(education.currentText, /Home Lab|Photography/);
+  assert.ok(projects.currentText.includes("Home Lab Network"));
+  assert.doesNotMatch(projects.currentText, /Photography/);
+  assert.ok(hobbies.currentText.includes("Photography"));
+});

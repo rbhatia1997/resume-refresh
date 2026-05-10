@@ -9,7 +9,9 @@ import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { analyzeResume } from "./resume-analyzer.js";
 import { normalizeInputText } from "./text-normalizer.js";
 import { buildResumeValidationFromText } from "./resume-validator.js";
-import { callModel, isModelConfigured, getProviderLabel } from "./inference.js";
+import { callModel, isModelConfigured, getProviderLabel, extractTextFromResumeImage } from "./inference.js";
+import { classifyResumeUpload } from "./resume-upload.js";
+import { splitJobDate } from "./export-format.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, "..");
@@ -467,7 +469,7 @@ async function readJsonBody(request) {
   return raw ? JSON.parse(raw) : {};
 }
 
-async function extractResumeText({ resumeText = "", resumeFileName = "", resumeFileBase64 = "" }) {
+async function extractResumeText({ resumeText = "", resumeFileName = "", resumeFileBase64 = "", resumeFileType = "" }) {
   if (resumeText.trim()) {
     return resumeText;
   }
@@ -481,8 +483,12 @@ async function extractResumeText({ resumeText = "", resumeFileName = "", resumeF
     throw new Error("Resume file is too large. Keep files under 4.5 MB.");
   }
 
-  const extension = path.extname(resumeFileName).toLowerCase();
-  if (extension === ".pdf") {
+  const upload = classifyResumeUpload({
+    fileName: resumeFileName,
+    mimeType: resumeFileType
+  });
+
+  if (upload.kind === "pdf") {
     const pdfParse = require("pdf-parse");
     const parsed = await withTimeout(
       pdfParse(buffer),
@@ -492,11 +498,22 @@ async function extractResumeText({ resumeText = "", resumeFileName = "", resumeF
     return parsed.text.trim();
   }
 
-  if ([".txt", ".md"].includes(extension)) {
+  if (upload.kind === "text") {
     return buffer.toString("utf8");
   }
 
-  throw new Error("Unsupported file type. Use PDF, TXT, or MD.");
+  if (upload.kind === "image") {
+    return await withTimeout(
+      extractTextFromResumeImage({
+        imageBase64: resumeFileBase64,
+        mimeType: upload.mimeType
+      }),
+      60_000,
+      "Photo parsing timed out. Try a clearer image, a smaller file, or paste the text instead."
+    );
+  }
+
+  throw new Error("Unsupported file type. Use PDF, TXT, MD, JPG, PNG, or WEBP.");
 }
 
 const AI_ACTION_INSTRUCTIONS = {
@@ -818,23 +835,6 @@ function parseResumeForExport(text) {
   }
 
   return sections;
-}
-
-/**
- * Detect and split a trailing date range from a job title line.
- * "Software Engineer | Acme Corp Jan 2022 - Present"
- *   → { role: "Software Engineer | Acme Corp", date: "Jan 2022 - Present" }
- * Returns null if no date found (line is a bullet or plain text).
- */
-function splitJobDate(line) {
-  if (/^[-*•]/.test(line)) return null;
-  const DATE_RE = /\s+((?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?|Spring|Summer|Fall|Winter)\s+\d{4}(?:\s*[-–]\s*(?:Present|Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)(?:\s+\d{4})?)?)$/;
-  const match = line.match(DATE_RE);
-  if (!match) return null;
-  return {
-    role: line.slice(0, match.index).trim(),
-    date: match[1].trim()
-  };
 }
 
 async function buildDocx(text) {

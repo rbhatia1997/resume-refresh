@@ -1,3 +1,13 @@
+import { extractContactInfo } from "./contact-info.js";
+import { parseExperienceEntries } from "./experience-entries.js";
+import {
+  buildContactSuggestions,
+  buildEducationSuggestions,
+  buildExperienceSuggestions,
+  buildSkillsSuggestions,
+  buildSummarySuggestions
+} from "./section-suggestions.js";
+
 const SECTION_HEADERS = [
   "summary",
   "professional summary",
@@ -15,7 +25,9 @@ const SECTION_HEADERS = [
   "core competencies",
   "certifications",
   "awards",
-  "volunteer"
+  "volunteer",
+  "hobbies",
+  "interests"
 ];
 
 const STOPWORDS = new Set([
@@ -163,7 +175,9 @@ const SECTION_ALIASES = {
   projects: ["projects"],
   certifications: ["certifications"],
   awards: ["awards"],
-  volunteer: ["volunteer"]
+  volunteer: ["volunteer"],
+  hobbies: ["hobbies"],
+  interests: ["interests"]
 };
 
 function normalizeWhitespace(text = "") {
@@ -656,140 +670,6 @@ function lintBullets(bullets = []) {
   };
 }
 
-// ── Structured experience entry parsing ───────────────────────────
-
-/**
- * Regex matching standalone date-range lines like:
- *   "2020 – 2023",  "Jan 2019 – Present",  "(2018 – 2020)"
- * A "standalone" date line has little content besides the range.
- */
-const DATE_RANGE_RE = /(?:(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+)?(?:19|20)\d{2}\s*[-–—\/]\s*(?:(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+)?(?:(?:19|20)\d{2}|present|current|now)/i;
-
-function isStandaloneDateLine(line) {
-  const t = line.trim();
-  if (!t || /^[-*•]/.test(t)) return false;
-  // Remove the date range; what's left should be minimal (parentheses, spaces, short location)
-  const remainder = t.replace(DATE_RANGE_RE, "").replace(/[()[\]–—\-\/\s|,·]/g, "").trim();
-  return DATE_RANGE_RE.test(t) && remainder.length < 8;
-}
-
-/**
- * Returns true if the line looks like the start of a new job entry
- * (as opposed to a prose continuation within the same role).
- *
- * Strong signals: pipe/dot separator ("Title | Company"), embedded date range,
- * or a recognizable title word in a short line.
- */
-function looksLikeNewRoleStart(line) {
-  const t = line.trim();
-  if (!t) return false;
-  // "Title | Company" or "Title · Company" separators → definitely a role header
-  if (/[|·]/.test(t)) return true;
-  // Line contains a date range → role header line (e.g. "Google  2020 – 2022")
-  if (DATE_RANGE_RE.test(t)) return true;
-  // Short line (< 80 chars) with recognizable title keywords
-  if (t.length < 80 && /\b(engineer|manager|analyst|designer|developer|director|specialist|associate|lead|senior|junior|consultant|coordinator|intern|founder|president|officer|strategist|scientist|architect)\b/i.test(t)) return true;
-  return false;
-}
-
-/**
- * Parse flat experience section lines into structured entry blocks.
- *
- * Each entry:
- *   headerLines  — title, company, location lines (non-bullet, non-date)
- *   dateRange    — extracted date string ("2020 – 2023")
- *   bullets      — cleaned bullet text (no leading "-")
- *   confidence   — 'high' | 'medium' | 'low'
- *
- * Uses blank lines (preserved by parseSections) as primary boundary signals.
- * Falls back to heuristics when no blank lines exist:
- *   - Non-bullet line after bullets that looks like a role header → new entry
- *   - Non-bullet prose continuation after bullets → stays in same entry
- */
-function parseExperienceEntries(lines = []) {
-  const entries = [];
-  let current = null;
-  let inBullets = false;
-
-  function flushEntry() {
-    if (!current) return;
-    const hasDates   = Boolean(current.dateRange) || current.headerLines.some(l => /\b(19|20)\d{2}\b/.test(l));
-    const hasBullets = current.bullets.length > 0;
-    const hasTitle   = current.headerLines.filter(Boolean).length > 0;
-
-    current.confidence = (hasDates && hasBullets && hasTitle) ? "high"
-      : (hasBullets && hasTitle)                              ? "medium"
-      : "low";
-
-    if (hasTitle || hasBullets) entries.push(current);
-    current = null;
-    inBullets = false;
-  }
-
-  function startEntry() {
-    flushEntry();
-    current = { headerLines: [], dateRange: "", bullets: [] };
-  }
-
-  for (const line of lines) {
-    const t = line.trim();
-
-    // Blank line = entry boundary (only flush if we have bullets — avoids
-    // creating ghost entries from double-blank-line spacing)
-    if (!t) {
-      if (inBullets && current?.bullets.length) flushEntry();
-      continue;
-    }
-
-    const isBullet   = /^[-*•]/.test(t);
-    const isDateOnly = isStandaloneDateLine(t);
-
-    if (isBullet) {
-      if (!current) startEntry();
-      inBullets = true;
-      current.bullets.push(t.replace(/^[-*•]\s*/, "").trim());
-      continue;
-    }
-
-    if (inBullets) {
-      // Non-bullet line after bullets: decide whether this is a NEW role
-      // or a prose continuation of the current role.
-      if (looksLikeNewRoleStart(t)) {
-        // Strong role-header signal → flush and open new entry
-        startEntry();
-        // falls through to header/date handling below
-      } else {
-        // Prose continuation — stay in current entry, DON'T start a new one
-        inBullets = false;
-        if (!current) startEntry();
-        if (isDateOnly) {
-          current.dateRange = t;
-        } else {
-          current.headerLines.push(t);
-        }
-        continue; // skip the common header/date path below
-      }
-    }
-
-    // When NOT in bullets, also detect a new role starting (catches resumes
-    // where the previous entry had bullets and blank line was missing between roles).
-    if (!inBullets && current && current.bullets.length > 0 && looksLikeNewRoleStart(t)) {
-      startEntry();
-    }
-
-    if (!current) startEntry();
-
-    if (isDateOnly) {
-      current.dateRange = t;
-    } else {
-      current.headerLines.push(t);
-    }
-  }
-
-  flushEntry();
-  return entries;
-}
-
 /**
  * Reassemble structured entries into display text, strengthening bullets
  * and tracking changes. Returns { lines, changes }.
@@ -1216,6 +1096,8 @@ const SECTION_DISPLAY_LABELS = {
   certifications: "Certifications",
   awards:         "Awards",
   volunteer:      "Volunteer & Leadership",
+  hobbies:        "Hobbies",
+  interests:      "Interests",
 };
 
 // Common non-name words that can appear in resume headers
@@ -1290,7 +1172,7 @@ function determineSectionOrder(sections, candidateLevel) {
   }
 
   // Append optional sections only if they have content
-  for (const id of ["projects", "certifications", "awards", "volunteer"]) {
+  for (const id of ["projects", "certifications", "awards", "volunteer", "hobbies", "interests"]) {
     if (!base.includes(id) && (sections[id] || []).filter(l => l.trim()).length > 0) {
       base.push(id);
     }
@@ -1344,7 +1226,15 @@ function buildSectionCritique(sectionId, suggestions, status) {
  *   - changeLog (array of {original, revised, reason} for experience bullets)
  *   - parseWarning (string | null) — surfaces low-confidence parsing
  */
-function buildSectionEditorData({ sections, rewrittenResume, sectionSuggestions, candidateLevel, targetRole }) {
+function buildSectionEditorData({
+  sections,
+  rewrittenResume,
+  sectionSuggestions,
+  candidateLevel,
+  targetRole,
+  contactInfo,
+  linkedinText
+}) {
   const rewrittenSections = parseSections(normalizeWhitespace(rewrittenResume));
 
   // Parse experience into structured entries for confidence signals + changelog
@@ -1423,14 +1313,51 @@ function buildSectionEditorData({ sections, rewrittenResume, sectionSuggestions,
       ].filter(Boolean).join("\n")).join("\n\n");
     }
 
+    const skillContext = [
+      ...(sections.skills || []),
+      ...(sections["technical skills"] || []),
+      ...(sections["core competencies"] || []),
+      linkedinText || ""
+    ].join("\n");
+    const sectionLevelSuggestions = (() => {
+      if (id === "heading") {
+        return buildContactSuggestions(contactInfo);
+      }
+      if (id === "summary") {
+        return buildSummarySuggestions({
+          currentText,
+          targetRole,
+          candidateLevel,
+          skills: extractCandidateSkills(skillContext)
+        });
+      }
+      if (id === "experience") {
+        return buildExperienceSuggestions({ entries: expEntries });
+      }
+      if (id === "skills") {
+        return buildSkillsSuggestions({
+          currentText,
+          targetRole,
+          supportingText: linkedinText
+        });
+      }
+      if (id === "education") {
+        return buildEducationSuggestions({ currentText });
+      }
+      return [];
+    })();
+    const effectiveStatus = status === "ok" && sectionLevelSuggestions.length ? "needs-work" : status;
+
     const sectionResult = {
       id,
       label:      SECTION_DISPLAY_LABELS[id] || id,
       currentText,
       proposedText,
-      critique:   buildSectionCritique(id, sectionIssues, status),
-      status,
+      critique:   buildSectionCritique(id, sectionIssues, effectiveStatus),
+      status:     effectiveStatus,
       changeLog:  id === "experience" ? expChanges : [],
+      suggestions: sectionLevelSuggestions,
+      parsedFields: id === "heading" ? contactInfo : id === "experience" ? { entries: expEntries } : {},
       parseWarning,
     };
 
@@ -1456,7 +1383,8 @@ export function analyzeResume({ linkedinText = "", linkedinUrl = "", resumeText 
     targetRole
   });
   const missingKeywords  = topMissingKeywords(normalizedLinkedIn, normalizedResume);
-  const candidateName    = extractCandidateName(sections);
+  const contactInfo      = extractContactInfo(sections.header || []);
+  const candidateName    = contactInfo.name || extractCandidateName(sections);
   const candidateLevel   = inferCandidateLevel(sections, bullets, targetRole);
   const sectionSuggestions = buildSectionSuggestions({
     sections,
@@ -1474,6 +1402,7 @@ export function analyzeResume({ linkedinText = "", linkedinUrl = "", resumeText 
 
   return {
     candidateName,
+    contactInfo,
     candidateLevel,
     meta: {
       linkedinUrl:       linkedinUrl.trim(),
@@ -1496,7 +1425,9 @@ export function analyzeResume({ linkedinText = "", linkedinUrl = "", resumeText 
       rewrittenResume,
       sectionSuggestions,
       candidateLevel,
-      targetRole
+      targetRole,
+      contactInfo,
+      linkedinText: normalizedLinkedIn
     }),
     rewrittenResume
   };

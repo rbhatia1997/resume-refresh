@@ -503,6 +503,23 @@ button { cursor: pointer; font: inherit; }
   padding: 18px 24px;
 }
 
+.section-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 310px;
+  gap: 18px;
+  padding: 18px 24px;
+}
+
+.section-workspace .proposed-block {
+  padding: 0;
+}
+
+.section-coach-column {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+}
+
 .editor-textarea {
   display: block;
   width: 100%;
@@ -523,6 +540,94 @@ button { cursor: pointer; font: inherit; }
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.suggestion-card {
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  padding: 12px 14px;
+  box-shadow: var(--shadow);
+}
+
+.suggestion-card.severity-high {
+  border-color: var(--warn-border);
+}
+
+.suggestion-card-ok {
+  background: var(--success-bg);
+  border-color: var(--success-border);
+}
+
+.suggestion-card-title {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--ink);
+  line-height: 1.35;
+}
+
+.suggestion-card-detail,
+.suggestion-card-rationale {
+  font-size: 0.8125rem;
+  color: var(--muted);
+  line-height: 1.5;
+  margin-top: 5px;
+}
+
+.suggestion-diff {
+  display: grid;
+  gap: 6px;
+  margin-top: 9px;
+}
+
+.suggestion-before,
+.suggestion-after {
+  border-radius: 7px;
+  padding: 8px 9px;
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
+.suggestion-before {
+  background: var(--warn-bg);
+  color: #92400e;
+  border: 1px solid var(--warn-border);
+}
+
+.suggestion-after {
+  background: var(--success-bg);
+  color: #14532d;
+  border: 1px solid var(--success-border);
+}
+
+.suggestion-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 10px;
+}
+
+.suggestion-edit {
+  margin-top: 9px;
+  min-height: 84px;
+  font-size: 0.8125rem;
+}
+
+.skill-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.skill-chip {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 0.75rem;
+  background: var(--bg);
+  color: var(--ink);
 }
 
 /* Editor action row */
@@ -605,6 +710,7 @@ button { cursor: pointer; font: inherit; }
 
 .note-title  { font-size: 0.875rem; font-weight: 600; margin-bottom: 3px; }
 .note-detail { font-size: 0.8125rem; color: var(--muted); line-height: 1.5; }
+.note-empty  { font-size: 0.8125rem; color: var(--muted); line-height: 1.5; }
 
 /* ── Parsing confidence warning ──────────────────────────────────── */
 .parse-warning {
@@ -863,6 +969,8 @@ button { cursor: pointer; font: inherit; }
   .current-block  { padding: 14px 18px; }
   .critique-bar   { padding: 10px 18px; }
   .proposed-block { padding: 14px 18px; }
+  .section-workspace { grid-template-columns: 1fr; padding: 14px 18px; }
+  .section-workspace .proposed-block { padding: 0; }
   .editor-actions { flex-direction: column-reverse; align-items: stretch; }
   .editor-actions .btn-primary { text-align: center; }
   .block-head { flex-direction: column; align-items: flex-start; }
