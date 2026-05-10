@@ -35,6 +35,7 @@ Open `http://localhost:3210`. Node 20+ required.
 | `LINKEDIN_CLIENT_ID` | No | Only needed if you want LinkedIn sign-in |
 | `LINKEDIN_CLIENT_SECRET` | No | LinkedIn OAuth |
 | `PUBLIC_BASE_URL` | No | Full origin URL used for OAuth redirects (e.g. `https://your-domain.com`) |
+| `DAILY_EDIT_LIMIT` | No | Shared per-IP daily limit for edit-producing calls (`/api/analyze` and `/api/rewrite`). Defaults to `10` |
 
 See `.env.example` for the full list with comments.
 
@@ -70,10 +71,15 @@ public/     Static frontend (HTML, CSS, JS)
 ## Security
 
 - Sessions signed with `APP_SECRET`
-- Rate-limited per IP: 20 analyze / 8 rewrite / 12 export requests per minute
+- Rate-limited per IP: 10 edit-producing calls per day by default, plus short-window burst limits on analyze/rewrite/export
 - Security headers on all responses (CSP, X-Frame-Options, Referrer-Policy, Permissions-Policy, X-Content-Type-Options)
 - Request body and file upload size limits enforced
+- PDF/DOCX export rejects resumes that exceed the one-page budget instead of silently creating a long/clipped export
 - No resume data stored server-side
+- Rate-limit subjects are HMAC-hashed in memory; raw IPs are not persisted by the app
+- Photo resume parsing sends the uploaded image to the configured OpenAI vision model for OCR; text/PDF/TXT/MD parsing stays server-local
+
+The built-in limiter is process-local, which is sufficient for a single Node process and local development. On horizontally scaled/serverless deployments, enforce the same daily limits at the platform edge or with shared infrastructure if you need a strict global quota across instances.
 
 ## LinkedIn sign-in (optional, not surfaced in the default UI)
 

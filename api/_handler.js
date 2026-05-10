@@ -1,3 +1,4 @@
+import { Readable } from "node:stream";
 import { handleRequest } from "../src/app.js";
 
 export const config = {
@@ -22,7 +23,7 @@ export async function toFetchRequest(req) {
 
   const body = ["GET", "HEAD"].includes(req.method || "GET")
     ? undefined
-    : Buffer.concat(await readChunks(req));
+    : Readable.toWeb(req);
 
   return new Request(url, {
     method: req.method,
@@ -30,14 +31,6 @@ export async function toFetchRequest(req) {
     body,
     duplex: body ? "half" : undefined
   });
-}
-
-async function readChunks(req) {
-  const chunks = [];
-  for await (const chunk of req) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-  }
-  return chunks;
 }
 
 export async function sendNodeResponse(res, response) {

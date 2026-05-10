@@ -16,14 +16,18 @@ import { splitJobDate } from "./export-format.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, "..");
 const publicDir = path.resolve(projectRoot, "public");
-const sessionCookieName = "resume_refresh_session";
-const maxBodyBytes = 6 * 1024 * 1024;
-const maxRewriteChars = 10000;
-const maxOnePageExportLines = 64;
-const rateLimits = new Map();
-const require = createRequire(import.meta.url);
 
 loadDotEnv();
+
+const sessionCookieName = "resume_refresh_session";
+export const MAX_BODY_BYTES = 6 * 1024 * 1024;
+const maxRewriteChars = 10000;
+const maxOnePageExportLines = 64;
+const dailyEditLimit = parsePositiveInteger(process.env.DAILY_EDIT_LIMIT, 10);
+const dailyEditWindowMs = 24 * 60 * 60 * 1000;
+const maxRateLimitBuckets = 5000;
+const rateLimits = new Map();
+const require = createRequire(import.meta.url);
 
 const linkedInClientId = process.env.LINKEDIN_CLIENT_ID || process.env.LI_CLIENT_ID || "";
 const linkedInClientSecret = process.env.LINKEDIN_CLIENT_SECRET || process.env.LI_CLIENT_SECRET || "";
@@ -33,6 +37,14 @@ const hasSecureAppSecret = process.env.NODE_ENV !== "production" || appSecret !=
 
 if (process.env.NODE_ENV === "production" && !hasSecureAppSecret) {
   throw new Error("FATAL: APP_SECRET must be set to a strong random value in production. Do not use the default.");
+}
+
+function parsePositiveInteger(value, fallback) {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    return fallback;
+  }
+  return parsed;
 }
 
 class AppError extends Error {
@@ -146,6 +158,7 @@ export async function handleRequest(request, { serveStatic = true } = {}) {
     if (request.method === "POST" && url.pathname === "/api/analyze") {
       enforceSameOrigin(request);
       enforceRateLimit(request, "analyze", { limit: 20, windowMs: 60_000 });
+      enforceDailyEditLimit(request);
       const body = await readJsonBody(request);
       const rawResumeText = await extractResumeText(body);
       const targetRoleInput = String(body.targetRole || "").trim();
@@ -174,14 +187,17 @@ export async function handleRequest(request, { serveStatic = true } = {}) {
 
       return jsonResponse({
         ...result,
-        extractedResumeText: cleanedResumeText,
-        linkedInProfile: session?.profile || null
+        linkedInProfile: session?.profile ? {
+          name: session.profile.name || "",
+          email: session.profile.email || ""
+        } : null
       });
     }
 
     if (request.method === "POST" && url.pathname === "/api/rewrite") {
       enforceSameOrigin(request);
       enforceRateLimit(request, "rewrite", { limit: 8, windowMs: 60_000 });
+      enforceDailyEditLimit(request);
       assertModelConfigured();
       const body = await readJsonBody(request);
       const rewritten = await rewriteWithOpenAI(body);
@@ -262,16 +278,44 @@ function enforceSameOrigin(request) {
 }
 
 function getClientAddress(request) {
+  const vercelForwardedFor = request.headers.get("x-vercel-forwarded-for");
+  if (vercelForwardedFor) {
+    return vercelForwardedFor.split(",")[0].trim();
+  }
   const forwardedFor = request.headers.get("x-forwarded-for");
   if (forwardedFor) {
     return forwardedFor.split(",")[0].trim();
   }
-  return "unknown";
+  return request.headers.get("x-real-ip") || "unknown";
 }
 
-function enforceRateLimit(request, action, { limit, windowMs }) {
-  const key = `${action}:${getClientAddress(request)}`;
+function getRateLimitSubject(request) {
+  return crypto
+    .createHmac("sha256", appSecret)
+    .update(getClientAddress(request))
+    .digest("base64url")
+    .slice(0, 24);
+}
+
+function pruneRateLimits(now = Date.now()) {
+  for (const [key, bucket] of rateLimits) {
+    if (bucket.expiresAt <= now) {
+      rateLimits.delete(key);
+    }
+  }
+
+  while (rateLimits.size > maxRateLimitBuckets) {
+    const oldest = rateLimits.keys().next().value;
+    if (!oldest) break;
+    rateLimits.delete(oldest);
+  }
+}
+
+function enforceRateLimit(request, action, { limit, windowMs, message = "Too many requests. Please wait a minute and try again." }) {
   const now = Date.now();
+  pruneRateLimits(now);
+
+  const key = `${action}:${getRateLimitSubject(request)}`;
   const bucket = rateLimits.get(key) || { count: 0, expiresAt: now + windowMs };
 
   if (bucket.expiresAt <= now) {
@@ -283,8 +327,16 @@ function enforceRateLimit(request, action, { limit, windowMs }) {
   rateLimits.set(key, bucket);
 
   if (bucket.count > limit) {
-    throw new AppError("Too many requests. Please wait a minute and try again.", { status: 429 });
+    throw new AppError(message, { status: 429 });
   }
+}
+
+function enforceDailyEditLimit(request) {
+  enforceRateLimit(request, "edit:daily", {
+    limit: dailyEditLimit,
+    windowMs: dailyEditWindowMs,
+    message: "Daily edit limit reached for this IP. Please try again tomorrow."
+  });
 }
 
 function parseCookies(request) {
@@ -459,15 +511,43 @@ async function readJsonBody(request) {
   }
 
   const contentLength = Number(request.headers.get("content-length") || 0);
-  if (contentLength > maxBodyBytes) {
+  if (contentLength > MAX_BODY_BYTES) {
     throw new AppError("Payload too large. Keep uploads under 6 MB.", { status: 413 });
   }
 
-  const raw = await request.text();
-  if (raw.length > maxBodyBytes) {
-    throw new AppError("Payload too large. Keep uploads under 6 MB.", { status: 413 });
-  }
+  const raw = await readRequestText(request);
   return raw ? JSON.parse(raw) : {};
+}
+
+async function readRequestText(request) {
+  if (!request.body) {
+    return "";
+  }
+
+  const chunks = [];
+  const reader = request.body.getReader();
+  let received = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+
+      const chunk = value instanceof Uint8Array ? value : Buffer.from(value);
+      received += chunk.byteLength;
+      if (received > MAX_BODY_BYTES) {
+        await reader.cancel().catch(() => {});
+        throw new AppError("Payload too large. Keep uploads under 6 MB.", { status: 413 });
+      }
+      chunks.push(chunk);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  return Buffer.concat(chunks).toString("utf8");
 }
 
 async function extractResumeText({ resumeText = "", resumeFileName = "", resumeFileBase64 = "", resumeFileType = "" }) {
