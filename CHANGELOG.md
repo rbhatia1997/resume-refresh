@@ -6,6 +6,14 @@ Format: `MAJOR.MINOR.PATCH.MICRO`
 
 ---
 
+## [0.1.1.6] - 2026-05-10
+
+### Fixed
+
+- **Resume section dividers have more breathing room** — increased spacing between section rules and the content below them in the final preview, PDF, and DOCX exports.
+
+---
+
 ## [0.1.1.5] - 2026-05-10
 
 ### Fixed
