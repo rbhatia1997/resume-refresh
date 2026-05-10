@@ -7,6 +7,7 @@ import {
   buildSkillsSuggestions,
   buildSummarySuggestions
 } from "./section-suggestions.js";
+import { buildSkillActionPreview, normalizeSkillLines } from "./skills-grounding.js";
 
 const SECTION_HEADERS = [
   "summary",
@@ -716,9 +717,13 @@ function formatEntriesWithAnnotations(entries = []) {
   let bulletIndex  = 0;
 
   for (const entry of entries) {
-    // Role header — preserved verbatim
-    allLines.push(...entry.headerLines.filter(Boolean));
-    if (entry.dateRange) allLines.push(entry.dateRange);
+    const heading = formatExperienceEntryHeading(entry);
+    if (heading) {
+      allLines.push(heading);
+    } else {
+      allLines.push(...entry.headerLines.filter(Boolean));
+      if (entry.dateRange) allLines.push(entry.dateRange);
+    }
 
     // Bullets — strengthen and record changes
     for (const original of entry.bullets) {
@@ -1049,10 +1054,19 @@ function buildDraft({ sections, bullets, linkedinText, resumeText, targetRole })
     ? existingSummaryLines.join(" ").trim()
     : summarizeProfile({ sections, linkedinText, skillText: skillSectionText, targetRole });
 
-  const skills = [...new Set([
+  const sourceSkills = [...new Set([
     ...extractCandidateSkills(linkedinText),
     ...extractCandidateSkills(skillSectionText)
-  ])].slice(0, 12);
+  ])];
+  const skillPreview = sourceSkills.length
+    ? buildSkillActionPreview({
+        action: "align",
+        currentText: skillSectionText,
+        targetRole,
+        supportingText: linkedinText
+      })
+    : { suggested: [] };
+  const skills = (skillPreview.suggested.length ? skillPreview.suggested : sourceSkills).slice(0, 12);
 
   // Parse experience as structured entries, then format each entry faithfully
   const rawExpLines =
@@ -1495,4 +1509,3 @@ export function analyzeResume({ linkedinText = "", linkedinUrl = "", resumeText 
     rewrittenResume
   };
 }
-import { normalizeSkillLines } from "./skills-grounding.js";

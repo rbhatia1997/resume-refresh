@@ -6,6 +6,16 @@ Format: `MAJOR.MINOR.PATCH.MICRO`
 
 ---
 
+## [0.1.1.5] - 2026-05-10
+
+### Fixed
+
+- **Experience headings are cleaned before preview/export** — the analyzer now strips duplicate inline date ranges before building the section editor and final preview.
+- **PDF section rules no longer crowd headings** — section divider lines now sit below headings instead of crossing through them, and the extra header rule before Summary was removed from preview, PDF, and DOCX output.
+- **Skills suggestions favor resume/LinkedIn evidence** — product skill cleanup now prioritizes supported, higher-signal skills and filters low-value process/tool terms like Jira and OKRs from suggested lists.
+
+---
+
 ## [0.1.1.4] - 2026-05-10
 
 ### Fixed

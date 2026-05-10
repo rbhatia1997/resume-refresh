@@ -1097,8 +1097,7 @@ async function buildDocx(text) {
     paragraphs.push(new Paragraph({
       alignment: AlignmentType.CENTER,
       children: [new TextRun({ text: sections.header[0], bold: true, size: 32, color: exportInkColor })],
-      spacing: { after: headerMeta ? 35 : 75 },
-      border: headerMeta ? undefined : docxDividerBorder()
+      spacing: { after: headerMeta ? 35 : 110 }
     }));
   }
 
@@ -1106,8 +1105,7 @@ async function buildDocx(text) {
     paragraphs.push(new Paragraph({
       alignment: AlignmentType.CENTER,
       children: [new TextRun({ text: headerMeta, color: exportMutedColor, size: 18 })],
-      spacing: { after: 95 },
-      border: docxDividerBorder()
+      spacing: { after: 115 }
     }));
   }
 
@@ -1271,7 +1269,7 @@ async function buildPdf(text) {
     }
   };
 
-  const drawDivider = (offset = 3) => {
+  const drawDivider = (offset = 0) => {
     if (clipped) return;
     page.drawLine({
       start: { x: margin, y: y - offset },
@@ -1298,8 +1296,7 @@ async function buildPdf(text) {
     });
   }
   if (sections.header[0] || headerMeta) {
-    drawDivider(2);
-    y -= 14;
+    y -= 11;
   }
 
   for (const [title, key] of exportSectionEntries(sections)) {
@@ -1317,8 +1314,9 @@ async function buildPdf(text) {
         font: boldFont,
         color: heading
       });
-      drawDivider(4);
-      y -= 13;
+      y -= 6;
+      drawDivider();
+      y -= 9;
     }
 
     for (const line of sections[key]) {
@@ -1362,7 +1360,7 @@ async function buildPdf(text) {
         }
       }
     }
-    y -= 4;
+    y -= 7;
   }
 
   return Buffer.from(await pdf.save());

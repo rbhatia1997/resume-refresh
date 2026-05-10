@@ -2,7 +2,9 @@ const MONTH_OR_SEASON_RE = String.raw`(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|a
 const YEAR_RE = String.raw`(?:19|20)\d{2}`;
 const DATE_POINT_RE = String.raw`(?:(?:${MONTH_OR_SEASON_RE})\s+)?${YEAR_RE}`;
 const SEASON_DATE_POINT_RE = String.raw`(?:${MONTH_OR_SEASON_RE})\s+${YEAR_RE}`;
-export const DATE_RANGE_RE = new RegExp(String.raw`(?:${DATE_POINT_RE}\s*[-–—/]\s*(?:${DATE_POINT_RE}|present|current|now)|${SEASON_DATE_POINT_RE})`, "i");
+const DATE_RANGE_SOURCE = String.raw`(?:${DATE_POINT_RE}\s*[-–—/]\s*(?:${DATE_POINT_RE}|present|current|now)|${SEASON_DATE_POINT_RE})`;
+export const DATE_RANGE_RE = new RegExp(DATE_RANGE_SOURCE, "i");
+const DATE_RANGE_GLOBAL_RE = new RegExp(DATE_RANGE_SOURCE, "ig");
 
 const TITLE_WORD_RE = /\b(engineer|manager|analyst|designer|developer|director|specialist|associate|lead|senior|junior|consultant|coordinator|intern|founder|president|officer|strategist|scientist|architect|technician|chef)\b/i;
 const ACTION_START_RE = /^(troubleshoot|resolve|diagnose|support|install|replace|configure|configured|deploy|deployed|maintain|maintained|document|documented|deliver|delivered|manage|managed|assist|assisted|prepare|prepared|coordinate|coordinated|operate|operated|repair|repaired|image|imaged|build|built|lead|led|own|owned|provide|provided)\b/i;
@@ -23,13 +25,20 @@ export function looksLikeNewRoleStart(line) {
 }
 
 function splitDateFromLine(line = "") {
-  const match = String(line).match(DATE_RANGE_RE);
-  if (!match) {
-    return { withoutDate: line.trim(), dateRange: "" };
+  const text = String(line || "");
+  const matches = Array.from(text.matchAll(DATE_RANGE_GLOBAL_RE));
+  if (!matches.length) {
+    return { withoutDate: text.trim(), dateRange: "" };
   }
+
+  const lastMatch = matches[matches.length - 1];
   return {
-    withoutDate: line.replace(match[0], "").replace(/[|,–—-]\s*$/, "").trim(),
-    dateRange: match[0].trim()
+    withoutDate: text
+      .replace(DATE_RANGE_GLOBAL_RE, " ")
+      .replace(/\s*[|,–—-]\s*$/, "")
+      .replace(/\s{2,}/g, " ")
+      .trim(),
+    dateRange: lastMatch[0].trim()
   };
 }
 

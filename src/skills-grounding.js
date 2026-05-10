@@ -15,6 +15,7 @@ const SKILL_VOCABULARY = [
   { canonical: "OKRs",                    aliases: ["okrs", "okr", "kpis", "kpi"] },
   { canonical: "Agile",                   aliases: ["agile", "scrum", "sprint planning", "kanban", "agile methodology"] },
   { canonical: "Competitive Analysis",    aliases: ["competitive analysis", "competitive intelligence", "market research"] },
+  { canonical: "AI Infrastructure",       aliases: ["ai infrastructure", "infrastructure systems", "datacenter", "data center", "nvidia", "h100", "h200", "gb200", "hpc", "high-performance computing", "liquid cooling", "pcie"] },
 
   // ── Engineering ─────────────────────────────────────────────────────
   { canonical: "Python",          aliases: ["python"] },
@@ -116,11 +117,19 @@ const SKILL_VOCABULARY = [
 
 const ROLE_SKILL_PRIORITIES = [
   {
+    pattern: /ai infrastructure|infrastructure product|hardware product|hpc/i,
+    preferred: [
+      "AI Infrastructure", "Product Strategy", "Product Analytics", "Experimentation",
+      "Go-to-Market Strategy", "Stakeholder Management", "Roadmap Prioritization",
+      "Growth Strategy", "User Research", "SQL"
+    ]
+  },
+  {
     pattern: /product manager|product management|pm\b/i,
     preferred: [
       "Product Strategy", "Roadmap Prioritization", "Experimentation", "Product Analytics",
       "SQL", "Stakeholder Management", "User Research", "Growth Strategy",
-      "Go-to-Market Strategy", "OKRs", "Agile", "Product Discovery", "Jira", "Figma"
+      "Go-to-Market Strategy", "Product Discovery", "Monetization", "Competitive Analysis"
     ]
   },
   {
@@ -179,6 +188,13 @@ const ROLE_SKILL_PRIORITIES = [
       "Risk Management", "Process Improvement", "Notion"
     ]
   },
+];
+
+const ROLE_LOW_SIGNAL_SKILLS = [
+  {
+    pattern: /product manager|product management|pm\b|ai infrastructure|infrastructure product|hardware product|hpc/i,
+    skills: new Set(["Jira", "OKRs", "Agile", "Figma"])
+  }
 ];
 
 const GENERIC_REJECTION_PATTERNS = [
@@ -264,6 +280,10 @@ function getRolePriorityList(targetRole = "") {
   return ROLE_SKILL_PRIORITIES.find((entry) => entry.pattern.test(targetRole || ""))?.preferred || [];
 }
 
+function getRoleLowSignalSkills(targetRole = "") {
+  return ROLE_LOW_SIGNAL_SKILLS.find((entry) => entry.pattern.test(targetRole || ""))?.skills || new Set();
+}
+
 export function buildSkillActionPreview({
   action,
   currentText = "",
@@ -273,6 +293,7 @@ export function buildSkillActionPreview({
   const current = normalizeSkillLines(currentText);
   const supporting = normalizeSkillLines(supportingText);
   const rolePreferred = getRolePriorityList(targetRole);
+  const lowSignal = getRoleLowSignalSkills(targetRole);
 
   const ranked = new Map();
   for (const skill of current.accepted) {
@@ -286,6 +307,7 @@ export function buildSkillActionPreview({
   }
 
   const suggested = [...ranked.entries()]
+    .filter(([skill]) => !lowSignal.has(skill))
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
     .map(([skill]) => skill)
     .slice(0, action === "align" ? 10 : 8);
