@@ -20,7 +20,7 @@ test("buildExperienceSuggestions returns concise per-bullet suggestions", () => 
   const suggestions = buildExperienceSuggestions({
     entries: [{
       title: "IT Support Specialist",
-      company: "Safeway",
+      company: "Example Retail",
       location: "Northern California",
       dateRange: "",
       bullets: ["Worked on installing equipment across store locations"]
@@ -59,7 +59,7 @@ test("experience suggestions flag bullets that lack quantified scope or results"
   const suggestions = buildExperienceSuggestions({
     entries: [{
       title: "Service & Delivery Technician",
-      company: "Safeway",
+      company: "Example Retail",
       dateRange: "July 2025 - Present",
       bullets: [
         "Troubleshoot and resolve hardware and software issues for retail store systems and devices",
@@ -76,7 +76,7 @@ test("experience suggestions flag tense and filler issues", () => {
   const suggestions = buildExperienceSuggestions({
     entries: [{
       title: "Sushi Chef",
-      company: "Mikuni",
+      company: "Example Restaurant",
       dateRange: "September 2021 - June 2025",
       bullets: [
         "Manage order accuracy and multitasking under pressure",

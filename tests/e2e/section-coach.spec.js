@@ -16,7 +16,7 @@ SUMMARY
 Hardworking team player looking for a job.
 
 EXPERIENCE
-IT Support Specialist - Safeway, Northern California
+IT Support Specialist - Example Retail, Northern California
 - Worked on installing equipment across store locations
 `);
   await page.locator("#target-role").fill("IT Support Specialist");
@@ -41,7 +41,7 @@ SUMMARY
 IT support specialist with retail systems experience.
 
 EXPERIENCE
-IT Support Specialist - Safeway, Northern California | Summer 2022
+IT Support Specialist - Example Retail, Northern California | Summer 2022
 - Installed equipment across store locations
 `);
   await page.locator("#target-role").fill("IT Support Specialist");
@@ -66,7 +66,7 @@ SUMMARY
 Hardworking team player looking for a job.
 
 EXPERIENCE
-IT Support Specialist - Safeway, Northern California
+IT Support Specialist - Example Retail, Northern California
 - Worked on installing equipment across store locations
 `);
   await page.locator("#target-role").fill("IT Support Specialist");
@@ -97,7 +97,7 @@ SUMMARY
 IT support specialist with retail systems experience.
 
 EXPERIENCE
-IT Support Specialist - Safeway, Northern California | 2022 - Present
+IT Support Specialist - Example Retail, Northern California | 2022 - Present
 - Diagnosed and resolved hardware and software issues for retail store systems.
 
 SKILLS
@@ -116,7 +116,7 @@ Hardware Support
   await expect(page.getByText("Tighten wording")).toHaveCount(0);
   await expect(page.getByText("Improve ATS match")).toHaveCount(0);
   await expect(page.locator("#final-draft")).toHaveClass(/resume-preview/);
-  const experienceRow = page.locator(".resume-final-experience-entry", { hasText: "IT Support Specialist - Safeway, Northern California" });
+  const experienceRow = page.locator(".resume-final-experience-entry", { hasText: "IT Support Specialist - Example Retail, Northern California" });
   await expect(experienceRow.locator(".resume-final-experience-date")).toHaveText("2022 - Present");
   await expect(page.locator(".resume-final-compact-list")).toContainText("POS Systems | Networking | Hardware Support");
   await expect(page.locator("#final-draft")).not.toContainText("SKILLS\nPOS Systems\nNetworking\nHardware Support");
@@ -130,12 +130,12 @@ test("final preview splits contact metadata, allows inline edits, and exports ed
       status: 200,
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        candidateName: "RONAK BHATIA",
+        candidateName: "ALEX RIVERA",
         sectionEditorData: [
           {
             id: "heading",
             label: "Contact Info",
-            proposedText: "RONAK BHATIA | Spring, TX | ronak@lyoko.com | linkedin.com/in/ronakbhatia | 805-428-7218",
+            proposedText: "ALEX RIVERA | Austin, TX | alex@example.com | linkedin.com/in/alexrivera | 555-010-2200",
             status: "ok",
             suggestions: []
           },
@@ -149,7 +149,7 @@ test("final preview splits contact metadata, allows inline edits, and exports ed
           {
             id: "experience",
             label: "Experience",
-            proposedText: "Product Manager - Hewlett Packard Enterprise | Aug 2023 - Present\n- Enable $100M+ in sales through direct customer engagement.\n\nCo-Founder - LYOKO LLC (lyoko.com) Jun 2022 - Aug 2022 Jan 2022 - Present\n- Created $7K+ annual revenue through subscriptions and commissions.",
+            proposedText: "Product Manager - Example Hardware Co | Aug 2023 - Present\n- Enable $100M+ in sales through direct customer engagement.\n\nCo-Founder - Example Events LLC (example-events.com) Jun 2022 - Aug 2022 Jan 2022 - Present\n- Created $7K+ annual revenue through subscriptions and commissions.",
             status: "ok",
             suggestions: []
           },
@@ -186,7 +186,7 @@ test("final preview splits contact metadata, allows inline edits, and exports ed
 
   await page.goto("/");
   await page.getByRole("tab", { name: "Paste text" }).click();
-  await page.locator("#resume-text").fill("RONAK BHATIA");
+  await page.locator("#resume-text").fill("ALEX RIVERA");
   await page.locator("#target-role").fill("Product Manager");
   await page.getByRole("button", { name: "Analyze my resume" }).click();
 
@@ -194,11 +194,11 @@ test("final preview splits contact metadata, allows inline edits, and exports ed
     await page.getByRole("button", { name: /Continue|Finish/ }).click();
   }
 
-  await expect(page.locator(".resume-final-header h1")).toHaveText("RONAK BHATIA");
-  await expect(page.locator(".resume-final-contact")).toHaveText("Spring, TX | ronak@lyoko.com | linkedin.com/in/ronakbhatia | 805-428-7218");
+  await expect(page.locator(".resume-final-header h1")).toHaveText("ALEX RIVERA");
+  await expect(page.locator(".resume-final-contact")).toHaveText("Austin, TX | alex@example.com | linkedin.com/in/alexrivera | 555-010-2200");
   await expect(page.locator("#final-draft")).toHaveAttribute("contenteditable", "true");
-  const doubleDateRow = page.locator(".resume-final-experience-entry", { hasText: "Co-Founder - LYOKO LLC" });
-  await expect(doubleDateRow.locator(".resume-final-experience-role")).toHaveText("Co-Founder - LYOKO LLC (lyoko.com)");
+  const doubleDateRow = page.locator(".resume-final-experience-entry", { hasText: "Co-Founder - Example Events LLC" });
+  await expect(doubleDateRow.locator(".resume-final-experience-role")).toHaveText("Co-Founder - Example Events LLC (example-events.com)");
   await expect(doubleDateRow.locator(".resume-final-experience-date")).toHaveText("Jan 2022 - Present");
   await expect(doubleDateRow.locator(".resume-final-experience-role")).not.toContainText("Jun 2022");
 
@@ -224,14 +224,14 @@ IT support specialist with retail systems experience.
 
 EXPERIENCE
 Service & Delivery Technician -
-Safeway, Northern California
+Example Retail, Northern California
 July 2025 - Present
 Troubleshoot and resolve hardware
 and software issues for retail store
 systems and devices
 Support installation, replacement,
 and configuration of IT equipment
-Sushi Chef - Mikuni, Davis
+Sushi Chef - Example Restaurant, Davis
 September 2021 - June 2025
 Delivered customer service in fast-
 paced restaurant environment
@@ -263,9 +263,9 @@ DJing
   await page.getByRole("button", { name: /Continue/ }).click();
 
   await expect(page.getByRole("heading", { name: "Experience" })).toBeVisible();
-  await expect(page.locator("#section-textarea")).toHaveValue(/Service & Delivery Technician - Safeway, Northern California\s+July 2025 - Present/);
+  await expect(page.locator("#section-textarea")).toHaveValue(/Service & Delivery Technician - Example Retail, Northern California\s+July 2025 - Present/);
   await expect(page.locator("#section-textarea")).toHaveValue(/- Troubleshoot and resolve hardware and software issues/);
-  const sushiPreview = page.locator(".experience-preview-entry", { hasText: "Sushi Chef - Mikuni, Davis" });
+  const sushiPreview = page.locator(".experience-preview-entry", { hasText: "Sushi Chef - Example Restaurant, Davis" });
   await expect(sushiPreview.locator(".experience-preview-date")).toHaveText("September 2021 - June 2025");
   await expect(page.getByText("Add scope or result").first()).toBeVisible();
   await expect(page.getByText("Trim filler wording").first()).toBeVisible();
@@ -301,14 +301,14 @@ IT support specialist with retail systems experience.
 
 EXPERIENCE
 Service & Delivery Technician -
-Safeway, Northern California
+Example Retail, Northern California
 July 2025 - Present
 Troubleshoot and resolve hardware
 and software issues for retail store
 systems and devices
 Support installation, replacement,
 and configuration of IT equipment
-Sushi Chef - Mikuni, Davis
+Sushi Chef - Example Restaurant, Davis
 September 2021 - June 2025
 Delivered customer service in fast-
 paced restaurant environment
@@ -364,7 +364,7 @@ SUMMARY
 IT support specialist with retail systems experience.
 
 EXPERIENCE
-IT Support Specialist - Safeway, California
+IT Support Specialist - Example Retail, California
 2022 - Present
 - Resolved POS and device issues.
 
@@ -429,7 +429,7 @@ SUMMARY
 IT support specialist with retail systems experience.
 
 EXPERIENCE
-IT Support Specialist - Safeway, Northern California | 2022 - Present
+IT Support Specialist - Example Retail, Northern California | 2022 - Present
 - Diagnosed and resolved hardware and software issues for retail store systems.
 
 SKILLS

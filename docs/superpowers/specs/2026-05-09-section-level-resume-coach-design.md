@@ -106,7 +106,7 @@ The experience parser should produce structured entries:
 ```js
 {
   title: "IT Support Specialist",
-  company: "Safeway",
+  company: "Example Retail",
   location: "Northern California",
   dateRange: "2022 - Present",
   bullets: [...]
@@ -137,7 +137,7 @@ Example:
 ```text
 Issue: Add scope
 Before: Install, replace, configure, and maintain IT equipment across store locations.
-After: Configured and maintained POS, printer, handheld, and network equipment across Northern California Safeway locations.
+After: Configured and maintained POS, printer, handheld, and network equipment across Northern California Example Retail locations.
 Why: Makes the environment and equipment scope clearer without inventing metrics.
 ```
 

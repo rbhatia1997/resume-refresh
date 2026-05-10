@@ -210,14 +210,14 @@ jane@example.com
 
 EXPERIENCE
 Service & Delivery Technician -
-Safeway, Northern California
+Example Retail, Northern California
 July 2025 - Present
 Troubleshoot and resolve hardware
 and software issues for retail store
 systems and devices
 Support installation, replacement,
 and configuration of IT equipment
-Sushi Chef - Mikuni, Davis
+Sushi Chef - Example Restaurant, Davis
 September 2021 - June 2025
 Delivered customer service in fast-
 paced restaurant environment
@@ -229,9 +229,9 @@ multitasking under pressure
 
   const experience = result.sectionEditorData.find((section) => section.id === "experience");
 
-  assert.match(experience.currentText, /Service & Delivery Technician - Safeway, Northern California\s+July 2025 - Present/);
+  assert.match(experience.currentText, /Service & Delivery Technician - Example Retail, Northern California\s+July 2025 - Present/);
   assert.match(experience.currentText, /- Troubleshoot and resolve hardware and software issues/);
-  assert.match(experience.currentText, /Sushi Chef - Mikuni, Davis\s+September 2021 - June 2025/);
+  assert.match(experience.currentText, /Sushi Chef - Example Restaurant, Davis\s+September 2021 - June 2025/);
   assert.equal(experience.parsedFields.entries.length, 2);
   assert.ok(experience.suggestions.some((item) => item.title === "Add scope or result"));
   assert.notEqual(experience.status, "ok");
@@ -248,7 +248,7 @@ SUMMARY
 IT support specialist with retail systems experience.
 
 EXPERIENCE
-IT Support Specialist - Safeway, California
+IT Support Specialist - Example Retail, California
 2022 - Present
 - Resolved POS and device issues.
 
@@ -289,7 +289,7 @@ SUMMARY
 IT support specialist with retail systems experience.
 
 EXPERIENCE
-IT Support Specialist - Safeway, California
+IT Support Specialist - Example Retail, California
 2022 - Present
 - Resolved POS and device issues.
 
@@ -326,7 +326,7 @@ SUMMARY
 IT support specialist with retail systems experience.
 
 EXPERIENCE
-IT Support Specialist - Safeway, California
+IT Support Specialist - Example Retail, California
 2022 - Present
 - Resolved POS and device issues.
 
@@ -353,14 +353,14 @@ test("analyzeResume removes duplicate inline dates from experience preview headi
   const result = analyzeResume({
     linkedinText: "",
     resumeText: `
-Ronak Bhatia
-ronak@example.com
+Alex Rivera
+alex@example.com
 
 SUMMARY
 Product manager with AI infrastructure experience.
 
 EXPERIENCE
-Co-Founder - LYOKO LLC (lyoko.com) Jun 2022 - Aug 2022 Jan 2022 - Present
+Co-Founder - Example Events LLC (example-events.com) Jun 2022 - Aug 2022 Jan 2022 - Present
 - Created $7K+ annual revenue through subscriptions and commissions with 14x growth rate YoY.
 
 SKILLS
@@ -376,23 +376,23 @@ Example University
   const experience = result.sectionEditorData.find((section) => section.id === "experience");
 
   assert.ok(experience);
-  assert.doesNotMatch(experience.currentText, /LYOKO LLC \(lyoko\.com\) Jun 2022/);
-  assert.match(experience.currentText, /Co-Founder - LYOKO LLC \(lyoko\.com\)\s+Jan 2022 - Present/);
-  assert.doesNotMatch(experience.proposedText, /LYOKO LLC \(lyoko\.com\) Jun 2022/);
+  assert.doesNotMatch(experience.currentText, /Example Events LLC \(example-events\.com\) Jun 2022/);
+  assert.match(experience.currentText, /Co-Founder - Example Events LLC \(example-events\.com\)\s+Jan 2022 - Present/);
+  assert.doesNotMatch(experience.proposedText, /Example Events LLC \(example-events\.com\) Jun 2022/);
 });
 
 test("analyzeResume uses LinkedIn-backed skills instead of low-signal product tools", () => {
   const result = analyzeResume({
     linkedinText: "Architected AI infrastructure and datacenter systems across NVIDIA H100/H200 deployments, product analytics, experimentation, go-to-market planning, growth strategy, and product strategy.",
     resumeText: `
-Ronak Bhatia
-ronak@example.com
+Alex Rivera
+alex@example.com
 
 SUMMARY
 Product manager with AI infrastructure experience.
 
 EXPERIENCE
-Product Manager - HPE Aug 2023 - Present
+Product Manager - Example Hardware Co Aug 2023 - Present
 - Architected AI infrastructure systems for NVIDIA H100/H200 deployments.
 
 SKILLS

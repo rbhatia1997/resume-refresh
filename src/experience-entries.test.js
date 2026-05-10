@@ -4,14 +4,14 @@ import { parseExperienceEntries, formatExperienceEntryHeading } from "./experien
 
 test("parseExperienceEntries splits title company location and date range", () => {
   const entries = parseExperienceEntries([
-    "IT Support Specialist - Safeway, Northern California | 2022 - Present",
+    "IT Support Specialist - Example Retail, Northern California | 2022 - Present",
     "- Diagnose and resolve hardware and software issues",
     "- Install and maintain POS systems"
   ]);
 
   assert.equal(entries.length, 1);
   assert.equal(entries[0].title, "IT Support Specialist");
-  assert.equal(entries[0].company, "Safeway");
+  assert.equal(entries[0].company, "Example Retail");
   assert.equal(entries[0].location, "Northern California");
   assert.equal(entries[0].dateRange, "2022 - Present");
   assert.deepEqual(entries[0].bullets, [
@@ -24,25 +24,25 @@ test("formatExperienceEntryHeading emits role/company/location separate from dat
   assert.equal(
     formatExperienceEntryHeading({
       title: "IT Support Specialist",
-      company: "Safeway",
+      company: "Example Retail",
       location: "Northern California",
       dateRange: "2022 - Present"
     }),
-    "IT Support Specialist - Safeway, Northern California 2022 - Present"
+    "IT Support Specialist - Example Retail, Northern California 2022 - Present"
   );
 });
 
 test("parseExperienceEntries recovers OCR-style roles and wrapped unbulleted bullets", () => {
   const entries = parseExperienceEntries([
     "Service & Delivery Technician -",
-    "Safeway, Northern California",
+    "Example Retail, Northern California",
     "July 2025 - Present",
     "Troubleshoot and resolve hardware",
     "and software issues for retail store",
     "systems and devices",
     "Support installation, replacement,",
     "and configuration of IT equipment",
-    "Sushi Chef - Mikuni, Davis",
+    "Sushi Chef - Example Restaurant, Davis",
     "September 2021 - June 2025",
     "Delivered customer service in fast-",
     "paced restaurant environment",
@@ -52,7 +52,7 @@ test("parseExperienceEntries recovers OCR-style roles and wrapped unbulleted bul
 
   assert.equal(entries.length, 2);
   assert.equal(entries[0].title, "Service & Delivery Technician");
-  assert.equal(entries[0].company, "Safeway");
+  assert.equal(entries[0].company, "Example Retail");
   assert.equal(entries[0].location, "Northern California");
   assert.equal(entries[0].dateRange, "July 2025 - Present");
   assert.deepEqual(entries[0].bullets, [
@@ -60,7 +60,7 @@ test("parseExperienceEntries recovers OCR-style roles and wrapped unbulleted bul
     "Support installation, replacement, and configuration of IT equipment"
   ]);
   assert.equal(entries[1].title, "Sushi Chef");
-  assert.equal(entries[1].company, "Mikuni");
+  assert.equal(entries[1].company, "Example Restaurant");
   assert.equal(entries[1].dateRange, "September 2021 - June 2025");
   assert.deepEqual(entries[1].bullets, [
     "Delivered customer service in fast-paced restaurant environment",
@@ -94,28 +94,28 @@ test("parseExperienceEntries treats seasonal dates as editable date ranges", () 
 
 test("parseExperienceEntries strips duplicate inline dates from role headings", () => {
   const entries = parseExperienceEntries([
-    "Co-Founder - LYOKO LLC (lyoko.com) Jun 2022 - Aug 2022 Jan 2022 - Present",
+    "Co-Founder - Example Events LLC (example-events.com) Jun 2022 - Aug 2022 Jan 2022 - Present",
     "- Created $7K+ annual revenue through subscriptions and commissions with 14x growth rate YoY."
   ]);
 
   assert.equal(entries.length, 1);
   assert.equal(entries[0].title, "Co-Founder");
-  assert.equal(entries[0].company, "LYOKO LLC (lyoko.com)");
+  assert.equal(entries[0].company, "Example Events LLC (example-events.com)");
   assert.equal(entries[0].dateRange, "Jan 2022 - Present");
   assert.equal(
     formatExperienceEntryHeading(entries[0]),
-    "Co-Founder - LYOKO LLC (lyoko.com) Jan 2022 - Present"
+    "Co-Founder - Example Events LLC (example-events.com) Jan 2022 - Present"
   );
 });
 
 test("formatExperienceEntryHeading can pad dates for monospace editor previews", () => {
   const heading = formatExperienceEntryHeading({
     title: "Sushi Chef",
-    company: "Mikuni",
+    company: "Example Restaurant",
     location: "Davis",
     dateRange: "September 2021 - June 2025"
   }, { alignDate: true, width: 68 });
 
-  assert.match(heading, /^Sushi Chef - Mikuni, Davis\s+September 2021 - June 2025$/);
+  assert.match(heading, /^Sushi Chef - Example Restaurant, Davis\s+September 2021 - June 2025$/);
   assert.equal(heading.length, 68);
 });

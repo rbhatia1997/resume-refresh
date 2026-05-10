@@ -120,14 +120,14 @@ import { parseExperienceEntries, formatExperienceEntryHeading } from "./experien
 
 test("parseExperienceEntries splits title company location and date range", () => {
   const entries = parseExperienceEntries([
-    "IT Support Specialist - Safeway, Northern California | 2022 - Present",
+    "IT Support Specialist - Example Retail, Northern California | 2022 - Present",
     "- Diagnose and resolve hardware and software issues",
     "- Install and maintain POS systems"
   ]);
 
   assert.equal(entries.length, 1);
   assert.equal(entries[0].title, "IT Support Specialist");
-  assert.equal(entries[0].company, "Safeway");
+  assert.equal(entries[0].company, "Example Retail");
   assert.equal(entries[0].location, "Northern California");
   assert.equal(entries[0].dateRange, "2022 - Present");
   assert.deepEqual(entries[0].bullets, [
@@ -140,11 +140,11 @@ test("formatExperienceEntryHeading emits role/company/location separate from dat
   assert.equal(
     formatExperienceEntryHeading({
       title: "IT Support Specialist",
-      company: "Safeway",
+      company: "Example Retail",
       location: "Northern California",
       dateRange: "2022 - Present"
     }),
-    "IT Support Specialist - Safeway, Northern California 2022 - Present"
+    "IT Support Specialist - Example Retail, Northern California 2022 - Present"
   );
 });
 ```
@@ -287,7 +287,7 @@ test("buildExperienceSuggestions returns concise per-bullet suggestions", () => 
   const suggestions = buildExperienceSuggestions({
     entries: [{
       title: "IT Support Specialist",
-      company: "Safeway",
+      company: "Example Retail",
       location: "Northern California",
       dateRange: "",
       bullets: ["Worked on installing equipment across store locations"]
@@ -520,7 +520,7 @@ SUMMARY
 Hardworking team player looking for a job.
 
 EXPERIENCE
-IT Support Specialist - Safeway, Northern California
+IT Support Specialist - Example Retail, Northern California
 - Worked on installing equipment across store locations
 `);
   await page.locator("#target-role").fill("IT Support Specialist");
@@ -613,7 +613,7 @@ SUMMARY
 Hardworking team player looking for a job.
 
 EXPERIENCE
-IT Support Specialist - Safeway, Northern California
+IT Support Specialist - Example Retail, Northern California
 - Worked on installing equipment across store locations
 `);
   await page.locator("#target-role").fill("IT Support Specialist");
@@ -738,7 +738,7 @@ SUMMARY
 IT support specialist with retail systems experience.
 
 EXPERIENCE
-IT Support Specialist - Safeway, Northern California | 2022 - Present
+IT Support Specialist - Example Retail, Northern California | 2022 - Present
 - Diagnosed and resolved hardware and software issues for retail store systems.
 
 SKILLS
@@ -800,9 +800,9 @@ import { splitJobDate } from "./export-format.js";
 
 test("splitJobDate supports role company location with trailing year range", () => {
   assert.deepEqual(
-    splitJobDate("IT Support Specialist - Safeway, Northern California 2022 - Present"),
+    splitJobDate("IT Support Specialist - Example Retail, Northern California 2022 - Present"),
     {
-      role: "IT Support Specialist - Safeway, Northern California",
+      role: "IT Support Specialist - Example Retail, Northern California",
       date: "2022 - Present"
     }
   );

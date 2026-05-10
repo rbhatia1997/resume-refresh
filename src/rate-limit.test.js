@@ -10,7 +10,7 @@ SUMMARY
 IT support specialist with retail systems experience.
 
 EXPERIENCE
-IT Support Specialist - Safeway, California
+IT Support Specialist - Example Retail, California
 2022 - Present
 - Resolved POS and device issues.
 

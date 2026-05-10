@@ -1086,6 +1086,17 @@ function docxDividerBorder() {
   };
 }
 
+function docxEntryDividerBorder() {
+  return {
+    top: {
+      style: BorderStyle.SINGLE,
+      color: "EDF0F4",
+      size: 4,
+      space: 4
+    }
+  };
+}
+
 async function buildDocx(text) {
   const sections = parseResumeForExport(text);
   assertOnePageExportBudget(sections);
@@ -1114,6 +1125,7 @@ async function buildDocx(text) {
     if (!lines.length) {
       continue;
     }
+    let experienceEntryCount = 0;
 
     paragraphs.push(new Paragraph({
       children: [new TextRun({ text: title.toUpperCase(), bold: true, size: 16, color: exportHeadingColor })],
@@ -1123,6 +1135,7 @@ async function buildDocx(text) {
 
     for (const line of sections[key]) {
       if (!line) {
+        if (key === "experience") continue;
         paragraphs.push(new Paragraph({ spacing: { after: 40 } }));
         continue;
       }
@@ -1131,15 +1144,18 @@ async function buildDocx(text) {
       if (!isBullet) {
         const split = key === "experience" ? splitJobDate(line) : null;
         if (split) {
+          const isSubsequentExperienceEntry = experienceEntryCount > 0;
+          experienceEntryCount += 1;
           // Job title line: role left, date right-aligned via tab stop
           paragraphs.push(new Paragraph({
             tabStops: [{ type: TabStopType.RIGHT, position: docxRightTabTwips }],
+            border: isSubsequentExperienceEntry ? docxEntryDividerBorder() : undefined,
             children: [
               new TextRun({ text: split.role, bold: true, size: 21, color: exportInkColor }),
               new TextRun({ text: "\t" }),
               new TextRun({ text: split.date, color: exportMutedColor, size: 19 })
             ],
-            spacing: { before: 35, after: 35 }
+            spacing: { before: isSubsequentExperienceEntry ? 120 : 35, after: 35 }
           }));
         } else {
           paragraphs.push(new Paragraph({
@@ -1211,6 +1227,7 @@ async function buildPdf(text) {
   const muted = rgb(0.39, 0.45, 0.55);
   const heading = rgb(0.2, 0.25, 0.33);
   const rule = rgb(0.84, 0.87, 0.9);
+  const entryRule = rgb(0.93, 0.94, 0.96);
   let y = page.getHeight() - margin;
   let clipped = false;
 
@@ -1279,6 +1296,18 @@ async function buildPdf(text) {
     });
   };
 
+  const drawEntryDivider = () => {
+    if (clipped) return;
+    y -= 5;
+    page.drawLine({
+      start: { x: margin, y },
+      end: { x: margin + maxWidth, y },
+      thickness: 0.45,
+      color: entryRule
+    });
+    y -= 8;
+  };
+
   if (sections.header[0]) {
     drawCenteredWrapped(sections.header[0], {
       size: 16,
@@ -1304,6 +1333,7 @@ async function buildPdf(text) {
     if (!lines.length) {
       continue;
     }
+    let experienceEntryCount = 0;
 
     ensureSpace(lineHeight * 2);
     if (!clipped) {
@@ -1322,6 +1352,7 @@ async function buildPdf(text) {
     for (const line of sections[key]) {
       if (clipped) break;
       if (!line) {
+        if (key === "experience") continue;
         y -= 4;
         continue;
       }
@@ -1342,6 +1373,10 @@ async function buildPdf(text) {
         if (split) {
           ensureSpace(lineHeight);
           if (!clipped) {
+            if (experienceEntryCount > 0) {
+              drawEntryDivider();
+            }
+            experienceEntryCount += 1;
             const dateSize = 9.8;
             const dateWidth = font.widthOfTextAtSize(split.date, dateSize);
             const roleLines = wrapText(split.role, boldFont, fontSize, Math.max(220, maxWidth - dateWidth - 24));

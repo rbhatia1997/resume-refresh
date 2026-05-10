@@ -23,7 +23,7 @@ SUMMARY
 IT support specialist with retail systems experience.
 
 EXPERIENCE
-IT Support Specialist - Safeway, California 2022 - Present
+IT Support Specialist - Example Retail, California 2022 - Present
 - Resolved POS and device issues across store systems.
 - Supported device deployment and hardware troubleshooting.
 
@@ -38,14 +38,14 @@ Example High School
 `;
 
 const previewStyledResume = `
-RONAK BHATIA
-Spring, TX | ronak@lyoko.com | linkedin.com/in/ronakbhatia | 805-428-7218
+ALEX RIVERA
+Austin, TX | alex@example.com | linkedin.com/in/alexrivera | 555-010-2200
 
 SUMMARY
 Product manager with 5+ years of experience delivering AI infrastructure systems.
 
 EXPERIENCE
-Product Manager - Hewlett Packard Enterprise Aug 2023 - Present
+Product Manager - Example Hardware Co Aug 2023 - Present
 - Enable $100M+ in sales through direct customer engagement.
 
 SKILLS
@@ -63,7 +63,7 @@ SUMMARY
 Operations and product generalist with experience across software launches and community programs.
 
 EXPERIENCE
-Co-Founder - LYOKO LLC (lyoko.com) Jun 2022 - Aug 2022 Jan 2022 - Present
+Co-Founder - Example Events LLC (example-events.com) Jun 2022 - Aug 2022 Jan 2022 - Present
 - Built event operations tooling for 30+ shows across multiple countries.
 
 SKILLS
@@ -72,8 +72,8 @@ Project Management
 Human Centered Design
 
 EDUCATION
-M.S. Computer Science | University of Illinois Urbana-Champaign | 3.95 GPA Dec 2024
-B.S. Engineering | Harvey Mudd College May 2019
+M.S. Computer Science | Example Graduate University | 3.95 GPA Dec 2024
+B.S. Engineering | Example College May 2019
 
 PROJECTS
 Community Hardware Lab
@@ -99,7 +99,7 @@ SUMMARY
 IT support specialist with retail systems experience.
 
 EXPERIENCE
-IT Support Specialist - Safeway, California 2022 - Present
+IT Support Specialist - Example Retail, California 2022 - Present
 ${bullets}
 `;
 }
@@ -127,14 +127,14 @@ test("export formatting compacts skills into grouped rows", () => {
 test("DOCX export matches the final preview hierarchy", async () => {
   const response = await handleRequest(exportRequest({
     format: "docx",
-    candidateName: "Ronak Bhatia",
+    candidateName: "Alex Rivera",
     text: previewStyledResume
   }, "203.0.113.13"), { serveStatic: false });
 
   const xml = await readDocxDocumentXml(response);
   assert.match(xml, /<w:jc w:val="center"\/>/);
   assert.match(xml, /<w:pBdr><w:bottom w:val="single"/);
-  assert.match(xml, /<w:b\/>.*?<w:sz w:val="21"\/>.*?<w:t[^>]*>Product Manager - Hewlett Packard Enterprise<\/w:t>/);
+  assert.match(xml, /<w:b\/>.*?<w:sz w:val="21"\/>.*?<w:t[^>]*>Product Manager - Example Hardware Co<\/w:t>/);
   assert.match(xml, /<w:tabs><w:tab w:val="right"/);
 });
 
@@ -146,11 +146,35 @@ test("DOCX export only right-aligns dates for experience rows", async () => {
   }, "203.0.113.14"), { serveStatic: false });
 
   const xml = await readDocxDocumentXml(response);
-  assert.match(xml, /<w:t[^>]*>Co-Founder - LYOKO LLC \(lyoko\.com\)<\/w:t>/);
+  assert.match(xml, /<w:t[^>]*>Co-Founder - Example Events LLC \(example-events\.com\)<\/w:t>/);
   assert.match(xml, /<w:t[^>]*>Jan 2022 - Present<\/w:t>/);
-  assert.doesNotMatch(xml, /Co-Founder - LYOKO LLC \(lyoko\.com\) Jun 2022/);
+  assert.doesNotMatch(xml, /Co-Founder - Example Events LLC \(example-events\.com\) Jun 2022/);
   assert.equal((xml.match(/<w:tabs>/g) || []).length, 1);
-  assert.match(xml, /<w:t[^>]*>M\.S\. Computer Science \| University of Illinois Urbana-Champaign \| 3\.95 GPA Dec 2024<\/w:t>/);
+  assert.match(xml, /<w:t[^>]*>M\.S\. Computer Science \| Example Graduate University \| 3\.95 GPA Dec 2024<\/w:t>/);
+});
+
+test("DOCX export adds preview-style dividers between experience entries", async () => {
+  const response = await handleRequest(exportRequest({
+    format: "docx",
+    candidateName: "Alex Rivera",
+    text: `
+Alex Rivera
+alex@example.com
+
+SUMMARY
+Product manager with AI infrastructure experience.
+
+EXPERIENCE
+Product Manager - Example Hardware Co Aug 2023 - Present
+- Built AI infrastructure products.
+
+Co-Founder - Example Events LLC (example-events.com) Jun 2022 - Aug 2022
+- Created event operations software.
+`
+  }, "203.0.113.15"), { serveStatic: false });
+
+  const xml = await readDocxDocumentXml(response);
+  assert.match(xml, /<w:top w:val="single"/);
 });
 
 test("PDF and DOCX export reject resumes that exceed the one-page budget", async () => {
