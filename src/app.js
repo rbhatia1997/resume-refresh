@@ -1117,7 +1117,7 @@ async function buildDocx(text) {
 
     paragraphs.push(new Paragraph({
       children: [new TextRun({ text: title.toUpperCase(), bold: true, size: 16, color: exportHeadingColor })],
-      spacing: { before: 105, after: 45 },
+      spacing: { before: 105, after: 70 },
       border: docxDividerBorder()
     }));
 
@@ -1316,7 +1316,7 @@ async function buildPdf(text) {
       });
       y -= 6;
       drawDivider();
-      y -= 9;
+      y -= 12;
     }
 
     for (const line of sections[key]) {
