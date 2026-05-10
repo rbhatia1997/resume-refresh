@@ -235,3 +235,77 @@ multitasking under pressure
   assert.ok(experience.suggestions.some((item) => item.title === "Add scope or result"));
   assert.notEqual(experience.status, "ok");
 });
+
+test("analyzeResume preserves unknown heading-like sections as additional sections", () => {
+  const result = analyzeResume({
+    linkedinText: "",
+    resumeText: `
+Jane Doe
+jane@example.com
+
+SUMMARY
+IT support specialist with retail systems experience.
+
+EXPERIENCE
+IT Support Specialist - Safeway, California
+2022 - Present
+- Resolved POS and device issues.
+
+EDUCATION
+Example High School
+2022
+
+PUBLICATIONS
+Retail Systems Troubleshooting Notes
+
+COMMUNITY INVOLVEMENT
+- Hosted local computer-building workshops
+`,
+    targetRole: "IT Support Specialist"
+  });
+
+  const education = result.sectionEditorData.find((section) => section.id === "education");
+  const publications = result.sectionEditorData.find((section) => section.label === "Publications");
+  const community = result.sectionEditorData.find((section) => section.label === "Community Involvement");
+
+  assert.ok(publications);
+  assert.match(publications.currentText, /Retail Systems Troubleshooting Notes/);
+  assert.equal(publications.exportHeader, "PUBLICATIONS");
+  assert.ok(community);
+  assert.match(community.currentText, /Hosted local computer-building workshops/);
+  assert.doesNotMatch(education.currentText, /PUBLICATIONS|COMMUNITY INVOLVEMENT|Retail Systems/i);
+});
+
+test("analyzeResume does not treat all-caps skills as custom section headings", () => {
+  const result = analyzeResume({
+    linkedinText: "",
+    resumeText: `
+Jane Doe
+jane@example.com
+
+SUMMARY
+IT support specialist with retail systems experience.
+
+EXPERIENCE
+IT Support Specialist - Safeway, California
+2022 - Present
+- Resolved POS and device issues.
+
+SKILLS
+SQL
+AWS
+POS Systems
+
+EDUCATION
+Example High School
+2022
+`,
+    targetRole: "IT Support Specialist"
+  });
+
+  const skills = result.sectionEditorData.find((section) => section.id === "skills");
+
+  assert.match(skills.currentText, /SQL/);
+  assert.match(skills.currentText, /AWS/);
+  assert.ok(!result.sectionEditorData.some((section) => section.label === "Sql" || section.label === "Aws"));
+});

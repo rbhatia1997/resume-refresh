@@ -194,6 +194,18 @@ function normalizeHeadingValue(line = "") {
   return String(line || "").toLowerCase().replace(/[^a-z ]/g, " ").replace(/\s+/g, " ").trim();
 }
 
+function customSectionSlug(line = "") {
+  return normalizeHeadingValue(line).replace(/\s+/g, "-");
+}
+
+function displaySectionLabel(line = "") {
+  const words = normalizeHeadingValue(line).split(/\s+/).filter(Boolean);
+  return words.map((word) => {
+    if (word.length <= 3 && word === word.toUpperCase()) return word;
+    return word.charAt(0).toUpperCase() + word.slice(1);
+  }).join(" ");
+}
+
 function isHeading(line) {
   const value = normalizeHeadingValue(line);
   return SECTION_HEADERS.includes(value) || Boolean(resolveCanonicalHeading(value));
@@ -215,6 +227,62 @@ function resolveCanonicalHeading(value) {
   return "";
 }
 
+function looksLikeCustomHeading(line = "", { current = "", previous = "", next = "" } = {}) {
+  const raw = String(line || "").trim();
+  if (!raw || isHeading(raw)) return false;
+  if (current === "header") return false;
+  if (/^[-*•]/.test(raw)) return false;
+  if (/@|https?:|www\.|linkedin\.com/i.test(raw)) return false;
+  if (/\b(19|20)\d{2}\b/.test(raw)) return false;
+  if (/[.,:;!?|]/.test(raw)) return false;
+
+  const normalized = normalizeHeadingValue(raw);
+  const words = normalized.split(/\s+/).filter(Boolean);
+  if (words.length < 1 || words.length > 5) return false;
+  if (normalized.length < 3 || normalized.length > 48) return false;
+
+  const letters = raw.replace(/[^A-Za-z]/g, "");
+  if (letters.length < 3) return false;
+
+  const previousBlank = !String(previous || "").trim();
+  const nextHasContent = Boolean(String(next || "").trim());
+  if (!previousBlank || !nextHasContent) return false;
+
+  const isAllCaps = letters === letters.toUpperCase();
+  if (isAllCaps) return true;
+
+  const titleLikeWords = raw
+    .split(/\s+/)
+    .filter(Boolean)
+    .every((word) => /^(and|or|of|for|in|on|&|\/)$/.test(word.toLowerCase()) || /^[A-Z][A-Za-z&/-]*$/.test(word));
+
+  return titleLikeWords;
+}
+
+function getOrCreateCustomSection(sections, label) {
+  if (!sections._customSections) sections._customSections = [];
+  const base = customSectionSlug(label) || "additional-section";
+  const existing = sections._customSections.find((section) => section.slug === base);
+  if (existing) return existing;
+
+  let id = `custom:${base}`;
+  let suffix = 2;
+  while (sections[id]) {
+    id = `custom:${base}-${suffix}`;
+    suffix += 1;
+  }
+
+  const section = {
+    id,
+    slug: base,
+    label: displaySectionLabel(label),
+    exportHeader: displaySectionLabel(label).toUpperCase()
+  };
+  sections._customSections.push(section);
+  sections[id] = [];
+  return section;
+}
+
 function parseSections(text = "") {
   // Split preserving blank lines so experience entry boundaries survive intact.
   // normalizeWhitespace() has already been applied upstream — just split on \n.
@@ -227,7 +295,8 @@ function parseSections(text = "") {
   let current = "header";
   sections[current] = [];
 
-  for (const line of lines) {
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
     // Only treat non-blank lines as potential headings
     if (line && isHeading(line)) {
       current = canonicalHeading(line);
@@ -236,11 +305,20 @@ function parseSections(text = "") {
       }
       continue;
     }
+    if (line && looksLikeCustomHeading(line, {
+      current,
+      previous: lines[index - 1] || "",
+      next: lines[index + 1] || ""
+    })) {
+      current = getOrCreateCustomSection(sections, line).id;
+      continue;
+    }
     sections[current].push(line); // blank strings preserved — they are entry separators
   }
 
   // Trim leading/trailing blank entries from each section's array
   for (const key of Object.keys(sections)) {
+    if (!Array.isArray(sections[key])) continue;
     const arr = sections[key];
     let start = 0, end = arr.length;
     while (start < end && arr[start] === "") start++;
@@ -346,7 +424,7 @@ const DOMAIN_SIGNALS = [
  * Estimate total years of professional experience from date spans found in the resume.
  */
 function estimateYearsExperience(sections) {
-  const allText = Object.values(sections).flat().join(" ");
+  const allText = Object.values(sections).filter(Array.isArray).flat().join(" ");
   const yearMatches = [...allText.matchAll(/\b((19|20)\d{2})\b/g)];
   const years = yearMatches
     .map(m => parseInt(m[1], 10))
@@ -410,7 +488,7 @@ function extractMostRecentTitle(sections) {
  */
 function inferDomain(sections, targetRole = "") {
   const allText = [
-    ...Object.values(sections).flat(),
+    ...Object.values(sections).filter(Array.isArray).flat(),
     targetRole
   ].join(" ");
 
@@ -1152,7 +1230,7 @@ function extractCandidateName(sections) {
  * Infer candidate career level from resume content signals.
  */
 function inferCandidateLevel(sections, bullets, targetRole = "") {
-  const allText = Object.values(sections).flat().join(" ");
+  const allText = Object.values(sections).filter(Array.isArray).flat().join(" ");
   const expLines = (sections.experience || sections["work experience"] || []).join("\n");
 
   const isStudent  = /\b(student|pursuing|expected graduation|class of 20\d{2}|gpa:?)\b/i.test(allText);
@@ -1188,6 +1266,12 @@ function determineSectionOrder(sections, candidateLevel) {
   for (const id of ["projects", "certifications", "awards", "volunteer", "hobbies", "interests", "languages"]) {
     if (!base.includes(id) && (sections[id] || []).filter(l => l.trim()).length > 0) {
       base.push(id);
+    }
+  }
+
+  for (const custom of sections._customSections || []) {
+    if (!base.includes(custom.id) && (sections[custom.id] || []).filter(l => l.trim()).length > 0) {
+      base.push(custom.id);
     }
   }
 
@@ -1258,9 +1342,11 @@ function buildSectionEditorData({
     : formatExperienceWithAnnotations(rawExpLines);
 
   const order = determineSectionOrder(sections, candidateLevel);
+  const customSectionMap = new Map((sections._customSections || []).map((section) => [section.id, section]));
 
   return order.map(id => {
     const internalId = id === "heading" ? "header" : id;
+    const customSection = customSectionMap.get(id);
 
     const currentLines  = (sections[internalId] || []).filter(l => l.trim());
     const proposedLines = (rewrittenSections[internalId] || []).filter(l => l.trim());
@@ -1362,7 +1448,7 @@ function buildSectionEditorData({
 
     const sectionResult = {
       id,
-      label:      SECTION_DISPLAY_LABELS[id] || id,
+      label:      customSection?.label || SECTION_DISPLAY_LABELS[id] || id,
       currentText,
       proposedText,
       critique:   buildSectionCritique(id, sectionIssues, effectiveStatus),
@@ -1372,6 +1458,11 @@ function buildSectionEditorData({
       parsedFields: id === "heading" ? contactInfo : id === "experience" ? { entries: expEntries } : {},
       parseWarning,
     };
+
+    if (customSection?.exportHeader) {
+      sectionResult.exportHeader = customSection.exportHeader;
+      sectionResult.sectionKind = "additional";
+    }
 
     if (id === "summary") {
       sectionResult.summarySource = sections._summarySource || "none";
@@ -1423,7 +1514,7 @@ export function analyzeResume({ linkedinText = "", linkedinUrl = "", resumeText 
       linkedinCharacters: normalizedLinkedIn.length
     },
     extracted: {
-      sections:           Object.keys(sections),
+      sections:           Object.keys(sections).filter((key) => !key.startsWith("_")),
       bullets:            bullets.length,
       missingKeywords,
       bulletQualityScore: Number(bulletLint.averageScore.toFixed(1)),

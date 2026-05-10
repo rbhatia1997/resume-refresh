@@ -556,13 +556,13 @@ editorBackBtn.addEventListener('click',     () => goBackSection());
 // ── Final view assembly ───────────────────────────────────────────
 function assembleFinalResume() {
   const parts  = [];
-  const sOrder = state.sections.map(s => s.id);
 
-  for (const id of sOrder) {
+  for (const section of state.sections) {
+    const id = section.id;
     const text = state.approved[id];
     if (!text?.trim()) continue;
 
-    const header = SECTION_HEADERS[id];
+    const header = section.exportHeader || SECTION_HEADERS[id];
     if (header) {
       parts.push(header);
     }
@@ -651,6 +651,7 @@ startOverBtn.addEventListener('click', () => {
   state.sectionIndex   = 0;
   state.approved       = {};
   state.skippedSuggestions = {};
+  state.expandedCoachSections = {};
   state.editingSuggestionId = null;
   state.candidateName  = '';
   state.lastPayload    = null;
@@ -700,6 +701,7 @@ intakeForm.addEventListener('submit', async e => {
     state.sectionIndex = 0;
     state.approved     = {};
     state.skippedSuggestions = {};
+    state.expandedCoachSections = {};
     state.editingSuggestionId = null;
 
     showEditorSection();
