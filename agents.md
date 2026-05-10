@@ -10,7 +10,7 @@ Resume Refresh is a Node.js ESM web app. It runs as a single-file HTTP server (`
 
 ```
 src/app.js              Main request router and all business logic
-src/inference.js        AI model adapter (OpenAI or Ollama)
+src/inference.js        OpenAI photo OCR and legacy model adapter
 src/resume-analyzer.js  Rule-based resume analysis
 src/resume-validator.js Input validation
 src/skills-grounding.js Skills extraction and grounding
@@ -27,8 +27,6 @@ api/auth/               LinkedIn OAuth flow
 
 public/index.html       v1 UI (current production)
 public/app.js           v1 frontend JavaScript
-public/v2.html          v2 UI (in development)
-public/v2/              v2 bundled assets
 ```
 
 ## How to run and test
@@ -45,19 +43,18 @@ npm run test:e2e        # Playwright tests
 
 **ESM only.** The package uses `"type": "module"`. All imports use `.js` extensions. No CommonJS (`require`).
 
-**No build step for the server.** `src/` files are run directly with Node. Only the v2 React prototype (`prototype/`) requires a build step (`npm run build:v2`).
+**No build step.** `src/` files are run directly with Node, and the production frontend is plain HTML/CSS/JS in `public/`.
 
 **Named exports only in the docx package.** The `docx` npm package in ESM mode throws a `SyntaxError` for any named export that doesn't exist. Do not add new named imports from `docx` without verifying they exist in the installed version (`node_modules/docx/build/index.js`).
 
 **Vercel routing.** `vercel.json` uses legacy `routes[]`. Security headers live inside a `"continue": true` route entry at the top of that array — do not add a separate top-level `headers[]` section, as it is silently ignored when `routes[]` is defined.
 
-**Inference is pluggable.** `src/inference.js` is the only file that knows about the AI provider. Everything else calls `callModel(systemPrompt, userPrompt)` and gets back a JSON string.
+**Inference is isolated.** `src/inference.js` is the only file that knows about OpenAI-backed resume photo OCR and model-backed legacy rewrite calls.
 
 ## Making changes
 
 - Changes to `src/app.js` affect both local and Vercel deployments
-- The v1 frontend is in `public/app.js` (vanilla JS, no build step)
-- The v2 frontend is a React app in `prototype/` — run `npm run build:v2` to compile to `public/v2/`
+- The frontend is in `public/app.js` (vanilla JS, no build step)
 - Export logic (PDF and DOCX) lives in `src/app.js` in `buildPdf` and `buildDocx`
 
 ## Environment
@@ -65,7 +62,7 @@ npm run test:e2e        # Playwright tests
 Requires Node 20+. No database. State lives in signed session cookies. No server-side resume storage.
 
 Required in production: `APP_SECRET`
-Optional: `OPENAI_API_KEY`, `INFERENCE_PROVIDER`, `OLLAMA_URL`, `OLLAMA_MODEL`, LinkedIn OAuth vars
+Optional: `OPENAI_API_KEY` for JPG/PNG/WEBP resume photo parsing, LinkedIn OAuth vars
 
 ## Tests
 

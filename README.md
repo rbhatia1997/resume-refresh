@@ -8,11 +8,11 @@ Paste your resume, describe what you're targeting, and get a polished, ATS-ready
 
 ## What it does
 
-- Accepts a resume as plain text, PDF, TXT, or MD
+- Accepts a resume as plain text, PDF, TXT, MD, JPG, PNG, or WEBP
 - Optionally paste your LinkedIn headline/about/experience for added context
-- Returns bullet-by-bullet improvement suggestions plus a full rewrite
+- Shows optional section-level suggestion cards while you edit
 - Exports to PDF or DOCX with right-aligned job dates and clean section formatting
-- Works without an API key (rule-based suggestions); plug in OpenAI or a local Ollama model to unlock AI rewrite
+- Works without an API key for text/PDF/TXT/MD resumes; resume photos require OpenAI vision OCR
 
 ## Run locally
 
@@ -29,31 +29,14 @@ Open `http://localhost:3210`. Node 20+ required.
 | Variable | Required | Description |
 |---|---|---|
 | `APP_SECRET` | Yes | Random secret for session signing. Generate: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
-| `OPENAI_API_KEY` | No | Enables AI-powered rewrite via OpenAI (`gpt-4.1-mini`) |
-| `INFERENCE_PROVIDER` | No | Set to `ollama` to use a local model instead of OpenAI |
-| `OLLAMA_URL` | No | Ollama base URL (default: `http://127.0.0.1:11434`) |
-| `OLLAMA_MODEL` | No | Model name (default: `qwen2.5:7b`) |
+| `OPENAI_API_KEY` | No | Required only for JPG/PNG/WEBP resume photo parsing via OpenAI vision OCR |
+| `OPENAI_MODEL` | No | OpenAI model for optional model-backed operations (default: `gpt-4.1-mini`) |
+| `OPENAI_VISION_MODEL` | No | OpenAI model for resume photo OCR (defaults to `OPENAI_MODEL`) |
 | `LINKEDIN_CLIENT_ID` | No | Only needed if you want LinkedIn sign-in |
 | `LINKEDIN_CLIENT_SECRET` | No | LinkedIn OAuth |
 | `PUBLIC_BASE_URL` | No | Full origin URL used for OAuth redirects (e.g. `https://your-domain.com`) |
 
 See `.env.example` for the full list with comments.
-
-## Using a local model (Ollama)
-
-```bash
-brew install ollama
-ollama pull qwen2.5:7b
-ollama serve
-```
-
-Then in `.env`:
-
-```
-INFERENCE_PROVIDER=ollama
-```
-
-Works well for bullet strengthening and wording cleanup. For full resume rewrites, a cloud model gives better results.
 
 ## Deploy to Vercel
 

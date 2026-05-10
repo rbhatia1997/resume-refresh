@@ -2,10 +2,10 @@
   "name": "Resume Refresh",
   "short_name": "Resume Refresh",
   "description": "Import, improve, and export a stronger recruiter-ready resume.",
-  "start_url": "/v2.html",
+  "start_url": "/",
   "display": "standalone",
-  "background_color": "#fcfaf6",
-  "theme_color": "#132126",
+  "background_color": "#f8f9fa",
+  "theme_color": "#2563eb",
   "icons": [
     {
       "src": "/favicon.svg",

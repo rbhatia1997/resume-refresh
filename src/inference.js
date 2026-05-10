@@ -110,6 +110,9 @@ export async function extractTextFromResumeImage({ imageBase64 = "", mimeType = 
   if (PROVIDER !== "openai") {
     throw new Error("Photo resume parsing requires OpenAI vision. Use PDF, TXT, or MD with the local provider.");
   }
+  if (!OPENAI_KEY) {
+    throw new Error("Photo resume parsing requires OPENAI_API_KEY. Add it to .env, or upload PDF, TXT, MD, or paste text instead.");
+  }
   if (!imageBase64) {
     throw new Error("No resume image provided.");
   }
