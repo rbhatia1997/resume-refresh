@@ -43,6 +43,18 @@ test("skills suggestions use canonical casing and readable copy", () => {
   assert.ok(suggestions.some((item) => /SQL|POS|Networking|Hardware/i.test(item.suggestedText)));
 });
 
+test("skills suggestions clean low-signal product tools when LinkedIn has stronger evidence", () => {
+  const suggestions = buildSkillsSuggestions({
+    currentText: "Agile\nExperimentation\nFigma\nGo-to-Market Strategy\nGrowth Strategy\nJira\nOKRs\nProduct Analytics\nProduct Discovery\nProduct Strategy",
+    targetRole: "AI Infrastructure Product Manager",
+    supportingText: "Architected AI infrastructure and datacenter systems across NVIDIA H100/H200 deployments, product analytics, experimentation, go-to-market planning, growth strategy, and product strategy."
+  });
+
+  assert.equal(suggestions.length, 1);
+  assert.match(suggestions[0].suggestedText, /AI Infrastructure/);
+  assert.doesNotMatch(suggestions[0].suggestedText, /Jira|OKRs/);
+});
+
 test("experience suggestions flag bullets that lack quantified scope or results", () => {
   const suggestions = buildExperienceSuggestions({
     entries: [{

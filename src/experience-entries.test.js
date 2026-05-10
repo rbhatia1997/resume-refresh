@@ -92,6 +92,22 @@ test("parseExperienceEntries treats seasonal dates as editable date ranges", () 
   );
 });
 
+test("parseExperienceEntries strips duplicate inline dates from role headings", () => {
+  const entries = parseExperienceEntries([
+    "Co-Founder - LYOKO LLC (lyoko.com) Jun 2022 - Aug 2022 Jan 2022 - Present",
+    "- Created $7K+ annual revenue through subscriptions and commissions with 14x growth rate YoY."
+  ]);
+
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].title, "Co-Founder");
+  assert.equal(entries[0].company, "LYOKO LLC (lyoko.com)");
+  assert.equal(entries[0].dateRange, "Jan 2022 - Present");
+  assert.equal(
+    formatExperienceEntryHeading(entries[0]),
+    "Co-Founder - LYOKO LLC (lyoko.com) Jan 2022 - Present"
+  );
+});
+
 test("formatExperienceEntryHeading can pad dates for monospace editor previews", () => {
   const heading = formatExperienceEntryHeading({
     title: "Sushi Chef",

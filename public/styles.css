@@ -776,9 +776,8 @@ button { cursor: pointer; font: inherit; }
 
 .resume-final-header {
   text-align: center;
-  padding-bottom: 9px;
-  margin-bottom: 12px;
-  border-bottom: 1px solid #d7dde6;
+  padding-bottom: 2px;
+  margin-bottom: 14px;
 }
 
 .resume-final-header h1 {

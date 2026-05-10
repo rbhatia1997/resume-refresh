@@ -236,8 +236,11 @@ export function buildSkillsSuggestions({ currentText = "", targetRole = "", supp
     targetRole,
     supportingText
   });
+  const currentSuggestedText = normalized.accepted.join("\n");
+  const suggestedText = preview.suggested.join("\n");
+  const hasUsefulChange = suggestedText && suggestedText !== currentSuggestedText;
 
-  if (!normalized.rejected.length && preview.suggested.length <= normalized.accepted.length) {
+  if (!normalized.rejected.length && !hasUsefulChange) {
     return [];
   }
 
@@ -246,9 +249,9 @@ export function buildSkillsSuggestions({ currentText = "", targetRole = "", supp
     type: "skills-list",
     severity: normalized.accepted.length < 3 ? "high" : "medium",
     title: "Clean up skills",
-    detail: "Use recognizable, recruiter-facing skills with consistent casing.",
+    detail: "Use higher-signal skills backed by the resume or LinkedIn context.",
     originalText: normalized.accepted.join("\n"),
-    suggestedText: preview.suggested.join("\n"),
+    suggestedText,
     rationale: "A clean skills list is easier for recruiters and ATS systems to scan.",
     applyMode: "replace-section"
   })];
