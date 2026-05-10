@@ -763,6 +763,17 @@ button { cursor: pointer; font: inherit; }
   line-height: 1.38;
 }
 
+.resume-preview[contenteditable="true"] {
+  cursor: text;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.resume-preview[contenteditable="true"]:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(37,99,235,0.12), var(--shadow);
+}
+
 .resume-final-header {
   text-align: center;
   padding-bottom: 9px;
