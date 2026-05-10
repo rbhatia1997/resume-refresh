@@ -70,6 +70,15 @@ const SECTION_HEADERS = {
   hobbies:        'HOBBIES',
   interests:      'INTERESTS',
   languages:      'LANGUAGES',
+  publications:   'PUBLICATIONS',
+  research:       'RESEARCH',
+  coursework:     'COURSEWORK',
+  licenses:       'LICENSES',
+  community:      'COMMUNITY INVOLVEMENT',
+  extracurriculars: 'EXTRACURRICULARS',
+  military:       'MILITARY SERVICE',
+  development:    'PROFESSIONAL DEVELOPMENT',
+  portfolio:      'PORTFOLIO',
 };
 
 // ── Init ──────────────────────────────────────────────────────────
@@ -562,7 +571,7 @@ function assembleFinalResume() {
     const text = state.approved[id];
     if (!text?.trim()) continue;
 
-    const header = section.exportHeader || SECTION_HEADERS[id];
+    const header = SECTION_HEADERS[id];
     if (header) {
       parts.push(header);
     }

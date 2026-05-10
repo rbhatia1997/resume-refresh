@@ -19,6 +19,7 @@ const publicDir = path.resolve(projectRoot, "public");
 const sessionCookieName = "resume_refresh_session";
 const maxBodyBytes = 6 * 1024 * 1024;
 const maxRewriteChars = 10000;
+const maxOnePageExportLines = 64;
 const rateLimits = new Map();
 const require = createRequire(import.meta.url);
 
@@ -764,10 +765,24 @@ function parseResumeForExport(text) {
     ["projects", "projects"],
     ["projects hobbies", "projects"],
     ["interests", "interests"],
-    ["hobbies", "interests"],
-    ["languages", "interests"],
+    ["hobbies", "hobbies"],
+    ["hobbies interests", "hobbies"],
+    ["languages", "languages"],
     ["certifications", "certifications"],
+    ["licenses", "licenses"],
+    ["licensure", "licenses"],
+    ["publications", "publications"],
+    ["research", "research"],
+    ["coursework", "coursework"],
+    ["relevant coursework", "coursework"],
     ["community", "community"],
+    ["community involvement", "community"],
+    ["extracurriculars", "extracurriculars"],
+    ["activities", "extracurriculars"],
+    ["military service", "military"],
+    ["professional development", "development"],
+    ["training", "development"],
+    ["portfolio", "portfolio"],
     ["leadership", "community"],
     ["volunteer", "community"],
     ["volunteering", "community"]
@@ -781,9 +796,18 @@ function parseResumeForExport(text) {
     education: [],
     projects: [],
     certifications: [],
+    licenses: [],
+    publications: [],
+    research: [],
+    coursework: [],
     community: [],
+    extracurriculars: [],
+    military: [],
+    development: [],
+    portfolio: [],
+    hobbies: [],
+    languages: [],
     interests: [],
-    _customSections: []
   };
   let current = "header";
 
@@ -800,15 +824,6 @@ function parseResumeForExport(text) {
     const canonical = headingMap.get(trimmed.toLowerCase().replace(/[^a-z ]/g, "").trim());
     if (canonical) {
       current = canonical;
-      continue;
-    }
-
-    if (looksLikeExportCustomHeading(trimmed, {
-      current,
-      previous: lines[index - 1] || "",
-      next: lines[index + 1] || ""
-    })) {
-      current = getOrCreateExportCustomSection(sections, trimmed).id;
       continue;
     }
 
@@ -831,11 +846,7 @@ function parseResumeForExport(text) {
   // Merge AI-wrapped bullet continuations back into the preceding bullet.
   // A continuation is a non-bullet, non-job-title line that immediately follows a bullet.
   // Job-title lines are identified by containing " | " or a 4-digit year.
-  for (const key of Object.keys(sections).filter((sectionKey) => (
-    Array.isArray(sections[sectionKey]) &&
-    sectionKey !== "header" &&
-    !sectionKey.startsWith("_")
-  ))) {
+  for (const key of Object.keys(sections).filter((sectionKey) => sectionKey !== "header")) {
     const merged = [];
     for (const line of sections[key]) {
       if (line && merged.length > 0) {
@@ -856,70 +867,6 @@ function parseResumeForExport(text) {
   return sections;
 }
 
-function normalizeExportHeading(line = "") {
-  return String(line || "").toLowerCase().replace(/[^a-z ]/g, " ").replace(/\s+/g, " ").trim();
-}
-
-function displayExportHeading(line = "") {
-  return normalizeExportHeading(line)
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ");
-}
-
-function looksLikeExportCustomHeading(line = "", { current = "", previous = "", next = "" } = {}) {
-  const raw = String(line || "").trim();
-  if (!raw || current === "header") return false;
-  if (/^[-*•]/.test(raw)) return false;
-  if (/@|https?:|www\.|linkedin\.com/i.test(raw)) return false;
-  if (/\b(19|20)\d{2}\b/.test(raw)) return false;
-  if (/[.,:;!?|]/.test(raw)) return false;
-
-  const normalized = normalizeExportHeading(raw);
-  const words = normalized.split(/\s+/).filter(Boolean);
-  if (words.length < 1 || words.length > 5) return false;
-  if (normalized.length < 3 || normalized.length > 48) return false;
-
-  const letters = raw.replace(/[^A-Za-z]/g, "");
-  if (letters.length < 3) return false;
-
-  const previousBlank = !String(previous || "").trim();
-  const nextHasContent = Boolean(String(next || "").trim());
-  if (!previousBlank || !nextHasContent) return false;
-
-  if (letters === letters.toUpperCase()) return true;
-
-  const titleLikeWords = raw
-    .split(/\s+/)
-    .filter(Boolean)
-    .every((word) => /^(and|or|of|for|in|on|&|\/)$/.test(word.toLowerCase()) || /^[A-Z][A-Za-z&/-]*$/.test(word));
-
-  return titleLikeWords;
-}
-
-function getOrCreateExportCustomSection(sections, label) {
-  const base = normalizeExportHeading(label).replace(/\s+/g, "-") || "additional-section";
-  const existing = sections._customSections.find((section) => section.slug === base);
-  if (existing) return existing;
-
-  let id = `custom:${base}`;
-  let suffix = 2;
-  while (sections[id]) {
-    id = `custom:${base}-${suffix}`;
-    suffix += 1;
-  }
-
-  const section = {
-    id,
-    slug: base,
-    title: displayExportHeading(label).toUpperCase()
-  };
-  sections[id] = [];
-  sections._customSections.push(section);
-  return section;
-}
-
 function exportSectionEntries(sections) {
   return [
     ["Summary", "summary"],
@@ -928,14 +875,59 @@ function exportSectionEntries(sections) {
     ["Education", "education"],
     ["Projects", "projects"],
     ["Certifications", "certifications"],
+    ["Licenses", "licenses"],
+    ["Publications", "publications"],
+    ["Research", "research"],
+    ["Coursework", "coursework"],
+    ["Portfolio", "portfolio"],
     ["Community", "community"],
+    ["Extracurriculars", "extracurriculars"],
+    ["Military Service", "military"],
+    ["Professional Development", "development"],
+    ["Hobbies", "hobbies"],
     ["Interests", "interests"],
-    ...(sections._customSections || []).map((section) => [section.title, section.id])
+    ["Languages", "languages"]
   ];
+}
+
+function estimateOnePageExportLines(sections) {
+  let lines = 0;
+  if (sections.header[0]) lines += 2;
+  if (sections.header.slice(1).join("  |  ").trim()) lines += 1;
+
+  for (const [, key] of exportSectionEntries(sections)) {
+    const sectionLines = sections[key].filter((line) => line !== "");
+    if (!sectionLines.length) continue;
+    lines += 1;
+
+    for (const line of sections[key]) {
+      if (!line) {
+        lines += 0.5;
+        continue;
+      }
+      const clean = line.replace(/^[-*•]\s*/, "");
+      const charsPerLine = /^[-*•]/.test(line) ? 88 : 96;
+      lines += Math.max(1, Math.ceil(clean.length / charsPerLine));
+    }
+    lines += 0.5;
+  }
+
+  return lines;
+}
+
+function assertOnePageExportBudget(sections) {
+  const estimatedLines = estimateOnePageExportLines(sections);
+  if (estimatedLines > maxOnePageExportLines) {
+    throw new AppError(
+      "This resume is still too long for a one-page export. Shorten or remove low-signal content before downloading.",
+      { status: 400 }
+    );
+  }
 }
 
 async function buildDocx(text) {
   const sections = parseResumeForExport(text);
+  assertOnePageExportBudget(sections);
   const paragraphs = [];
 
   if (sections.header[0]) {
@@ -1035,6 +1027,7 @@ function sanitizeForWinAnsi(str) {
 
 async function buildPdf(text) {
   const sections = parseResumeForExport(sanitizeForWinAnsi(text));
+  assertOnePageExportBudget(sections);
   const pdf = await PDFDocument.create();
   const page = pdf.addPage([612, 792]);
   const font = await pdf.embedFont(StandardFonts.Helvetica);
