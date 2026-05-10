@@ -1131,7 +1131,7 @@ async function buildDocx(text) {
 
       const isBullet = /^[-*•]/.test(line);
       if (!isBullet) {
-        const split = splitJobDate(line);
+        const split = key === "experience" ? splitJobDate(line) : null;
         if (split) {
           // Job title line: role left, date right-aligned via tab stop
           paragraphs.push(new Paragraph({
@@ -1340,7 +1340,7 @@ async function buildPdf(text) {
           drawWrapped(line.replace(/^[-*•]\s*/, ""), { indent: 14 });
         }
       } else {
-        const split = splitJobDate(sanitizeForWinAnsi(line));
+        const split = key === "experience" ? splitJobDate(sanitizeForWinAnsi(line)) : null;
         if (split) {
           ensureSpace(lineHeight);
           if (!clipped) {

@@ -6,6 +6,15 @@ Format: `MAJOR.MINOR.PATCH.MICRO`
 
 ---
 
+## [0.1.1.4] - 2026-05-10
+
+### Fixed
+
+- **Experience dates no longer duplicate in role titles** — if a role line contains more than one date-like range, the preview and exports strip dates out of the role text and keep the trailing date right-aligned.
+- **Education dates stay in education text** — PDF and DOCX exports now apply right-aligned date formatting only to Experience rows, preventing education/projects lines from being misread as jobs.
+
+---
+
 ## [0.1.1.3] - 2026-05-10
 
 ### Fixed
